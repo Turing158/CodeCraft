@@ -1,0 +1,315 @@
+<!doctype html>
+<html lang="zh-CN" data-theme="dark" data-motion="on" data-layout="phone">
+  <head>
+    <meta charset="UTF-8" />
+    <meta
+      name="viewport"
+      content="width=device-width, initial-scale=1.0, viewport-fit=cover"
+    />
+    <meta name="color-scheme" content="dark light" />
+    <link rel="icon" type="image/png" sizes="32x32" href="data:image/png;base64,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" />
+    <title>CodeCraft | 局域网审批</title>
+    <link rel="stylesheet" href="./console.css" />
+    <script type="module" src="./main.ts"></script>
+  </head>
+  <body>
+    <div class="shell">
+      <header class="topbar">
+        <div class="topbar__brand">
+          <img
+            class="topbar__brand-mark"
+            src="data:image/png;base64,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"
+            alt=""
+            width="32"
+            height="32"
+          />
+          <div class="topbar__brand-copy">
+            CodeCraft
+            <span>局域网控制台</span>
+          </div>
+        </div>
+        <div class="topbar__spacer"></div>
+        <span id="freshness" class="session-card__time">尚无数据</span>
+        <span
+          id="connection"
+          class="connection"
+          role="status"
+          aria-live="polite"
+          data-phase="checking"
+        >
+          <span class="connection__dot" aria-hidden="true"></span>
+          <span id="connection-label">正在检查登录状态</span>
+        </span>
+        <button
+          id="theme-toggle"
+          class="icon-button"
+          type="button"
+          aria-label="切换主题"
+        >
+          <svg
+            aria-hidden="true"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="1.8"
+            stroke-linecap="round"
+            stroke-linejoin="round"
+          >
+            <path d="M20.7 14.5A8.4 8.4 0 0 1 9.5 3.3 8.5 8.5 0 1 0 20.7 14.5Z" />
+          </svg>
+        </button>
+        <button
+          id="settings-toggle"
+          class="icon-button"
+          type="button"
+          aria-label="显示外观设置"
+          aria-expanded="false"
+          aria-controls="settings-sheet"
+        >
+          <svg
+            class="settings-icon"
+            aria-hidden="true"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="1.8"
+            stroke-linecap="round"
+            stroke-linejoin="round"
+          >
+            <path
+              d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.09a2 2 0 0 1 1 1.74v.5a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.38a2 2 0 0 0-.73-2.73l-.15-.09a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2Z"
+            />
+            <circle cx="12" cy="12" r="3" />
+          </svg>
+        </button>
+      </header>
+
+      <section id="gate" class="gate" aria-labelledby="gate-title">
+        <div class="gate__card">
+          <h1 id="gate-title">输入访问令牌</h1>
+          <p>
+            令牌在桌面端「设置 → 局域网」里查看。它等同于密码，任何拿到地址和令牌的人都能看到会话内容。
+          </p>
+          <div class="gate__row">
+            <input
+              id="token-input"
+              class="text-field"
+              type="password"
+              inputmode="latin"
+              autocomplete="one-time-code"
+              spellcheck="false"
+              placeholder="32 位访问令牌"
+              aria-describedby="token-error"
+            />
+            <button id="token-paste" class="button" type="button">粘贴</button>
+          </div>
+          <label class="remember-token" for="remember-token">
+            <input id="remember-token" type="checkbox" />
+            <span class="remember-token__control" aria-hidden="true">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="m5 12 4.25 4.25L19 6.5" />
+              </svg>
+            </span>
+            <span>在此设备上记住密钥</span>
+          </label>
+          <button id="token-submit" class="button button--primary" type="button">
+            连接
+          </button>
+          <p id="token-error" class="gate__error" role="alert" hidden></p>
+        </div>
+      </section>
+
+      <main id="workspace" class="workspace" hidden>
+        <section class="pane pane--list" aria-labelledby="sessions-title">
+          <div id="integrations" class="integrations"></div>
+
+          <h2 id="sessions-title" class="section-heading">
+            会话
+            <span id="pending-badge" class="badge" data-empty="true">0</span>
+            <span class="sr-only">项待处理</span>
+          </h2>
+
+          <div id="session-skeleton" class="skeleton"></div>
+          <ul id="session-list" class="session-list"></ul>
+          <div id="session-empty" class="empty-state empty-state--sessions" role="status" hidden>
+            <svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M8 6h13" />
+              <path d="M8 12h13" />
+              <path d="M8 18h13" />
+              <path d="M3 6h.01" />
+              <path d="M3 12h.01" />
+              <path d="M3 18h.01" />
+            </svg>
+            <strong>暂无会话</strong>
+            <span>桌面端出现会话后会自动同步到这里</span>
+          </div>
+        </section>
+
+        <section
+          id="detail-placeholder"
+          class="detail-placeholder pane pane--detail-placeholder"
+          aria-labelledby="detail-placeholder-title"
+          hidden
+        >
+          <span class="detail-placeholder__icon" aria-hidden="true">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">
+              <rect width="18" height="18" x="3" y="3" rx="2" />
+              <path d="M9 3v18" />
+              <path d="m14 9 3 3-3 3" />
+            </svg>
+          </span>
+          <h2 id="detail-placeholder-title">选择一个会话</h2>
+          <p id="detail-placeholder-copy">从左侧会话列表中选择一项，这里会显示会话详情与审批内容。</p>
+        </section>
+
+        <section
+          id="detail"
+          class="detail pane pane--detail"
+          aria-labelledby="detail-title"
+          hidden
+        >
+          <div class="detail__header">
+            <button
+              id="detail-back"
+              class="icon-button"
+              type="button"
+              aria-label="返回会话列表"
+            >
+              <svg
+                aria-hidden="true"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="1.8"
+                stroke-linecap="round"
+                stroke-linejoin="round"
+              >
+                <path d="m15 18-6-6 6-6" />
+              </svg>
+            </button>
+            <h2 id="detail-title" class="detail__title">会话详情</h2>
+            <span id="detail-status" class="session-card__status"></span>
+          </div>
+          <p id="detail-meta" class="detail__meta"></p>
+
+          <div id="review" class="review" hidden>
+            <div class="review__kind">
+              <span id="review-kind-label">等待审批</span>
+            </div>
+            <p id="review-tool" class="review__tool"></p>
+            <div id="review-summary" class="review__summary markdown"></div>
+            <div id="review-questions"></div>
+            <p id="review-notice" class="review__notice" hidden></p>
+            <div id="review-actions" class="review__actions"></div>
+          </div>
+
+          <div class="detail__section">
+            <h3 class="section-heading">工具调用</h3>
+            <ul id="activity-list" class="activity-list"></ul>
+            <p id="activity-empty" class="empty-state" hidden>暂无工具调用</p>
+          </div>
+
+          <div class="detail__section">
+            <h3 class="section-heading">对话</h3>
+            <ul id="output-list" class="output-list"></ul>
+            <p id="output-empty" class="empty-state" hidden>暂无对话内容</p>
+          </div>
+        </section>
+      </main>
+
+      <div id="action-bar" class="action-bar" hidden></div>
+    </div>
+
+    <div id="scrim" class="scrim" hidden></div>
+
+    <section
+      id="settings-sheet"
+      class="settings-sheet"
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="settings-title"
+      tabindex="-1"
+      hidden
+    >
+      <header class="settings-sheet__header">
+        <div>
+          <h2 id="settings-title">外观设置</h2>
+          <p>调整此浏览器中的显示方式</p>
+        </div>
+        <button
+          id="settings-close"
+          class="icon-button"
+          type="button"
+          aria-label="关闭设置"
+        >
+          <svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round">
+            <path d="M18 6 6 18" />
+            <path d="m6 6 12 12" />
+          </svg>
+        </button>
+      </header>
+      <div class="settings-row">
+        <span>主题</span>
+        <div id="theme-segmented" class="segmented">
+          <button type="button" data-theme-value="dark" aria-pressed="true">
+            深色
+          </button>
+          <button type="button" data-theme-value="light" aria-pressed="false">
+            亮色
+          </button>
+          <span class="segmented__indicator" aria-hidden="true"></span>
+        </div>
+      </div>
+      <div class="settings-row">
+        <span>动画</span>
+        <div id="motion-segmented" class="segmented">
+          <button type="button" data-motion-value="on" aria-pressed="true">
+            开启
+          </button>
+          <button type="button" data-motion-value="off" aria-pressed="false">
+            关闭
+          </button>
+          <span class="segmented__indicator" aria-hidden="true"></span>
+        </div>
+      </div>
+      <div class="settings-row settings-row--placement">
+        <span>弹出位置</span>
+        <div id="settings-placement-segmented" class="segmented segmented--placement">
+          <button type="button" data-settings-placement-value="left" aria-pressed="false">
+            左边
+          </button>
+          <button type="button" data-settings-placement-value="right" aria-pressed="false">
+            右边
+          </button>
+          <button type="button" data-settings-placement-value="top" aria-pressed="false">
+            上边
+          </button>
+          <button type="button" data-settings-placement-value="bottom" aria-pressed="true">
+            下边
+          </button>
+          <span class="segmented__indicator" aria-hidden="true"></span>
+        </div>
+      </div>
+      <div id="motion-speed-row" class="settings-row">
+        <label for="motion-speed">动画速度</label>
+        <input
+          id="motion-speed"
+          class="range"
+          type="range"
+          min="0.25"
+          max="2"
+          step="0.05"
+          value="1"
+        />
+      </div>
+      <div class="settings-row">
+        <span id="connection-info">连接信息</span>
+        <button id="sign-out" class="button button--danger" type="button">
+          退出登录
+        </button>
+      </div>
+    </section>
+
+    <p id="toast" class="toast" role="status" aria-live="polite" hidden></p>
+  </body>
+</html>

@@ -1,0 +1,102 @@
+/*
+ * Design tokens shared with the desktop panel (src/styles.css).
+ * Colours, radii and status hues are copied so the console reads as the same
+ * product; the panel's fixed 500px geometry and transparency layers are not.
+ */
+
+:root {
+  color-scheme: dark;
+
+  --surface-page: #101317;
+  --surface-raised: #151921;
+  --surface-raised-hover: #1b2027;
+  --surface-sunken: #0e1217;
+  --surface-border: rgba(226, 232, 240, 0.14);
+  --surface-border-hover: rgba(226, 232, 240, 0.3);
+  --code-background: rgba(15, 23, 42, 0.72);
+
+  --text-primary: #f8fafc;
+  --text-secondary: #aab3bf;
+  --text-muted: #697482;
+
+  --accent: #5eead4;
+  --accent-strong: #0f766e;
+  --accent-soft: rgba(94, 234, 212, 0.11);
+  --accent-border: rgba(94, 234, 212, 0.34);
+  --accent-contrast: #05221f;
+
+  --status-working: #38bdf8;
+  --status-waiting: #fbbf24;
+  --status-attention: #fb923c;
+  --status-failed: #f87171;
+  --status-idle: #64748b;
+
+  --radius-sm: 8px;
+  --radius-md: 12px;
+  --radius-lg: 18px;
+  --radius-pill: 999px;
+
+  --shadow-card: 0 1px 2px rgba(2, 6, 23, 0.4);
+  --shadow-hover: 0 10px 28px rgba(2, 6, 23, 0.34);
+  --shadow-float: 0 18px 40px rgba(2, 6, 23, 0.55);
+
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 22px;
+  --space-6: 28px;
+
+  --font-body: "Segoe UI Variable", "Segoe UI", "PingFang SC",
+    "Microsoft YaHei", Arial, sans-serif;
+  --font-mono: "Cascadia Mono", "Consolas", "SFMono-Regular", monospace;
+
+  --ease-enter: cubic-bezier(0.22, 1, 0.36, 1);
+  --motion-scale: 1;
+  --duration-micro: calc(90ms / var(--motion-scale));
+  --duration-enter: calc(180ms / var(--motion-scale));
+  --duration-view: calc(240ms / var(--motion-scale));
+}
+
+:root[data-theme="light"] {
+  color-scheme: light;
+
+  --surface-page: #f7f9fc;
+  --surface-raised: #ffffff;
+  --surface-raised-hover: #eef2f7;
+  --surface-sunken: #f8fafc;
+  --surface-border: rgba(15, 23, 42, 0.13);
+  --surface-border-hover: rgba(15, 23, 42, 0.25);
+  --code-background: #eef2f7;
+
+  --text-primary: #0f172a;
+  --text-secondary: #475569;
+  --text-muted: #64748b;
+
+  --accent: #0f766e;
+  --accent-strong: #0f766e;
+  --accent-soft: rgba(13, 148, 136, 0.1);
+  --accent-border: rgba(13, 148, 136, 0.38);
+  --accent-contrast: #ffffff;
+
+  --status-working: #0284c7;
+  --status-waiting: #b45309;
+  --status-attention: #c2410c;
+  --status-failed: #b91c1c;
+  --status-idle: #64748b;
+
+  --shadow-card: 0 1px 2px rgba(15, 23, 42, 0.08);
+  --shadow-hover: 0 10px 28px rgba(15, 23, 42, 0.14);
+  --shadow-float: 0 18px 40px rgba(15, 23, 42, 0.18);
+}
+
+/* The animation switch collapses every duration instead of adding a separate
+   no-motion code path. */
+:root[data-motion="off"] *,
+:root[data-motion="off"] *::before,
+:root[data-motion="off"] *::after {
+  animation-duration: 0.001ms !important;
+  animation-delay: 0ms !important;
+  transition-duration: 0.001ms !important;
+  transition-delay: 0ms !important;
+}

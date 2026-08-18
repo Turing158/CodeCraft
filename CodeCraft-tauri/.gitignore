@@ -1,0 +1,46 @@
+# Logs
+logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+lerna-debug.log*
+
+node_modules
+dist
+dist-ssr
+artifacts
+*.local
+*.test
+*.test.*
+scripts/
+
+# Rust and Tauri generated output
+src-tauri/target/
+src-tauri/gen/schemas/
+
+# Editor directories and files
+.vscode/*
+!.vscode/extensions.json
+.idea
+.DS_Store
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
+
+# Tauri generated icons (regenerate with `tauri icon`)
+src-tauri/icons/*
+!src-tauri/icons/ico.svg
+!src-tauri/icons/icon/
+src-tauri/icons/icon/*
+!src-tauri/icons/icon/claude.svg
+!src-tauri/icons/icon/openai.svg
+!src-tauri/icons/icon/bone_block.svg
+!src-tauri/icons/icon/cat.svg
+!src-tauri/icons/icon/experience.svg
+!src-tauri/icons/icon/note_block.svg
+!src-tauri/icons/icon/grass-block.svg
+!src-tauri/icons/icon/sea-lantern.svg

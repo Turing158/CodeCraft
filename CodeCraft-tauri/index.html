@@ -1,0 +1,1980 @@
+<!doctype html>
+<html
+  lang="zh-CN"
+  data-panel-state="collapsed"
+  data-collapse-source="auto"
+  data-theme="dark"
+  data-motion="on"
+  data-working-square-light-svg="grass-block"
+  data-working-square-dark-svg="sea-lantern"
+>
+  <head>
+    <meta charset="UTF-8" />
+    <link rel="stylesheet" href="/src/styles.css" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="color-scheme" content="dark light" />
+    <title>CodeCraft</title>
+    <script type="module" src="/src/main.ts" defer></script>
+  </head>
+
+  <body>
+    <main
+      id="panel"
+      class="panel"
+      aria-label="Claude Code 活跃会话"
+      aria-hidden="true"
+    >
+      <div class="panel__reveal">
+        <div class="panel__body">
+          <div
+            id="panel-drag-region"
+            class="panel__drag-region"
+            aria-hidden="true"
+            data-enabled="false"
+          ></div>
+          <div class="collapsed-working-flow" aria-hidden="true">
+            <span class="collapsed-working-flow__square"></span>
+            <span class="collapsed-working-flow__square"></span>
+            <span class="collapsed-working-flow__square"></span>
+            <span class="collapsed-working-flow__square"></span>
+            <span class="collapsed-working-flow__square"></span>
+          </div>
+          <button
+            id="session-live-view"
+            class="session-live"
+            type="button"
+            hidden
+            aria-hidden="true"
+          >
+            <span
+              id="session-live-status"
+              class="session-live__status"
+              aria-hidden="true"
+            ></span>
+            <span class="session-live__text">
+              <span id="session-live-title" class="session-live__title"></span>
+              <span
+                id="session-live-status-text"
+                class="session-live__status-text"
+              ></span>
+            </span>
+            <svg
+              class="session-live__chevron"
+              aria-hidden="true"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="2"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+            >
+              <path d="m9 18 6-6-6-6" />
+            </svg>
+          </button>
+          <button
+            id="session-live-collapse"
+            class="session-live__collapse"
+            type="button"
+            aria-label="收起面板"
+            title="收起面板"
+          >
+            <svg
+              aria-hidden="true"
+              viewBox="0 0 16 8"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="1.5"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+            >
+              <path d="m3 6 5-4 5 4" />
+            </svg>
+          </button>
+          <div class="panel-view-stage">
+            <section
+              id="session-view"
+              class="panel-view session-shell"
+              aria-labelledby="session-title"
+            >
+              <header class="session-header">
+                <div class="session-product">
+                  <button
+                    id="session-product-trigger"
+                    class="session-product__trigger"
+                    type="button"
+                    aria-haspopup="listbox"
+                    aria-expanded="false"
+                    aria-controls="session-product-menu"
+                  >
+                    <span
+                      id="session-product-icon"
+                      class="session-product__mark"
+                      aria-hidden="true"
+                    ></span>
+                    <span id="session-title" class="session-product__label">
+                      CodeCraft
+                    </span>
+                    <svg
+                      class="session-product__chevron"
+                      aria-hidden="true"
+                      viewBox="0 0 24 24"
+                      fill="none"
+                      stroke="currentColor"
+                      stroke-width="2"
+                      stroke-linecap="round"
+                      stroke-linejoin="round"
+                    >
+                      <path d="m6 9 6 6 6-6" />
+                    </svg>
+                  </button>
+                  <div
+                    id="session-product-menu"
+                    class="session-product__menu"
+                    role="listbox"
+                    aria-label="筛选会话来源"
+                    hidden
+                  ></div>
+                </div>
+
+                <div class="session-header__actions">
+                  <div id="integration-state" class="integration-state">
+                    <span
+                      class="integration-state__dot"
+                      aria-hidden="true"
+                    ></span>
+                    <span id="session-summary">0 个活跃</span>
+                  </div>
+                  <button
+                    id="settings-open"
+                    class="settings-open"
+                    type="button"
+                    aria-label="打开设置"
+                    title="设置"
+                  >
+                    <svg
+                      aria-hidden="true"
+                      viewBox="0 0 24 24"
+                      fill="none"
+                      stroke="currentColor"
+                      stroke-width="1.8"
+                      stroke-linecap="round"
+                      stroke-linejoin="round"
+                    >
+                      <path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.38a2 2 0 0 0-.73-2.73l-.15-.09a2 2 0 0 1-1-1.74v-.51a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z" />
+                      <circle cx="12" cy="12" r="3" />
+                    </svg>
+                  </button>
+                </div>
+              </header>
+
+              <div id="session-source-cards" class="session-source-cards" data-filter="all">
+                <section
+                  id="claude-session-card"
+                  class="session-source-card"
+                  aria-labelledby="claude-session-card-title"
+                >
+                  <header class="session-source-card__header">
+                    <div class="session-source-card__identity">
+                      <span class="session-source-card__mark" aria-hidden="true">
+                        <img id="claude-session-card-icon" alt="" />
+                      </span>
+                      <h2 id="claude-session-card-title">Claude Code</h2>
+                    </div>
+                    <button
+                      id="claude-connection-status"
+                      class="session-source-card__status"
+                      type="button"
+                      data-connected="false"
+                      title="点击重新安装并连接 Claude Code Hook"
+                    >
+                      <span class="session-source-card__status-dot" aria-hidden="true"></span>
+                      <span class="session-source-card__status-label">Hook 异常</span>
+                      <svg
+                        class="session-source-card__status-icon"
+                        aria-hidden="true"
+                        viewBox="0 0 24 24"
+                        fill="none"
+                        stroke="currentColor"
+                        stroke-width="2"
+                        stroke-linecap="round"
+                        stroke-linejoin="round"
+                      >
+                        <path d="M20 11a8.1 8.1 0 0 0-14.7-4.7L4 8" />
+                        <path d="M4 4v4h4" />
+                        <path d="M4 13a8.1 8.1 0 0 0 14.7 4.7L20 16" />
+                        <path d="M20 20v-4h-4" />
+                      </svg>
+                    </button>
+                  </header>
+                  <ul
+                    id="claude-session-list"
+                    class="session-list"
+                    aria-label="Claude Code 会话列表"
+                    aria-live="polite"
+                  >
+                    <li class="session-list__empty">暂无活跃会话</li>
+                  </ul>
+                </section>
+
+                <section
+                  id="codex-session-card"
+                  class="session-source-card"
+                  aria-labelledby="codex-session-card-title"
+                >
+                  <header class="session-source-card__header">
+                    <div class="session-source-card__identity">
+                      <span class="session-source-card__mark session-source-card__mark--codex" aria-hidden="true">
+                        <img id="codex-session-card-icon" alt="" />
+                      </span>
+                      <h2 id="codex-session-card-title">Codex</h2>
+                    </div>
+                    <div
+                      id="codex-connection-status"
+                      class="session-source-card__status session-source-card__status--static"
+                      data-connected="false"
+                      title="Codex Hook 状态"
+                    >
+                      <span class="session-source-card__status-dot" aria-hidden="true"></span>
+                      <span class="session-source-card__status-label">连接异常</span>
+                      <svg
+                        class="session-source-card__status-icon"
+                        aria-hidden="true"
+                        viewBox="0 0 24 24"
+                        fill="none"
+                        stroke="currentColor"
+                        stroke-width="2"
+                        stroke-linecap="round"
+                        stroke-linejoin="round"
+                      >
+                        <path d="M20 11a8.1 8.1 0 0 0-14.7-4.7L4 8" />
+                        <path d="M4 4v4h4" />
+                        <path d="M4 13a8.1 8.1 0 0 0 14.7 4.7L20 16" />
+                        <path d="M20 20v-4h-4" />
+                      </svg>
+                    </div>
+                  </header>
+                  <ul
+                    id="codex-session-list"
+                    class="session-list"
+                    aria-label="Codex 会话列表"
+                    aria-live="polite"
+                  >
+                    <li class="session-list__empty">暂无活跃会话</li>
+                  </ul>
+                </section>
+              </div>
+            </section>
+
+            <section
+              id="session-detail-view"
+              class="panel-view detail-shell"
+              aria-labelledby="session-detail-title"
+              hidden
+            >
+              <header class="detail-header">
+                <button
+                  id="session-detail-back"
+                  class="detail-back"
+                  type="button"
+                  aria-label="返回会话列表"
+                  title="返回会话列表"
+                >
+                  <svg
+                    aria-hidden="true"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    stroke-width="1.8"
+                    stroke-linecap="round"
+                    stroke-linejoin="round"
+                  >
+                    <path d="m15 18-6-6 6-6" />
+                  </svg>
+                </button>
+                <div class="detail-heading">
+                  <h1 id="session-detail-title">Claude Code 会话</h1>
+                  <span id="session-detail-status" class="detail-status"></span>
+                </div>
+              </header>
+
+              <section class="detail-section" aria-labelledby="activity-title">
+                <header class="detail-section__header">
+                  <h2 id="activity-title">工具调用</h2>
+                  <span id="activity-summary" class="detail-section__meta"></span>
+                </header>
+                <ol
+                  id="session-activity-list"
+                  class="activity-list"
+                  aria-live="polite"
+                ></ol>
+              </section>
+
+              <section
+                class="detail-section detail-section--output"
+                aria-labelledby="output-title"
+              >
+                <header class="detail-section__header">
+                  <h2 id="output-title">对话</h2>
+                  <span class="detail-section__meta">实时转录</span>
+                </header>
+                <div
+                  id="session-output"
+                  class="session-output"
+                  role="log"
+                  aria-live="polite"
+                  aria-relevant="additions text"
+                ></div>
+              </section>
+            </section>
+
+            <section
+              id="question-view"
+              class="panel-view question-shell"
+              aria-label="回答代码助手的问题"
+              aria-live="polite"
+              hidden
+            >
+              <section
+                class="question-block question-block--prompt"
+                aria-labelledby="question-block-title"
+              >
+                <header class="question-block__header">
+                  <nav
+                    class="question-actions question-card-actions"
+                    aria-label="答题界面操作"
+                  >
+                    <button
+                      id="question-back"
+                      class="question-card-action"
+                      type="button"
+                      aria-label="返回"
+                      title="返回"
+                    >
+                      <svg
+                        aria-hidden="true"
+                        viewBox="0 0 24 24"
+                        fill="none"
+                        stroke="currentColor"
+                        stroke-width="1.8"
+                        stroke-linecap="round"
+                        stroke-linejoin="round"
+                      >
+                        <path d="m15 18-6-6 6-6" />
+                      </svg>
+                    </button>
+                  </nav>
+                  <div class="question-block__labels">
+                    <h1 id="question-block-title">第 1/1 问题</h1>
+                    <span
+                      id="question-header"
+                      class="question-header-badge"
+                    ></span>
+                  </div>
+                </header>
+                <div
+                  id="question-preview"
+                  class="question-preview"
+                  tabindex="0"
+                  aria-describedby="question-popover"
+                >
+                  <p id="question-text"></p>
+                  <aside
+                    id="question-popover"
+                    class="question-popover"
+                    role="tooltip"
+                  >
+                    <span class="question-popover__label">完整问题</span>
+                    <p id="question-full-text"></p>
+                  </aside>
+                </div>
+              </section>
+
+              <section
+                id="question-answer-block"
+                class="question-block question-block--answers"
+                aria-label="回答选项"
+                data-collapsed="false"
+              >
+                <button
+                  id="answer-collapse-toggle"
+                  class="question-answer-toggle"
+                  type="button"
+                  aria-expanded="true"
+                  aria-controls="question-options"
+                  aria-label="收起回答选项"
+                  title="收起回答选项"
+                >
+                  <span id="answer-mode" class="answer-mode"></span>
+                  <svg
+                    aria-hidden="true"
+                    viewBox="0 0 16 10"
+                    fill="none"
+                    stroke="currentColor"
+                    stroke-width="1.5"
+                    stroke-linecap="round"
+                    stroke-linejoin="round"
+                  >
+                    <path d="m3 7 5-4 5 4" />
+                  </svg>
+                </button>
+                <div
+                  id="question-options"
+                  class="question-options"
+                  role="group"
+                  aria-label="回答选项"
+                ></div>
+              </section>
+
+              <section
+                id="question-extra-block"
+                class="question-block question-block--extra"
+                hidden
+              >
+                <label class="sr-only" for="question-extra-input"
+                  >额外信息</label
+                >
+                <textarea
+                  id="question-extra-input"
+                  rows="2"
+                  maxlength="500"
+                  placeholder="输入你的回答或补充说明"
+                ></textarea>
+              </section>
+
+              <nav
+                id="question-actions"
+                class="question-actions"
+                aria-label="问题导航"
+                hidden
+              >
+                <button
+                  id="question-previous"
+                  class="question-action question-action--secondary"
+                  type="button"
+                  hidden
+                >
+                  上一步
+                </button>
+                <button
+                  id="question-open-codex"
+                  class="question-action question-action--secondary"
+                  type="button"
+                  hidden
+                >
+                  前往 Codex
+                </button>
+                <button
+                  id="question-next"
+                  class="question-action question-action--primary"
+                  type="button"
+                  hidden
+                >
+                  下一步
+                </button>
+                <button
+                  id="question-submit"
+                  class="question-action question-action--primary"
+                  type="button"
+                  hidden
+                >
+                  提交
+                </button>
+              </nav>
+            </section>
+
+            <section
+              id="permission-view"
+              class="panel-view permission-shell"
+              aria-label="确认代码助手工具调用"
+              aria-live="polite"
+              hidden
+            >
+              <section
+                class="question-block question-block--prompt"
+                aria-labelledby="permission-block-title"
+              >
+                <header class="question-block__header">
+                  <nav
+                    class="question-actions question-card-actions"
+                    aria-label="返回"
+                  >
+                    <button
+                      id="permission-back"
+                      class="question-card-action"
+                      type="button"
+                      aria-label="返回"
+                      title="返回"
+                    >
+                      <svg
+                        aria-hidden="true"
+                        viewBox="0 0 24 24"
+                        fill="none"
+                        stroke="currentColor"
+                        stroke-width="1.8"
+                        stroke-linecap="round"
+                        stroke-linejoin="round"
+                      >
+                        <path d="m15 18-6-6 6-6" />
+                      </svg>
+                    </button>
+                  </nav>
+                  <div class="question-block__labels">
+                    <h1 id="permission-block-title">工具调用</h1>
+                    <span
+                      id="permission-tool"
+                      class="question-header-badge"
+                    ></span>
+                  </div>
+                </header>
+                <div
+                  id="permission-summary"
+                  class="question-preview"
+                  tabindex="0"
+                >
+                  <p id="permission-summary-text"></p>
+                </div>
+                <p
+                  id="permission-cwd"
+                  class="permission-cwd"
+                ></p>
+              </section>
+
+              <section
+                class="question-block question-block--answers"
+                aria-label="确认选项"
+              >
+                <header class="question-block__header">
+                  <div class="question-block__labels">
+                    <h1>操作</h1>
+                    <span class="question-header-badge">点击后立即回传</span>
+                  </div>
+                </header>
+                <div
+                  id="permission-options"
+                  class="permission-options"
+                  role="group"
+                  aria-label="确认操作"
+                >
+                  <button
+                    id="permission-allow"
+                    class="question-option permission-option permission-option--allow"
+                    type="button"
+                    data-permission="allow"
+                  >
+                    <span class="question-option__label">允许一次</span>
+                    <span class="question-option__description">仅执行这一次，不保存规则</span>
+                  </button>
+                  <button
+                    id="permission-always-allow"
+                    class="question-option permission-option permission-option--always"
+                    type="button"
+                    data-permission="always-allow"
+                  >
+                    <span class="question-option__label">始终允许</span>
+                    <span class="question-option__description">执行并记住，之后不再询问</span>
+                  </button>
+                  <button
+                    id="permission-deny"
+                    class="question-option permission-option permission-option--deny"
+                    type="button"
+                    data-permission="deny"
+                  >
+                    <span class="question-option__label">拒绝</span>
+                    <span class="question-option__description">不执行这个工具并继续</span>
+                  </button>
+                </div>
+              </section>
+            </section>
+
+            <section
+              id="plan-view"
+              class="panel-view permission-shell"
+              aria-label="确认实行计划"
+              aria-live="polite"
+              hidden
+            >
+              <section
+                class="question-block question-block--prompt"
+                aria-labelledby="plan-block-title"
+              >
+                <header class="question-block__header">
+                  <nav
+                    class="question-actions question-card-actions"
+                    aria-label="返回"
+                  >
+                    <button
+                      id="plan-back"
+                      class="question-card-action"
+                      type="button"
+                      aria-label="返回"
+                      title="返回"
+                    >
+                      <svg
+                        aria-hidden="true"
+                        viewBox="0 0 24 24"
+                        fill="none"
+                        stroke="currentColor"
+                        stroke-width="1.8"
+                        stroke-linecap="round"
+                        stroke-linejoin="round"
+                      >
+                        <path d="m15 18-6-6 6-6" />
+                      </svg>
+                    </button>
+                  </nav>
+                  <div class="question-block__labels">
+                    <h1 id="plan-block-title">计划</h1>
+                    <span
+                      id="plan-tool"
+                      class="question-header-badge"
+                    ></span>
+                  </div>
+                </header>
+                <div
+                  id="plan-preview"
+                  class="question-preview plan-preview"
+                  tabindex="0"
+                >
+                  <div id="plan-summary-text" class="plan-markdown"></div>
+                  <aside
+                    id="plan-popover"
+                    class="question-popover"
+                    role="tooltip"
+                  >
+                    <span class="question-popover__label">完整计划</span>
+                    <div id="plan-full-text" class="plan-markdown"></div>
+                  </aside>
+                </div>
+                <p
+                  id="plan-cwd"
+                  class="permission-cwd"
+                ></p>
+              </section>
+
+              <section
+                class="question-block question-block--answers"
+                aria-label="实行计划"
+              >
+                <header class="question-block__header">
+                  <div class="question-block__labels">
+                    <h1>操作</h1>
+                    <span id="plan-action-badge" class="question-header-badge">点击后立即回传</span>
+                  </div>
+                </header>
+                <div
+                  id="plan-options"
+                  class="permission-options"
+                  role="group"
+                  aria-label="实行计划操作"
+                >
+                  <button
+                    id="plan-auto"
+                    class="question-option permission-option permission-option--allow"
+                    type="button"
+                    data-plan-mode="auto"
+                  >
+                    <span class="question-option__label">实行计划&nbsp;&nbsp;auto mode</span>
+                    <span class="question-option__description">以自动模式执行此计划</span>
+                  </button>
+                  <button
+                    id="plan-auto-remember"
+                    class="question-option permission-option permission-option--allow"
+                    type="button"
+                    data-plan-mode="auto"
+                  >
+                    <span class="question-option__label">实行计划&nbsp;&nbsp;approve edits</span>
+                    <span class="question-option__description">自动执行计划，编辑操作自动批准</span>
+                  </button>
+                  <input
+                    id="plan-custom-input"
+                    type="text"
+                    placeholder="请输入需要修改的内容"
+                    aria-label="自定义指令"
+                    autocomplete="off"
+                  />
+                  <button
+                    id="plan-custom-submit"
+                    class="question-action question-action--primary"
+                    type="button"
+                  >
+                    提交
+                  </button>
+                  <button
+                    id="plan-open-codex"
+                    class="question-action question-action--primary plan-open-codex"
+                    type="button"
+                    hidden
+                  >
+                    <svg
+                      aria-hidden="true"
+                      viewBox="0 0 24 24"
+                      fill="none"
+                      stroke="currentColor"
+                      stroke-width="1.8"
+                      stroke-linecap="round"
+                      stroke-linejoin="round"
+                    >
+                      <path d="M15 3h6v6" />
+                      <path d="m10 14 11-11" />
+                      <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6" />
+                    </svg>
+                    <span>前往 Codex</span>
+                  </button>
+                </div>
+              </section>
+            </section>
+
+            <section
+              id="settings-view"
+              class="panel-view settings-shell"
+              aria-labelledby="settings-title"
+              hidden
+            >
+              <header class="detail-header">
+                <button
+                  id="settings-back"
+                  class="detail-back"
+                  type="button"
+                  aria-label="返回会话列表"
+                  title="返回"
+                >
+                  <svg
+                    aria-hidden="true"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    stroke-width="1.8"
+                    stroke-linecap="round"
+                    stroke-linejoin="round"
+                  >
+                    <path d="m15 18-6-6 6-6" />
+                  </svg>
+                </button>
+                <div class="detail-heading settings-heading">
+                  <h1 id="settings-title">设置</h1>
+                  <nav
+                    id="settings-nav-shell"
+                    class="settings-nav-shell"
+                    aria-label="设置分类"
+                    data-overflow-left="false"
+                    data-overflow-right="false"
+                  >
+                    <div
+                      id="settings-nav"
+                      class="settings-nav"
+                      role="tablist"
+                      aria-label="设置分类"
+                    >
+                      <button
+                        id="settings-tab-general"
+                        class="settings-nav__item"
+                        type="button"
+                        role="tab"
+                        aria-selected="true"
+                        aria-controls="settings-panel"
+                        data-settings-section="general"
+                      >
+                        通用
+                      </button>
+                      <button
+                        id="settings-tab-hook"
+                        class="settings-nav__item"
+                        type="button"
+                        role="tab"
+                        aria-selected="false"
+                        aria-controls="settings-panel"
+                        data-settings-section="hook"
+                      >
+                        Hook
+                      </button>
+                      <button
+                        id="settings-tab-theme"
+                        class="settings-nav__item"
+                        type="button"
+                        role="tab"
+                        aria-selected="false"
+                        aria-controls="settings-panel"
+                        data-settings-section="theme"
+                      >
+                        风格
+                      </button>
+                      <button
+                        id="settings-tab-sound"
+                        class="settings-nav__item"
+                        type="button"
+                        role="tab"
+                        aria-selected="false"
+                        aria-controls="settings-panel"
+                        data-settings-section="sound"
+                      >
+                        音效
+                      </button>
+                      <button
+                        id="settings-tab-ssh"
+                        class="settings-nav__item"
+                        type="button"
+                        role="tab"
+                        aria-selected="false"
+                        aria-controls="settings-panel"
+                        data-settings-section="ssh"
+                      >
+                        SSH
+                      </button>
+                      <button
+                        id="settings-tab-lan"
+                        class="settings-nav__item"
+                        type="button"
+                        role="tab"
+                        aria-selected="false"
+                        aria-controls="settings-panel"
+                        data-settings-section="lan"
+                      >
+                        局域网
+                      </button>
+                      <button
+                        id="settings-tab-about"
+                        class="settings-nav__item"
+                        type="button"
+                        role="tab"
+                        aria-selected="false"
+                        aria-controls="settings-panel"
+                        data-settings-section="about"
+                      >
+                        关于
+                      </button>
+                      <span
+                        id="settings-nav-indicator"
+                        class="settings-nav__indicator"
+                        aria-hidden="true"
+                      ></span>
+                    </div>
+                  </nav>
+                </div>
+              </header>
+
+              <div
+                id="settings-panel"
+                class="settings-content"
+                role="tabpanel"
+                aria-labelledby="settings-tab-general"
+                tabindex="0"
+              >
+                <div id="settings-placeholder" class="settings-empty" role="status">
+                  <svg
+                    class="settings-empty__icon"
+                    aria-hidden="true"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    stroke-width="1.6"
+                    stroke-linecap="round"
+                    stroke-linejoin="round"
+                  >
+                    <path d="M4 21v-7" />
+                    <path d="M4 10V3" />
+                    <path d="M12 21v-9" />
+                    <path d="M12 8V3" />
+                    <path d="M20 21v-5" />
+                    <path d="M20 12V3" />
+                    <path d="M2 14h4" />
+                    <path d="M10 8h4" />
+                    <path d="M18 16h4" />
+                  </svg>
+                  <p id="settings-placeholder-text">通用设置内容待添加</p>
+                </div>
+
+                <div id="general-settings" class="settings-section">
+                  <section class="settings-card language-settings" aria-labelledby="language-title">
+                    <div class="settings-card__header language-settings__header">
+                      <div>
+                        <h2 id="language-title">语言</h2>
+                        <p>选择后会立即应用到整个 CodeCraft 界面。</p>
+                      </div>
+
+                      <div id="language-select" class="language-select">
+                        <button
+                          id="language-trigger"
+                          class="language-select__trigger"
+                          type="button"
+                          aria-haspopup="listbox"
+                          aria-expanded="false"
+                          aria-controls="language-menu"
+                          aria-label="选择界面语言，当前为简体中文"
+                        >
+                          <span id="language-mark" class="language-select__mark" aria-hidden="true">简</span>
+                          <span id="language-label" class="language-select__label">简体中文</span>
+                          <svg
+                            class="language-select__chevron"
+                            aria-hidden="true"
+                            viewBox="0 0 24 24"
+                            fill="none"
+                            stroke="currentColor"
+                            stroke-width="2"
+                            stroke-linecap="round"
+                            stroke-linejoin="round"
+                          >
+                            <path d="m6 9 6 6 6-6" />
+                          </svg>
+                        </button>
+
+                        <div
+                          id="language-menu"
+                          class="language-select__menu"
+                          role="listbox"
+                          aria-label="界面语言"
+                          hidden
+                        >
+                          <button class="language-select__option" type="button" role="option" data-locale="zh-CN" aria-selected="true">
+                            <span class="language-select__mark" aria-hidden="true">简</span>
+                            <span class="language-select__option-label">简体中文</span>
+                            <span class="language-select__option-chevron-slot" aria-hidden="true"></span>
+                          </button>
+                          <button class="language-select__option" type="button" role="option" data-locale="zh-TW" aria-selected="false">
+                            <span class="language-select__mark" aria-hidden="true">繁</span>
+                            <span class="language-select__option-label">繁體中文</span>
+                            <span class="language-select__option-chevron-slot" aria-hidden="true"></span>
+                          </button>
+                          <button class="language-select__option" type="button" role="option" data-locale="en" aria-selected="false">
+                            <span class="language-select__mark language-select__mark--wide" aria-hidden="true">EN</span>
+                            <span class="language-select__option-label">English</span>
+                            <span class="language-select__option-chevron-slot" aria-hidden="true"></span>
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                  </section>
+
+                  <section class="settings-card session-cleanup-settings" aria-labelledby="session-cleanup-title">
+                    <div class="settings-card__header">
+                      <div>
+                        <h2 id="session-cleanup-title">自动清理会话</h2>
+                        <p>空闲或停止状态超过所选时间后，从会话列表中移除；工作中和等待处理的会话不会受影响。</p>
+                      </div>
+                    </div>
+
+                    <div class="settings-select-row">
+                      <label for="session-cleanup-trigger">清理时间</label>
+                      <div id="session-cleanup-select" class="session-cleanup-select">
+                        <button
+                          id="session-cleanup-trigger"
+                          class="session-cleanup-select__trigger"
+                          type="button"
+                          aria-haspopup="listbox"
+                          aria-expanded="false"
+                          aria-controls="session-cleanup-menu"
+                          aria-label="选择清理时间，当前为30 分钟"
+                        >
+                          <span id="session-cleanup-label" class="session-cleanup-select__label">30 分钟</span>
+                          <svg
+                            class="session-cleanup-select__chevron"
+                            aria-hidden="true"
+                            viewBox="0 0 24 24"
+                            fill="none"
+                            stroke="currentColor"
+                            stroke-width="2"
+                            stroke-linecap="round"
+                            stroke-linejoin="round"
+                          >
+                            <path d="m6 9 6 6 6-6" />
+                          </svg>
+                        </button>
+
+                        <div
+                          id="session-cleanup-menu"
+                          class="session-cleanup-select__menu"
+                          role="listbox"
+                          aria-label="清理时间"
+                          hidden
+                        >
+                          <button class="session-cleanup-select__option" type="button" role="option" data-cleanup-preset="5m" aria-selected="false">
+                            <span class="session-cleanup-select__option-label">5 分钟</span>
+                            <span class="session-cleanup-select__option-chevron-slot" aria-hidden="true"></span>
+                          </button>
+                          <button class="session-cleanup-select__option" type="button" role="option" data-cleanup-preset="10m" aria-selected="false">
+                            <span class="session-cleanup-select__option-label">10 分钟</span>
+                            <span class="session-cleanup-select__option-chevron-slot" aria-hidden="true"></span>
+                          </button>
+                          <button class="session-cleanup-select__option" type="button" role="option" data-cleanup-preset="30m" aria-selected="true">
+                            <span class="session-cleanup-select__option-label">30 分钟</span>
+                            <span class="session-cleanup-select__option-chevron-slot" aria-hidden="true"></span>
+                          </button>
+                          <button class="session-cleanup-select__option" type="button" role="option" data-cleanup-preset="1h" aria-selected="false">
+                            <span class="session-cleanup-select__option-label">1 小时</span>
+                            <span class="session-cleanup-select__option-chevron-slot" aria-hidden="true"></span>
+                          </button>
+                          <button class="session-cleanup-select__option" type="button" role="option" data-cleanup-preset="custom" aria-selected="false">
+                            <span class="session-cleanup-select__option-label">自定义</span>
+                            <span class="session-cleanup-select__option-chevron-slot" aria-hidden="true"></span>
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+
+                    <div id="session-cleanup-custom" class="settings-custom-duration" hidden>
+                      <div class="settings-custom-duration__copy">
+                        <label for="session-cleanup-custom-minutes">自定义时长</label>
+                        <small id="session-cleanup-custom-hint">可设置 1 分钟至 7 天。</small>
+                      </div>
+                      <div class="settings-number-input">
+                        <input
+                          id="session-cleanup-custom-minutes"
+                          type="number"
+                          min="1"
+                          max="10080"
+                          step="1"
+                          inputmode="numeric"
+                          aria-describedby="session-cleanup-custom-hint"
+                        />
+                        <span aria-hidden="true">分钟</span>
+                      </div>
+                    </div>
+                  </section>
+
+                  <section class="settings-card window-position-settings" aria-labelledby="window-position-title">
+                    <div class="settings-card__header">
+                      <div>
+                        <h2 id="window-position-title">顶部位置</h2>
+                        <p>控制顶部区域的水平拖拽与窗口停靠位置。</p>
+                      </div>
+                    </div>
+
+                    <label class="settings-toggle" for="top-drag-enabled">
+                      <span class="settings-toggle__copy">
+                        <strong>启用顶部拖拽</strong>
+                        <small>从界面顶部拖动，在主屏顶部调整位置。</small>
+                      </span>
+                      <input id="top-drag-enabled" type="checkbox" />
+                      <span class="settings-toggle__control" aria-hidden="true">
+                        <span></span>
+                      </span>
+                    </label>
+
+                    <button
+                      id="window-position-advanced-toggle"
+                      class="settings-advanced-toggle"
+                      type="button"
+                      aria-expanded="false"
+                      aria-controls="window-position-advanced"
+                    >
+                      <span>高级选项</span>
+                      <svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+                        <path d="m9 18 6-6-6-6" />
+                      </svg>
+                    </button>
+
+                    <div id="window-position-advanced" class="settings-advanced-panel" hidden>
+                      <div class="settings-height-panel__content">
+                        <div class="position-presets" role="group" aria-label="快速设置窗口位置">
+                          <button type="button" data-position-preset="0">置左</button>
+                          <button type="button" data-position-preset="0.5">居中</button>
+                          <button type="button" data-position-preset="1">置右</button>
+                        </div>
+
+                        <div class="range-setting">
+                          <div class="range-setting__heading">
+                            <label for="window-horizontal-position">自定义位置</label>
+                            <output id="window-horizontal-position-output" for="window-horizontal-position">50%</output>
+                          </div>
+                          <input
+                            id="window-horizontal-position"
+                            class="settings-range"
+                            type="range"
+                            min="0"
+                            max="100"
+                            step="1"
+                            value="50"
+                            style="--range-progress: 50%"
+                            aria-valuetext="50%"
+                            aria-describedby="window-horizontal-position-range"
+                          />
+                          <div id="window-horizontal-position-range" class="range-setting__range" aria-hidden="true">
+                            <span>左侧</span>
+                            <span>右侧</span>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  </section>
+
+                  <section class="settings-card" aria-labelledby="approval-mode-title">
+                    <div class="settings-card__header">
+                      <div>
+                        <h2 id="approval-mode-title">自动审批</h2>
+                        <p>Claude Code 与 Codex 共用此策略；风险审批只自动通过低风险命令。</p>
+                      </div>
+                    </div>
+
+                    <fieldset class="settings-segmented" aria-label="自动审批">
+                      <label>
+                        <input type="radio" name="approval-mode" value="manual" checked />
+                        <span>手动审批</span>
+                      </label>
+                      <label>
+                        <input type="radio" name="approval-mode" value="risk" />
+                        <span>风险审批</span>
+                      </label>
+                      <label>
+                        <input type="radio" name="approval-mode" value="automatic" />
+                        <span>自动审批</span>
+                      </label>
+                    </fieldset>
+                  </section>
+
+                  <section class="settings-card" aria-labelledby="collapse-expand-title">
+                    <div class="settings-card__header">
+                      <div>
+                        <h2 id="collapse-expand-title">收起/展开</h2>
+                        <p>设置面板自动收起和审批请求展开方式。</p>
+                      </div>
+                    </div>
+
+                    <div class="range-setting">
+                      <div class="range-setting__heading">
+                        <label for="auto-collapse-delay">自动收起延迟</label>
+                        <output id="auto-collapse-delay-output" for="auto-collapse-delay">1.0s</output>
+                      </div>
+                      <input
+                        id="auto-collapse-delay"
+                        class="settings-range"
+                        type="range"
+                        min="0.1"
+                        max="10"
+                        step="0.1"
+                        value="1"
+                        style="--range-progress: 9.09%"
+                        aria-valuetext="1.0s"
+                        aria-describedby="auto-collapse-delay-range"
+                      />
+                      <div id="auto-collapse-delay-range" class="range-setting__range" aria-hidden="true">
+                        <span>0.1s</span>
+                        <span>10.0s</span>
+                      </div>
+                    </div>
+
+                    <label class="settings-toggle collapse-expand-toggle" for="approval-auto-expand">
+                      <span class="settings-toggle__copy">
+                        <strong>审批自动展开</strong>
+                        <small>收到审批请求时自动展开面板。</small>
+                      </span>
+                      <input id="approval-auto-expand" type="checkbox" checked />
+                      <span class="settings-toggle__control" aria-hidden="true">
+                        <span></span>
+                      </span>
+                    </label>
+                  </section>
+                </div>
+
+                <div id="hook-settings" class="settings-section hook-settings" hidden>
+                  <div class="hook-settings__toolbar">
+                    <div>
+                      <h2>Hook 管理</h2>
+                      <p>点击 Agent 可安装或卸载对应的 CodeCraft Hook。</p>
+                    </div>
+                    <button
+                      id="hook-refresh"
+                      class="hook-refresh"
+                      type="button"
+                      aria-label="刷新 Hook 状态"
+                    >
+                      <svg class="hook-refresh__icon" aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+                        <path d="M20 11a8.1 8.1 0 0 0-14.7-4.7L4 8" />
+                        <path d="M4 4v4h4" />
+                        <path d="M4 13a8.1 8.1 0 0 0 14.7 4.7L20 16" />
+                        <path d="M20 20v-4h-4" />
+                      </svg>
+                      <span id="hook-refresh-label">刷新</span>
+                      <span class="hook-spinner hook-refresh__spinner" aria-hidden="true"></span>
+                    </button>
+                  </div>
+
+                  <section id="installed-hook-card" class="settings-card hook-card" aria-labelledby="installed-hook-title">
+                    <div class="hook-card__header">
+                      <div>
+                        <h2 id="installed-hook-title">已安装的 Hook</h2>
+                        <p>点击列表项可卸载 Hook。</p>
+                      </div>
+                      <span id="installed-hook-count" class="hook-card__count">0</span>
+                    </div>
+                    <div id="installed-hook-list" class="hook-agent-list"></div>
+                    <div id="installed-hook-empty" class="hook-card__empty">
+                      <svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">
+                        <path d="M8 12h8M12 8v8" />
+                        <rect x="3" y="4" width="18" height="16" rx="3" />
+                      </svg>
+                      <span>暂无已安装的 Hook</span>
+                    </div>
+                  </section>
+
+                  <section id="available-hook-card" class="settings-card hook-card" aria-labelledby="available-hook-title">
+                    <div class="hook-card__header">
+                      <div>
+                        <h2 id="available-hook-title">未安装的 Hook</h2>
+                        <p>点击列表项可安装 Hook。</p>
+                      </div>
+                      <span id="available-hook-count" class="hook-card__count">0</span>
+                    </div>
+                    <div id="available-hook-list" class="hook-agent-list"></div>
+                    <div id="available-hook-empty" class="hook-card__empty">
+                      <svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">
+                        <path d="M9 12h6" />
+                        <rect x="3" y="4" width="18" height="16" rx="3" />
+                      </svg>
+                      <span>所有可用 Hook 均已安装</span>
+                    </div>
+                  </section>
+                  <p id="hook-settings-status" class="hook-settings__status" role="status" aria-live="polite" hidden></p>
+                </div>
+
+                <div id="theme-settings" class="settings-section" hidden>
+                  <section class="settings-card interface-settings" aria-labelledby="interface-settings-title">
+                    <div class="settings-card__header">
+                      <div>
+                        <h2 id="interface-settings-title">界面设置</h2>
+                        <p>按比例缩放全部元素，或分别调整界面尺寸。</p>
+                      </div>
+                    </div>
+
+                    <fieldset class="settings-segmented settings-segmented--two" aria-label="界面设置模式">
+                      <label>
+                        <input type="radio" name="interface-sizing-mode" value="scale" />
+                        <span>比例</span>
+                      </label>
+                      <label>
+                        <input type="radio" name="interface-sizing-mode" value="custom" />
+                        <span>自定义</span>
+                      </label>
+                    </fieldset>
+
+                    <div id="interface-scale-settings" class="interface-settings__panel" hidden>
+                      <div class="settings-height-panel__content">
+                        <div class="range-setting">
+                          <div class="range-setting__heading">
+                            <label for="interface-scale">整体比例</label>
+                            <output id="interface-scale-output" for="interface-scale">100%</output>
+                          </div>
+                          <input id="interface-scale" class="settings-range" type="range" min="75" max="150" step="1" value="100" aria-describedby="interface-scale-range" />
+                          <div id="interface-scale-range" class="range-setting__range" aria-hidden="true">
+                            <span>75%</span>
+                            <span>150%</span>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+
+                    <div id="interface-custom-settings" class="interface-settings__panel" hidden>
+                      <div class="settings-height-panel__content interface-custom-settings">
+                        <div class="range-setting">
+                          <div class="range-setting__heading">
+                            <label for="interface-font-scale">文字大小</label>
+                            <output id="interface-font-scale-output" for="interface-font-scale">100%</output>
+                          </div>
+                          <input id="interface-font-scale" class="settings-range" type="range" min="75" max="150" step="1" value="100" aria-describedby="interface-font-scale-range" />
+                          <div id="interface-font-scale-range" class="range-setting__range" aria-hidden="true"><span>75%</span><span>150%</span></div>
+                        </div>
+
+                        <div class="range-setting">
+                          <div class="range-setting__heading">
+                            <label for="interface-width">界面宽度</label>
+                            <output id="interface-width-output" for="interface-width">500px</output>
+                          </div>
+                          <input id="interface-width" class="settings-range" type="range" min="360" max="820" step="10" value="500" aria-describedby="interface-width-range" />
+                          <div id="interface-width-range" class="range-setting__range" aria-hidden="true"><span>360px</span><span>820px</span></div>
+                        </div>
+
+                        <div class="range-setting">
+                          <div class="range-setting__heading">
+                            <label for="interface-min-height">最小高度</label>
+                            <output id="interface-min-height-output" for="interface-min-height">300px</output>
+                          </div>
+                          <input id="interface-min-height" class="settings-range" type="range" min="240" max="1100" step="10" value="300" aria-describedby="interface-min-height-range" />
+                          <div id="interface-min-height-range" class="range-setting__range" aria-hidden="true"><span>240px</span><span>1100px</span></div>
+                        </div>
+
+                        <div class="range-setting">
+                          <div class="range-setting__heading">
+                            <label for="interface-max-height">最大高度</label>
+                            <output id="interface-max-height-output" for="interface-max-height">780px</output>
+                          </div>
+                          <input id="interface-max-height" class="settings-range" type="range" min="240" max="1100" step="10" value="780" aria-describedby="interface-max-height-range" />
+                          <div id="interface-max-height-range" class="range-setting__range" aria-hidden="true"><span>240px</span><span>1100px</span></div>
+                        </div>
+
+                        <div class="range-setting">
+                          <div class="range-setting__heading">
+                            <label for="interface-padding">内容边距</label>
+                            <output id="interface-padding-output" for="interface-padding">18px</output>
+                          </div>
+                          <input id="interface-padding" class="settings-range" type="range" min="10" max="32" step="1" value="18" aria-describedby="interface-padding-range" />
+                          <div id="interface-padding-range" class="range-setting__range" aria-hidden="true"><span>紧凑</span><span>宽松</span></div>
+                        </div>
+                      </div>
+                    </div>
+                  </section>
+
+                  <section class="settings-card" aria-labelledby="theme-mode-title">
+                    <div class="settings-card__header">
+                      <div>
+                        <h2 id="theme-mode-title">主题模式</h2>
+                        <p>选择后会立即应用到整个 CodeCraft 界面。</p>
+                      </div>
+                    </div>
+
+                    <fieldset class="theme-switch" aria-label="主题模式">
+                      <div class="theme-switch__option">
+                        <input id="theme-mode-system" type="radio" name="theme-mode" value="system" />
+                        <label class="theme-switch__mode" for="theme-mode-system">
+                          <span class="theme-switch__preview theme-switch__preview--system" aria-hidden="true">
+                            <span></span><span></span><span></span>
+                          </span>
+                          <span class="theme-switch__label">
+                            <span class="theme-switch__label-copy">
+                              <svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+                                <rect x="3" y="4" width="18" height="14" rx="2" />
+                                <path d="M8 22h8M12 18v4" />
+                              </svg>
+                              <span>跟随系统</span>
+                            </span>
+                          </span>
+                        </label>
+                        <button class="theme-switch__square-preview theme-switch__square-preview--system" type="button" data-working-square-image-theme="system" aria-label="更换跟随系统主题的工作方块图片" title="点击更换图片，显示时会自动裁切为正方形"></button>
+                      </div>
+                      <div class="theme-switch__option">
+                        <input id="theme-mode-dark" type="radio" name="theme-mode" value="dark" />
+                        <label class="theme-switch__mode" for="theme-mode-dark">
+                          <span class="theme-switch__preview theme-switch__preview--dark" aria-hidden="true">
+                            <span></span><span></span><span></span>
+                          </span>
+                          <span class="theme-switch__label">
+                            <span class="theme-switch__label-copy">
+                              <svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+                                <path d="M20.7 14.5A8.4 8.4 0 0 1 9.5 3.3 8.5 8.5 0 1 0 20.7 14.5Z" />
+                              </svg>
+                              <span>深色</span>
+                            </span>
+                          </span>
+                        </label>
+                        <button class="theme-switch__square-preview theme-switch__square-preview--dark" type="button" data-working-square-image-theme="dark" aria-label="更换深色主题的工作方块图片" title="点击更换图片，显示时会自动裁切为正方形"></button>
+                      </div>
+                      <div class="theme-switch__option">
+                        <input id="theme-mode-light" type="radio" name="theme-mode" value="light" />
+                        <label class="theme-switch__mode" for="theme-mode-light">
+                          <span class="theme-switch__preview theme-switch__preview--light" aria-hidden="true">
+                            <span></span><span></span><span></span>
+                          </span>
+                          <span class="theme-switch__label">
+                            <span class="theme-switch__label-copy">
+                              <svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+                                <circle cx="12" cy="12" r="4" />
+                                <path d="M12 2v2M12 20v2M4.93 4.93l1.42 1.42M17.66 17.66l1.41 1.41M2 12h2M20 12h2M4.93 19.07l1.42-1.42M17.66 6.34l1.41-1.41" />
+                              </svg>
+                              <span>亮色</span>
+                            </span>
+                          </span>
+                        </label>
+                        <button class="theme-switch__square-preview theme-switch__square-preview--light" type="button" data-working-square-image-theme="light" aria-label="更换亮色主题的工作方块图片" title="点击更换图片，显示时会自动裁切为正方形"></button>
+                      </div>
+                    </fieldset>
+                    <input id="working-square-image-input" type="file" accept="image/*,.svg" aria-label="选择工作方块图片" hidden />
+                    <p id="working-square-image-status" class="working-square-image-status" role="status" aria-live="polite" hidden></p>
+                  </section>
+
+                  <section class="settings-card" aria-labelledby="transparency-title">
+                    <div class="settings-card__header">
+                      <div>
+                        <h2 id="transparency-title">透明效果</h2>
+                        <p>分别调节界面、卡片和文字的透明度。</p>
+                      </div>
+                    </div>
+
+                    <div class="transparency-subsettings">
+                      <div class="range-setting">
+                        <div class="range-setting__heading">
+                          <label for="transparency-value">界面透明度</label>
+                          <output id="transparency-output" for="transparency-value">0.88</output>
+                        </div>
+                        <input
+                          id="transparency-value"
+                          class="settings-range"
+                          type="range"
+                          min="0.1"
+                          max="1"
+                          step="0.01"
+                          value="0.88"
+                          aria-describedby="transparency-range"
+                        />
+                        <div id="transparency-range" class="range-setting__range" aria-hidden="true">
+                          <span>0.10 透明</span>
+                          <span>1.00 不透明</span>
+                        </div>
+                      </div>
+
+                      <div class="range-setting">
+                        <div class="range-setting__heading">
+                          <label for="card-transparency-value">卡片透明度</label>
+                          <output id="card-transparency-output" for="card-transparency-value">0.86</output>
+                        </div>
+                        <input
+                          id="card-transparency-value"
+                          class="settings-range"
+                          type="range"
+                          min="0.1"
+                          max="1"
+                          step="0.01"
+                          value="0.86"
+                          aria-describedby="card-transparency-range"
+                        />
+                        <div id="card-transparency-range" class="range-setting__range" aria-hidden="true">
+                          <span>0.10 透明</span>
+                          <span>1.00 不透明</span>
+                        </div>
+                      </div>
+
+                      <div class="range-setting">
+                        <div class="range-setting__heading">
+                          <label for="text-transparency-value">文字透明度</label>
+                          <output id="text-transparency-output" for="text-transparency-value">1.00</output>
+                        </div>
+                        <input
+                          id="text-transparency-value"
+                          class="settings-range"
+                          type="range"
+                          min="0.1"
+                          max="1"
+                          step="0.01"
+                          value="1"
+                          aria-describedby="text-transparency-range"
+                        />
+                        <div id="text-transparency-range" class="range-setting__range" aria-hidden="true">
+                          <span>0.10 透明</span>
+                          <span>1.00 不透明</span>
+                        </div>
+                      </div>
+                    </div>
+                  </section>
+
+                  <section class="settings-card" aria-labelledby="motion-mode-title">
+                    <div class="settings-card__header">
+                      <div>
+                        <h2 id="motion-mode-title">界面动画</h2>
+                        <p>控制过渡、状态动效以及内容切换动画。</p>
+                      </div>
+                    </div>
+
+                    <fieldset class="settings-segmented" aria-label="界面动画">
+                      <label>
+                        <input type="radio" name="motion-mode" value="system" />
+                        <span>跟随系统</span>
+                      </label>
+                      <label>
+                        <input type="radio" name="motion-mode" value="on" />
+                        <span>开启</span>
+                      </label>
+                      <label>
+                        <input type="radio" name="motion-mode" value="off" />
+                        <span>关闭</span>
+                      </label>
+                    </fieldset>
+
+                    <div id="animation-speed-setting" class="animation-speed-setting" hidden>
+                      <div class="animation-speed-setting__heading">
+                        <label for="animation-speed">动画速度</label>
+                        <output id="animation-speed-value" for="animation-speed">1.00×</output>
+                      </div>
+                      <input
+                        id="animation-speed"
+                        type="range"
+                        min="0.01"
+                        max="2"
+                        step="0.01"
+                        value="1"
+                        aria-describedby="animation-speed-range"
+                      />
+                      <div id="animation-speed-range" class="animation-speed-setting__range" aria-hidden="true">
+                        <span>0.01×</span>
+                        <span>1×</span>
+                        <span>2×</span>
+                      </div>
+                    </div>
+                  </section>
+                </div>
+
+                <div id="sound-settings" class="settings-section sound-settings" hidden>
+                  <section class="settings-card" aria-labelledby="sound-alert-title">
+                    <div class="settings-card__header">
+                      <div>
+                        <h2 id="sound-alert-title">音效提醒</h2>
+                        <p>在工具调用、审批和会话状态变化时播放提醒。</p>
+                      </div>
+                    </div>
+
+                    <label class="settings-toggle" for="sound-enabled">
+                      <span class="settings-toggle__copy">
+                        <strong>启用音效提醒</strong>
+                        <small>关闭后保留音效库与音量设置。</small>
+                      </span>
+                      <input id="sound-enabled" type="checkbox" checked />
+                      <span class="settings-toggle__control" aria-hidden="true">
+                        <span></span>
+                      </span>
+                    </label>
+
+                    <div class="range-setting sound-volume-setting">
+                      <div class="range-setting__heading">
+                        <label for="sound-volume">音量调节</label>
+                        <output id="sound-volume-output" for="sound-volume">70%</output>
+                      </div>
+                      <input
+                        id="sound-volume"
+                        class="settings-range"
+                        type="range"
+                        min="0"
+                        max="100"
+                        step="1"
+                        value="70"
+                        style="--range-progress: 70%"
+                        aria-valuetext="70%"
+                        aria-describedby="sound-volume-range"
+                      />
+                      <div id="sound-volume-range" class="range-setting__range" aria-hidden="true">
+                        <span>静音</span>
+                        <span>100%</span>
+                      </div>
+                    </div>
+                  </section>
+
+                  <section class="settings-card" aria-labelledby="sound-library-title">
+                    <div class="settings-card__header">
+                      <div>
+                        <h2 id="sound-library-title">音效库</h2>
+                        <p>预设中的提醒类事件共用一段音效，结束类事件共用另一段。</p>
+                      </div>
+                    </div>
+
+                    <fieldset class="sound-library" aria-label="音效库">
+                      <div class="sound-pack">
+                        <label class="sound-pack__select">
+                          <input type="radio" name="sound-pack" value="note-block" checked />
+                          <span class="sound-pack__icon-slot" aria-hidden="true">
+                            <img class="sound-pack__icon" data-sound-pack-icon="note-block" alt="" />
+                          </span>
+                          <span class="sound-pack__copy">
+                            <strong>音符盒</strong>
+                            <small>note-block</small>
+                          </span>
+                        </label>
+                        <div class="sound-preview-group" role="group" aria-label="音符盒试听">
+                          <button class="sound-preview sound-preview--approval" type="button" data-sound-pack-preview="note-block" data-sound-preview-kind="approval" aria-label="试听音符盒提醒音" title="试听音符盒提醒音">
+                            <svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+                              <path d="m9 18 8-6-8-6v12Z" />
+                            </svg>
+                          </button>
+                          <button class="sound-preview sound-preview--complete" type="button" data-sound-pack-preview="note-block" data-sound-preview-kind="taskComplete" aria-label="试听音符盒完成音" title="试听音符盒完成音">
+                            <svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+                              <path d="m5 12 4 4 10-10" />
+                            </svg>
+                          </button>
+                        </div>
+                      </div>
+                      <div class="sound-pack">
+                        <label class="sound-pack__select">
+                          <input type="radio" name="sound-pack" value="cat" />
+                          <span class="sound-pack__icon-slot" aria-hidden="true">
+                            <img class="sound-pack__icon" data-sound-pack-icon="cat" alt="" />
+                          </span>
+                          <span class="sound-pack__copy">
+                            <strong>猫猫</strong>
+                            <small>cat</small>
+                          </span>
+                        </label>
+                        <div class="sound-preview-group" role="group" aria-label="猫猫试听">
+                          <button class="sound-preview sound-preview--approval" type="button" data-sound-pack-preview="cat" data-sound-preview-kind="approval" aria-label="试听猫猫提醒音" title="试听猫猫提醒音">
+                            <svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+                              <path d="m9 18 8-6-8-6v12Z" />
+                            </svg>
+                          </button>
+                          <button class="sound-preview sound-preview--complete" type="button" data-sound-pack-preview="cat" data-sound-preview-kind="taskComplete" aria-label="试听猫猫完成音" title="试听猫猫完成音">
+                            <svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+                              <path d="m5 12 4 4 10-10" />
+                            </svg>
+                          </button>
+                        </div>
+                      </div>
+                      <div class="sound-pack">
+                        <label class="sound-pack__select">
+                          <input type="radio" name="sound-pack" value="bone-block" />
+                          <span class="sound-pack__icon-slot" aria-hidden="true">
+                            <img class="sound-pack__icon" data-sound-pack-icon="bone-block" alt="" />
+                          </span>
+                          <span class="sound-pack__copy">
+                            <strong>骨块</strong>
+                            <small>bone-block</small>
+                          </span>
+                        </label>
+                        <div class="sound-preview-group" role="group" aria-label="骨块试听">
+                          <button class="sound-preview sound-preview--approval" type="button" data-sound-pack-preview="bone-block" data-sound-preview-kind="approval" aria-label="试听骨块提醒音" title="试听骨块提醒音">
+                            <svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+                              <path d="m9 18 8-6-8-6v12Z" />
+                            </svg>
+                          </button>
+                          <button class="sound-preview sound-preview--complete" type="button" data-sound-pack-preview="bone-block" data-sound-preview-kind="taskComplete" aria-label="试听骨块完成音" title="试听骨块完成音">
+                            <svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+                              <path d="m5 12 4 4 10-10" />
+                            </svg>
+                          </button>
+                        </div>
+                      </div>
+                      <div class="sound-pack">
+                        <label class="sound-pack__select">
+                          <input type="radio" name="sound-pack" value="experience" />
+                          <span class="sound-pack__icon-slot" aria-hidden="true">
+                            <img class="sound-pack__icon" data-sound-pack-icon="experience" alt="" />
+                          </span>
+                          <span class="sound-pack__copy">
+                            <strong>经验</strong>
+                            <small>experience</small>
+                          </span>
+                        </label>
+                        <div class="sound-preview-group" role="group" aria-label="经验试听">
+                          <button class="sound-preview sound-preview--approval" type="button" data-sound-pack-preview="experience" data-sound-preview-kind="approval" aria-label="试听经验提醒音" title="试听经验提醒音">
+                            <svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+                              <path d="m9 18 8-6-8-6v12Z" />
+                            </svg>
+                          </button>
+                          <button class="sound-preview sound-preview--complete" type="button" data-sound-pack-preview="experience" data-sound-preview-kind="taskComplete" aria-label="试听经验完成音" title="试听经验完成音">
+                            <svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+                              <path d="m5 12 4 4 10-10" />
+                            </svg>
+                          </button>
+                        </div>
+                      </div>
+                      <div class="sound-pack sound-pack--custom">
+                        <label class="sound-pack__select">
+                          <input type="radio" name="sound-pack" value="custom" />
+                          <span class="sound-pack__icon-slot sound-pack__icon-slot--custom" aria-hidden="true"></span>
+                          <span class="sound-pack__copy">
+                            <strong>自定</strong>
+                            <small>为 5 类事件分别选择</small>
+                          </span>
+                        </label>
+                      </div>
+                    </fieldset>
+
+                    <div id="custom-sound-settings" class="custom-sounds" hidden>
+                      <div class="custom-sound" data-sound-event="toolCall">
+                        <span class="custom-sound__name">工具调用</span>
+                        <span id="custom-sound-toolCall-file" class="custom-sound__file">未选择音频</span>
+                        <label class="custom-sound__choose">
+                          <input type="file" accept="audio/*,.ogg,.mp3,.wav,.m4a,.aac,.flac" data-custom-sound="toolCall" />
+                          <span>选择</span>
+                        </label>
+                        <button class="custom-sound__preview" type="button" data-custom-sound-preview="toolCall" aria-label="试听工具调用音效" title="试听工具调用音效">
+                          <svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 8-6-8-6v12Z" /></svg>
+                        </button>
+                      </div>
+                      <div class="custom-sound" data-sound-event="permissionApproval">
+                        <span class="custom-sound__name">权限审批</span>
+                        <span id="custom-sound-permissionApproval-file" class="custom-sound__file">未选择音频</span>
+                        <label class="custom-sound__choose">
+                          <input type="file" accept="audio/*,.ogg,.mp3,.wav,.m4a,.aac,.flac" data-custom-sound="permissionApproval" />
+                          <span>选择</span>
+                        </label>
+                        <button class="custom-sound__preview" type="button" data-custom-sound-preview="permissionApproval" aria-label="试听权限审批音效" title="试听权限审批音效">
+                          <svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 8-6-8-6v12Z" /></svg>
+                        </button>
+                      </div>
+                      <div class="custom-sound" data-sound-event="planExecution">
+                        <span class="custom-sound__name">计划实行</span>
+                        <span id="custom-sound-planExecution-file" class="custom-sound__file">未选择音频</span>
+                        <label class="custom-sound__choose">
+                          <input type="file" accept="audio/*,.ogg,.mp3,.wav,.m4a,.aac,.flac" data-custom-sound="planExecution" />
+                          <span>选择</span>
+                        </label>
+                        <button class="custom-sound__preview" type="button" data-custom-sound-preview="planExecution" aria-label="试听计划实行音效" title="试听计划实行音效">
+                          <svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 8-6-8-6v12Z" /></svg>
+                        </button>
+                      </div>
+                      <div class="custom-sound" data-sound-event="sessionSuccess">
+                        <span class="custom-sound__name">会话成功</span>
+                        <span id="custom-sound-sessionSuccess-file" class="custom-sound__file">未选择音频</span>
+                        <label class="custom-sound__choose">
+                          <input type="file" accept="audio/*,.ogg,.mp3,.wav,.m4a,.aac,.flac" data-custom-sound="sessionSuccess" />
+                          <span>选择</span>
+                        </label>
+                        <button class="custom-sound__preview" type="button" data-custom-sound-preview="sessionSuccess" aria-label="试听会话成功音效" title="试听会话成功音效">
+                          <svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 8-6-8-6v12Z" /></svg>
+                        </button>
+                      </div>
+                      <div class="custom-sound" data-sound-event="sessionFailure">
+                        <span class="custom-sound__name">会话失败</span>
+                        <span id="custom-sound-sessionFailure-file" class="custom-sound__file">未选择音频</span>
+                        <label class="custom-sound__choose">
+                          <input type="file" accept="audio/*,.ogg,.mp3,.wav,.m4a,.aac,.flac" data-custom-sound="sessionFailure" />
+                          <span>选择</span>
+                        </label>
+                        <button class="custom-sound__preview" type="button" data-custom-sound-preview="sessionFailure" aria-label="试听会话失败音效" title="试听会话失败音效">
+                          <svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 8-6-8-6v12Z" /></svg>
+                        </button>
+                      </div>
+                      <p id="custom-sound-status" class="custom-sounds__status" role="status" aria-live="polite"></p>
+                    </div>
+                  </section>
+                </div>
+
+                <div id="lan-settings" class="settings-section" hidden>
+                  <section class="settings-card" aria-labelledby="lan-service-title">
+                    <div class="settings-card__header">
+                      <div>
+                        <h2 id="lan-service-title">局域网控制台</h2>
+                        <p>开启后同一网络下的浏览器可以查看会话并处理审批。</p>
+                      </div>
+                      <span id="lan-state" class="lan-state" data-state="stopped">未运行</span>
+                    </div>
+
+                    <label class="settings-toggle" for="lan-enabled">
+                      <span class="settings-toggle__copy">
+                        <strong>启用服务</strong>
+                        <small>首次监听时 Windows 会弹出防火墙授权，请选择“允许”。</small>
+                      </span>
+                      <input id="lan-enabled" type="checkbox" />
+                      <span class="settings-toggle__control" aria-hidden="true">
+                        <span></span>
+                      </span>
+                    </label>
+
+                    <div
+                      id="lan-clients"
+                      class="lan-clients"
+                      role="group"
+                      aria-labelledby="lan-clients-title"
+                      hidden
+                    >
+                      <div class="lan-clients__copy">
+                        <strong id="lan-clients-title">在线客户端</strong>
+                        <small id="lan-last-client">暂无访问记录</small>
+                      </div>
+                      <span id="lan-client-count" class="hook-card__count">0</span>
+                    </div>
+
+                    <button
+                      id="lan-advanced-toggle"
+                      class="lan-advanced-toggle"
+                      type="button"
+                      aria-expanded="false"
+                      aria-controls="lan-advanced"
+                    >
+                      <span>高级选项</span>
+                      <svg
+                        class="lan-advanced-toggle__chevron"
+                        aria-hidden="true"
+                        viewBox="0 0 24 24"
+                        fill="none"
+                        stroke="currentColor"
+                        stroke-width="2"
+                        stroke-linecap="round"
+                        stroke-linejoin="round"
+                      >
+                        <path d="m6 9 6 6 6-6" />
+                      </svg>
+                    </button>
+
+                    <div id="lan-advanced" class="lan-advanced" hidden>
+                      <div class="lan-advanced__group">
+                        <div class="lan-advanced__heading">
+                          <strong id="lan-port-title">端口</strong>
+                          <small>范围 1024–65535，被占用时会提示并保持关闭。</small>
+                        </div>
+                        <div class="lan-field" role="group" aria-labelledby="lan-port-title">
+                          <label class="sr-only" for="lan-port">端口</label>
+                          <input
+                            id="lan-port"
+                            class="lan-input"
+                            type="number"
+                            min="1024"
+                            max="65535"
+                            step="1"
+                            value="8787"
+                            inputmode="numeric"
+                          />
+                          <button id="lan-port-apply" class="lan-button" type="button">应用</button>
+                        </div>
+                      </div>
+
+                      <div class="lan-advanced__group">
+                        <div class="lan-advanced__heading">
+                          <strong id="lan-token-title">访问令牌</strong>
+                          <small>令牌等同于密码。轮换后已登录的浏览器会立即失效。</small>
+                        </div>
+                        <div class="lan-field" role="group" aria-labelledby="lan-token-title">
+                          <code id="lan-token" class="lan-token">••••••••</code>
+                          <button id="lan-token-reveal" class="lan-button" type="button" aria-pressed="false">显示</button>
+                          <button id="lan-token-copy" class="lan-button" type="button">复制</button>
+                          <button id="lan-token-rotate" class="lan-button lan-button--danger" type="button">轮换</button>
+                        </div>
+                      </div>
+
+                      <p id="lan-advanced-lock" class="lan-hint" hidden></p>
+                    </div>
+
+                    <p id="lan-error" class="lan-error" role="status" aria-live="polite" hidden></p>
+                  </section>
+
+                  <section id="lan-address-card" class="settings-card" aria-labelledby="lan-address-title" hidden>
+                    <div class="settings-card__header">
+                      <div>
+                        <h2 id="lan-address-title">访问地址</h2>
+                        <p>在手机浏览器里打开任一地址，然后输入访问令牌。</p>
+                      </div>
+                    </div>
+
+                    <div id="lan-address-list" class="lan-address-list"></div>
+                    <p id="lan-address-empty" class="lan-hint" hidden>未找到局域网地址，请检查网络连接。</p>
+                    <div id="lan-qr" class="lan-qr" hidden></div>
+                  </section>
+
+                  <section class="settings-card" aria-labelledby="lan-approvals-title">
+                    <div class="settings-card__header">
+                      <div>
+                        <h2 id="lan-approvals-title">远程审批</h2>
+                        <p>关闭时网页只能查看；开启后拿到令牌的人可以代你决定。</p>
+                      </div>
+                    </div>
+
+                    <label class="settings-toggle" for="lan-allow-approvals">
+                      <span class="settings-toggle__copy">
+                        <strong>允许网页提交决定</strong>
+                        <small>Codex 的问题与计划仍然只读，只能在原终端完成。</small>
+                      </span>
+                      <input id="lan-allow-approvals" type="checkbox" />
+                      <span class="settings-toggle__control" aria-hidden="true">
+                        <span></span>
+                      </span>
+                    </label>
+
+                    <label class="settings-toggle" for="lan-audit-remote">
+                      <span class="settings-toggle__copy">
+                        <strong>记录远程决定</strong>
+                        <small>写入 lan-audit.log，标记来源为局域网。</small>
+                      </span>
+                      <input id="lan-audit-remote" type="checkbox" checked />
+                      <span class="settings-toggle__control" aria-hidden="true">
+                        <span></span>
+                      </span>
+                    </label>
+                  </section>
+
+                  <section class="settings-card lan-warning" aria-labelledby="lan-warning-title">
+                    <div class="settings-card__header">
+                      <div>
+                        <h2 id="lan-warning-title">安全提示</h2>
+                        <p>局域网内是明文 HTTP，请只在可信网络中开启。</p>
+                      </div>
+                    </div>
+                    <ul class="lan-warning__list">
+                      <li>任何拿到地址和令牌的人都能查看会话内容。</li>
+                      <li>开启远程审批意味着对方可以代你允许工具调用。</li>
+                      <li>不使用时关闭开关，端口会立即释放。</li>
+                    </ul>
+                  </section>
+                </div>
+
+                <div id="about-settings" class="settings-section" hidden>
+                  <section class="about-product" aria-labelledby="about-product-title">
+                    <div class="about-product__mark" aria-hidden="true">
+                      <img id="about-app-icon" alt="" />
+                    </div>
+                    <div class="about-product__copy">
+                      <div class="about-product__title-row">
+                        <h2 id="about-product-title">CodeCraft</h2>
+                        <span class="about-version">v<span id="about-version">0.1.0</span></span>
+                      </div>
+                      <p>专注于 AI 编程会话的轻量桌面工作台。</p>
+                    </div>
+                  </section>
+
+                  <section class="settings-card" aria-labelledby="about-capabilities-title">
+                    <div class="settings-card__header">
+                      <div>
+                        <h2 id="about-capabilities-title">为编程工作流而生</h2>
+                        <p>在一个安静、紧凑的界面中掌握编程助手的工作状态。</p>
+                      </div>
+                    </div>
+
+                    <div class="about-capabilities" role="list">
+                      <div class="about-capability" role="listitem">
+                        <svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+                          <path d="M4 5h16v11H4z" />
+                          <path d="m8 20 4-4 4 4" />
+                          <path d="m8 9 2 2-2 2M13 13h3" />
+                        </svg>
+                        <div>
+                          <strong>会话集中管理</strong>
+                          <span>汇总 Claude Code 与 Codex 会话</span>
+                        </div>
+                      </div>
+                      <div class="about-capability" role="listitem">
+                        <svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+                          <path d="M9 11l3 3L22 4" />
+                          <path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11" />
+                        </svg>
+                        <div>
+                          <strong>关键请求及时处理</strong>
+                          <span>快速响应审批、提问与计划确认</span>
+                        </div>
+                      </div>
+                    </div>
+                  </section>
+
+                  <section class="settings-card about-details" aria-labelledby="about-details-title">
+                    <div class="settings-card__header">
+                      <div>
+                        <h2 id="about-details-title">应用信息</h2>
+                        <p>当前安装版本及运行环境。</p>
+                      </div>
+                    </div>
+
+                    <dl class="about-details__list">
+                      <div>
+                        <dt>版本</dt>
+                        <dd>v<span id="about-detail-version">0.1.0</span></dd>
+                      </div>
+                      <div>
+                        <dt>平台</dt>
+                        <dd>Windows 桌面端</dd>
+                      </div>
+                      <div>
+                        <dt>技术</dt>
+                        <dd>Tauri 2 · Rust · WebView2</dd>
+                      </div>
+                    </dl>
+                  </section>
+
+                  <p class="about-footer">© 2026 CodeCraft</p>
+                </div>
+              </div>
+            </section>
+          </div>
+
+          <button
+            id="collapse-handle"
+            class="panel__collapse-handle"
+            type="button"
+            aria-label="收起面板"
+            title="收起面板"
+          >
+            <svg
+              aria-hidden="true"
+              viewBox="0 0 16 8"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="1.5"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+            >
+              <path d="m3 6 5-4 5 4" />
+            </svg>
+          </button>
+        </div>
+      </div>
+    </main>
+  </body>
+</html>
