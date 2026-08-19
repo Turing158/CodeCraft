@@ -39,6 +39,29 @@
             <span class="collapsed-working-flow__square"></span>
             <span class="collapsed-working-flow__square"></span>
           </div>
+          <div
+            id="startup-sequence"
+            class="startup-sequence"
+            aria-hidden="true"
+          >
+            <div class="startup-sequence__rail" aria-hidden="true">
+              <span class="startup-sequence__rail-fill"></span>
+            </div>
+            <div class="startup-sequence__brand">
+              <span class="startup-sequence__mark" aria-hidden="true">
+                <img id="startup-app-icon" alt="" />
+              </span>
+              <span class="startup-sequence__copy">
+                <strong>CodeCraft</strong>
+                <small>AI coding workspace</small>
+              </span>
+            </div>
+            <div class="startup-sequence__signal" aria-hidden="true">
+              <span></span>
+              <span></span>
+              <span></span>
+            </div>
+          </div>
           <button
             id="session-live-view"
             class="session-live"
@@ -1495,6 +1518,34 @@
                         <span>2×</span>
                       </div>
                     </div>
+                  </section>
+
+                  <section class="settings-card" aria-labelledby="startup-animation-title">
+                    <div class="settings-card__header">
+                      <div>
+                        <h2 id="startup-animation-title">启动动画</h2>
+                        <p>控制启动时长条界面的展示动画。</p>
+                      </div>
+                    </div>
+
+                    <fieldset
+                      id="startup-animation-mode"
+                      class="settings-segmented"
+                      aria-label="启动动画"
+                    >
+                      <label>
+                        <input type="radio" name="startup-animation-mode" value="none" />
+                        <span>无</span>
+                      </label>
+                      <label>
+                        <input type="radio" name="startup-animation-mode" value="minimal" />
+                        <span>简约动画</span>
+                      </label>
+                      <label>
+                        <input type="radio" name="startup-animation-mode" value="full" />
+                        <span>完整动画</span>
+                      </label>
+                    </fieldset>
                   </section>
                 </div>
 

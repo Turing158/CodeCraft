@@ -1,6 +1,7 @@
 export type ThemeMode = "system" | "dark" | "light";
 export type ResolvedTheme = Exclude<ThemeMode, "system">;
 export type MotionMode = "system" | "on" | "off";
+export type StartupAnimationMode = "none" | "minimal" | "full";
 export const LIGHT_WORKING_SQUARE_SVGS = ["grass-block"] as const;
 export const DARK_WORKING_SQUARE_SVGS = ["sea-lantern"] as const;
 export type LightWorkingSquareSvg =
@@ -15,6 +16,7 @@ export interface AppearanceSettings {
   workingSquareLightImageFile: string | null;
   workingSquareDarkImageFile: string | null;
   motionMode: MotionMode;
+  startupAnimationMode: StartupAnimationMode;
   animationSpeed: number;
   transparency: number;
   cardTransparency: number;
@@ -33,6 +35,7 @@ export const DEFAULT_APPEARANCE_SETTINGS: AppearanceSettings = {
   workingSquareLightImageFile: null,
   workingSquareDarkImageFile: null,
   motionMode: "system",
+  startupAnimationMode: "full",
   animationSpeed: 1,
   transparency: 0.88,
   cardTransparency: 0.86,
@@ -86,6 +89,12 @@ export const normalizeAppearanceSettings = (
     value.motionMode === "on" || value.motionMode === "off"
       ? value.motionMode
       : "system";
+  const startupAnimationMode: StartupAnimationMode =
+    value.startupAnimationMode === "none" ||
+    value.startupAnimationMode === "minimal" ||
+    value.startupAnimationMode === "full"
+      ? value.startupAnimationMode
+      : DEFAULT_APPEARANCE_SETTINGS.startupAnimationMode;
   const workingSquareLightSvg = isLightWorkingSquareSvg(
     value.workingSquareLightSvg,
   )
@@ -131,6 +140,7 @@ export const normalizeAppearanceSettings = (
     workingSquareLightImageFile,
     workingSquareDarkImageFile,
     motionMode,
+    startupAnimationMode,
     animationSpeed,
     transparency,
     cardTransparency,
@@ -166,3 +176,11 @@ export const effectiveAnimationSpeed = (
   if (!motionIsEnabled(settings.motionMode, systemPrefersReducedMotion)) return 0;
   return settings.motionMode === "on" ? settings.animationSpeed : 1;
 };
+
+export const effectiveStartupAnimationMode = (
+  settings: AppearanceSettings,
+  systemPrefersReducedMotion: boolean,
+): StartupAnimationMode =>
+  motionIsEnabled(settings.motionMode, systemPrefersReducedMotion)
+    ? settings.startupAnimationMode
+    : "none";

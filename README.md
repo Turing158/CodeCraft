@@ -1,6 +1,6 @@
 <div align="center">
 
-<img src="CodeCraft-tauri/src-tauri/icons/128x128@2x.png" alt="CodeCraft" width="112" height="112" />
+<img src="docs/assets/logo.png" alt="CodeCraft" width="112" height="112" />
 
 # CodeCraft
 

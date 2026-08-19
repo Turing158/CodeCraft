@@ -5,11 +5,13 @@ import {
   clampAnimationSpeed,
   clampTransparency,
   effectiveAnimationSpeed,
+  effectiveStartupAnimationMode,
   effectiveTheme,
   parseAppearanceSettings,
   transparencyIsActive,
   type AppearanceSettings,
   type MotionMode,
+  type StartupAnimationMode,
   type ThemeMode,
 } from "./appearance-settings";
 import {
@@ -404,6 +406,8 @@ const panelDragRegion = panel?.querySelector<HTMLElement>("#panel-drag-region");
 const collapsedWorkingLeadSquare = panel?.querySelector<HTMLElement>(
   ".collapsed-working-flow__square:first-child",
 );
+const startupSequence = panel?.querySelector<HTMLElement>("#startup-sequence");
+const startupAppIcon = panel?.querySelector<HTMLImageElement>("#startup-app-icon");
 const panelViewStage = panel?.querySelector<HTMLElement>(".panel-view-stage");
 const sessionLiveView = panel?.querySelector<HTMLButtonElement>(
   "#session-live-view",
@@ -661,6 +665,15 @@ const motionModeInputs = panel
       panel.querySelectorAll<HTMLInputElement>('input[name="motion-mode"]'),
     )
   : [];
+const startupAnimationModeFieldset =
+  panel?.querySelector<HTMLFieldSetElement>("#startup-animation-mode");
+const startupAnimationModeInputs = panel
+  ? Array.from(
+      panel.querySelectorAll<HTMLInputElement>(
+        'input[name="startup-animation-mode"]',
+      ),
+    )
+  : [];
 const animationSpeedSetting = panel?.querySelector<HTMLElement>(
   "#animation-speed-setting",
 );
@@ -836,6 +849,8 @@ if (
   !panelBody ||
   !panelDragRegion ||
   !collapsedWorkingLeadSquare ||
+  !startupSequence ||
+  !startupAppIcon ||
   !panelViewStage ||
   !sessionLiveView ||
   !sessionLiveCollapse ||
@@ -948,6 +963,8 @@ if (
   !aboutDetailVersion ||
   themeModeInputs.length !== 3 ||
   motionModeInputs.length !== 3 ||
+  !startupAnimationModeFieldset ||
+  startupAnimationModeInputs.length !== 3 ||
   !animationSpeedSetting ||
   !animationSpeedInput ||
   !animationSpeedValue ||
@@ -1328,6 +1345,10 @@ let renderedQuestionContent: RenderedQuestionContent | undefined;
 const COLLAPSED_PANEL_HEIGHT = 5;
 const LIVE_COLLAPSED_HEIGHT = 48;
 const LIVE_COLLAPSED_CORNER_PROGRESS = 0.5;
+const STARTUP_PANEL_HEIGHT = 132;
+const STARTUP_RAIL_DURATION_MS = 460;
+const STARTUP_INTRO_DURATION_MS = 920;
+const STARTUP_EXIT_DURATION_MS = 240;
 let liveCollapsedHeightActive = false;
 const MAX_EXPANDED_PANEL_HEIGHT = BASE_CONTENT_MAX_HEIGHT;
 const SETTINGS_MIN_EXPANDED_PANEL_HEIGHT = BASE_SETTINGS_MIN_HEIGHT;
@@ -1424,9 +1445,12 @@ const refreshExpandedPanelHeight = () => {
 };
 
 const syncPanelShape = () => {
+  const shapeContentHeight = rootElement.hasAttribute("data-startup-phase")
+    ? STARTUP_PANEL_HEIGHT
+    : expandedPanelHeight;
   panelBody.style.clipPath = panelClipPath(
     window.innerHeight / currentInterfaceScale(),
-    expandedPanelHeight,
+    shapeContentHeight,
     liveCollapsedHeightActive
       ? {
           collapsedHeight: LIVE_COLLAPSED_HEIGHT,
@@ -3449,6 +3473,89 @@ const updateCollapsedLiveView = () => {
   if (heightChanged) void syncCollapsedPanelSize();
 };
 
+const waitForStartupPhase = (durationMs: number) =>
+  new Promise<void>((resolve) => {
+    window.setTimeout(resolve, durationMs);
+  });
+
+const resizeStartupPanel = async (
+  expanded: boolean,
+  animateHeight: boolean,
+) => {
+  if (!isTauriRuntime) return;
+
+  beginPanelShapeTracking();
+  try {
+    await invoke<void>("set_panel_expanded", {
+      expanded,
+      panelWidth: currentNativePanelWidth(),
+      interfaceScale: currentInterfaceScale(),
+      height: STARTUP_PANEL_HEIGHT * currentInterfaceScale(),
+      collapsedHeight: collapsedPanelHeight() * currentInterfaceScale(),
+      collapsedCornerProgress: collapsedPanelCornerProgress(),
+      animateHeight,
+    });
+  } finally {
+    endPanelShapeTracking();
+  }
+};
+
+const runStartupSequence = async () => {
+  const animationSpeed = currentAnimationSpeed();
+  const startupAnimationMode = effectiveStartupAnimationMode(
+    appearanceSettings,
+    systemMotionPreference.matches,
+  );
+  if (startupAnimationMode === "none") {
+    updateCollapsedLiveView();
+    return;
+  }
+
+  const phaseDuration = (durationMs: number) =>
+    Math.max(1, Math.round(durationMs / animationSpeed));
+
+  startupAppIcon.src = codeCraftIconUrl;
+  startupSequence.setAttribute("aria-hidden", "false");
+  panel.setAttribute("aria-hidden", "true");
+  panelViewStage.setAttribute("aria-hidden", "true");
+  rootElement.dataset.panelState = "startup";
+  rootElement.dataset.startupPhase = "reveal";
+  syncPanelShape();
+
+  try {
+    await waitForStartupPhase(phaseDuration(STARTUP_RAIL_DURATION_MS));
+
+    if (startupAnimationMode === "full") {
+      rootElement.dataset.startupPhase = "expand";
+      await resizeStartupPanel(true, true);
+      rootElement.dataset.startupPhase = "intro";
+      await waitForStartupPhase(phaseDuration(STARTUP_INTRO_DURATION_MS));
+      rootElement.dataset.startupPhase = "exit";
+      await waitForStartupPhase(phaseDuration(STARTUP_EXIT_DURATION_MS));
+    }
+
+    const liveSession = primaryUnifiedLiveSession(latestUnifiedSessions());
+    const collapseSource = rootElement.dataset.collapseSource;
+    liveCollapsedHeightActive =
+      (collapseSource === "auto" || collapseSource === "mini") &&
+      liveSession !== undefined;
+    await resizeStartupPanel(false, startupAnimationMode === "full");
+  } catch (error: unknown) {
+    console.error("Unable to play the CodeCraft startup sequence", error);
+    try {
+      await resizeStartupPanel(false, false);
+    } catch {
+      // Keep the frontend state usable even if the native resize is unavailable.
+    }
+  } finally {
+    rootElement.dataset.panelState = "collapsed";
+    rootElement.removeAttribute("data-startup-phase");
+    startupSequence.setAttribute("aria-hidden", "true");
+    syncPanelShape();
+    updateCollapsedLiveView();
+  }
+};
+
 const syncCollapsedSessionState = () => {
   if (hasUnifiedWorkingSession(latestUnifiedSessions())) {
     startCollapsedWorking();
@@ -5301,6 +5408,14 @@ const syncAppearanceControls = () => {
   for (const input of motionModeInputs) {
     input.checked = input.value === appearanceSettings.motionMode;
   }
+  const startupAnimationLocked = appearanceSettings.motionMode === "off";
+  const displayedStartupAnimationMode = startupAnimationLocked
+    ? "none"
+    : appearanceSettings.startupAnimationMode;
+  startupAnimationModeFieldset.disabled = startupAnimationLocked;
+  for (const input of startupAnimationModeInputs) {
+    input.checked = input.value === displayedStartupAnimationMode;
+  }
   syncWorkingSquareImagePreviews();
   syncAnimationSpeedControl();
   syncTransparencyControls();
@@ -5842,6 +5957,15 @@ for (const input of motionModeInputs) {
   input.addEventListener("change", () => {
     if (!input.checked) return;
     updateAppearanceSettings({ motionMode: input.value as MotionMode });
+  });
+}
+
+for (const input of startupAnimationModeInputs) {
+  input.addEventListener("change", () => {
+    if (!input.checked || startupAnimationModeFieldset.disabled) return;
+    updateAppearanceSettings({
+      startupAnimationMode: input.value as StartupAnimationMode,
+    });
   });
 }
 
@@ -6513,6 +6637,8 @@ const contextMenu = new ContextMenuController<CodeCraftContextData>(
 
 syncProductVisibility();
 
+void runStartupSequence();
+
 if (isTauriRuntime) {
   initCodexPanel(renderCodexSnapshot);
   void refreshClaudeSessions();
@@ -6887,6 +7013,7 @@ sessionLiveCollapse.addEventListener("click", () => {
 });
 
 panel.addEventListener("pointerenter", () => {
+  if (rootElement.hasAttribute("data-startup-phase")) return;
   if (suppressPanelRevealUntilPointerLeave) return;
   if (document.documentElement.hasAttribute("data-panel-live")) return;
   void controller.pointerEntered().catch((error: unknown) => {
@@ -6895,6 +7022,7 @@ panel.addEventListener("pointerenter", () => {
 });
 
 panel.addEventListener("pointerleave", () => {
+  if (rootElement.hasAttribute("data-startup-phase")) return;
   if (panelDragPointerId !== undefined) return;
   if (!contextMenu.element.hidden) return;
   suppressPanelRevealUntilPointerLeave = false;
