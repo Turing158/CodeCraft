@@ -31,6 +31,13 @@ export class PanelController {
     if (generation !== this.generation) return;
   }
 
+  async revealIfCollapsed(): Promise<boolean> {
+    if (this.visualState === "expanded") return false;
+
+    await this.pointerEntered();
+    return true;
+  }
+
   async revealTemporarily(durationMs: number): Promise<void> {
     const generation = ++this.generation;
     this.clearTimers();

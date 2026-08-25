@@ -87,6 +87,26 @@ pub(crate) fn should_auto_approve(mode: ApprovalMode, risk: ApprovalRisk) -> boo
     }
 }
 
+/// Questions and plan confirmations require a subjective user decision even
+/// when the global policy is set to automatic.
+pub(crate) fn requires_user_decision(tool: &str) -> bool {
+    let normalized = tool
+        .chars()
+        .filter(|character| character.is_ascii_alphanumeric())
+        .flat_map(char::to_lowercase)
+        .collect::<String>();
+    matches!(
+        normalized.as_str(),
+        "askuserquestion"
+            | "requestuserinput"
+            | "question"
+            | "plan"
+            | "planexit"
+            | "exitplanmode"
+            | "updateplan"
+    )
+}
+
 pub(crate) fn risk_for_tool(tool: &str, input: Option<&Value>) -> ApprovalRisk {
     match tool.to_ascii_lowercase().as_str() {
         "read" | "glob" | "grep" | "websearch" | "brainstorm" => ApprovalRisk::Low,
@@ -285,5 +305,22 @@ mod tests {
             risk_for_claude_permission(&json!({ "tool_name": "Edit", "tool_input": {} })),
             ApprovalRisk::Elevated
         );
+    }
+
+    #[test]
+    fn questions_and_plans_always_require_a_user_decision() {
+        for tool in [
+            "AskUserQuestion",
+            "request_user_input",
+            "question",
+            "Plan",
+            "plan_exit",
+            "ExitPlanMode",
+            "update_plan",
+        ] {
+            assert!(requires_user_decision(tool), "unexpected tool: {tool}");
+        }
+        assert!(!requires_user_decision("Bash"));
+        assert!(!requires_user_decision("apply_patch"));
     }
 }

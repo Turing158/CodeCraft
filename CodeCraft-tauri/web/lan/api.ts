@@ -98,3 +98,52 @@ export const submitCodexApproval = (
     method: "POST",
     body: JSON.stringify({ requestId, decision }),
   });
+
+export interface OpenCodeTarget {
+  pluginInstanceId: string;
+  sessionId: string;
+  reviewId: string;
+  requestId?: string;
+}
+
+export const submitOpenCodeQuestion = (
+  target: OpenCodeTarget,
+  answers: string[][],
+) =>
+  request<{ ok: boolean }>("/api/opencode/question", {
+    method: "POST",
+    body: JSON.stringify({ ...target, requestId: target.requestId ?? target.reviewId, answers }),
+  });
+
+export const rejectOpenCodeQuestion = (target: OpenCodeTarget) =>
+  request<{ ok: boolean }>("/api/opencode/question/reject", {
+    method: "POST",
+    body: JSON.stringify({ ...target, requestId: target.requestId ?? target.reviewId, answers: [] }),
+  });
+
+export type OpenCodePermissionDecision = "once" | "always" | "reject";
+
+export const submitOpenCodePermission = (
+  target: OpenCodeTarget,
+  action: OpenCodePermissionDecision,
+) =>
+  request<{ ok: boolean }>("/api/opencode/permission", {
+    method: "POST",
+    body: JSON.stringify({
+      ...target,
+      requestId: target.requestId ?? target.reviewId,
+      action,
+      message: null,
+    }),
+  });
+
+export type OpenCodeGateDecision = "allowOnce" | "allowSession" | "reject";
+
+export const submitOpenCodeGate = (
+  target: OpenCodeTarget,
+  action: OpenCodeGateDecision,
+) =>
+  request<{ ok: boolean }>("/api/opencode/gate", {
+    method: "POST",
+    body: JSON.stringify({ ...target, action }),
+  });

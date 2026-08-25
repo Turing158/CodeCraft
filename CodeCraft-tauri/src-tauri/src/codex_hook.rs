@@ -548,9 +548,12 @@ fn handle_codex_hook(payload: &Value) -> Result<(), String> {
     }
 
     let approval_settings = approval_policy::load_settings();
+    let tool = tool_name(payload);
+    let requires_user_decision = approval_policy::requires_user_decision(&tool);
     let risk = approval_policy::risk_for_codex_hook(payload);
-    let decision =
-        approval_policy::should_auto_approve(approval_settings.mode, risk).then_some("allow");
+    let decision = (!requires_user_decision
+        && approval_policy::should_auto_approve(approval_settings.mode, risk))
+    .then_some("allow");
     if decision.is_some() {
         print_decision(decision);
         if config.audit_log {
@@ -970,49 +973,13 @@ pub(crate) fn read_audit_tail(max_lines: usize) -> Result<String, String> {
 }
 
 #[cfg(windows)]
-fn base64_encode(bytes: &[u8]) -> String {
-    const ALPHABET: &[u8; 64] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
-    let mut encoded = String::with_capacity(bytes.len().div_ceil(3) * 4);
-    for chunk in bytes.chunks(3) {
-        let first = chunk[0];
-        let second = chunk.get(1).copied().unwrap_or(0);
-        let third = chunk.get(2).copied().unwrap_or(0);
-        encoded.push(ALPHABET[(first >> 2) as usize] as char);
-        encoded.push(ALPHABET[(((first & 0x03) << 4) | (second >> 4)) as usize] as char);
-        encoded.push(if chunk.len() > 1 {
-            ALPHABET[(((second & 0x0f) << 2) | (third >> 6)) as usize] as char
-        } else {
-            '='
-        });
-        encoded.push(if chunk.len() > 2 {
-            ALPHABET[(third & 0x3f) as usize] as char
-        } else {
-            '='
-        });
-    }
-    encoded
-}
-
-#[cfg(windows)]
 fn hook_command(executable: &Path) -> String {
+    // Release builds use the Windows GUI subsystem. Running the child through
+    // cmd keeps the synchronous hook's stdin/stdout pipes attached until it
+    // exits, so Codex receives the JSON decision it prints.
     let executable = executable.display().to_string();
-    let shell_safe = executable
-        .chars()
-        .all(|character| character.is_ascii_alphanumeric() || "\\/:._-".contains(character));
-    if shell_safe {
-        return format!("{executable} {HOOK_ARGUMENT}");
-    }
-
-    let escaped = executable.replace('\'', "''");
-    let script = format!("& '{escaped}' {HOOK_ARGUMENT}");
-    let utf16 = script
-        .encode_utf16()
-        .flat_map(u16::to_le_bytes)
-        .collect::<Vec<_>>();
-    format!(
-        "powershell.exe -NoLogo -NoProfile -NonInteractive -ExecutionPolicy Bypass -EncodedCommand {}",
-        base64_encode(&utf16)
-    )
+    let escaped = executable.replace('"', "\"\"");
+    format!("cmd.exe /d /s /c \"\"{escaped}\" {HOOK_ARGUMENT}\"")
 }
 
 #[cfg(not(windows))]
@@ -1233,40 +1200,27 @@ mod tests {
 
     #[cfg(windows)]
     #[test]
-    fn windows_hook_command_does_not_quote_shell_safe_paths() {
+    fn windows_hook_command_waits_for_the_gui_subsystem_process() {
         let command = hook_command(Path::new(
             r"E:\project\CodeCraft\target\debug\codecraft-tauri.exe",
         ));
-        assert_eq!(
-            command,
-            r"E:\project\CodeCraft\target\debug\codecraft-tauri.exe --codecraft-codex-hook"
-        );
+        assert!(command.starts_with("cmd.exe /d /s /c \"\""));
+        assert!(command.contains(HOOK_ARGUMENT));
     }
 
     #[cfg(windows)]
     #[test]
-    fn windows_hook_command_runs_paths_with_spaces() {
-        use std::process::{Command, Stdio};
-
+    fn windows_hook_command_quotes_paths_with_spaces() {
         let root = env::temp_dir().join(format!(
             "codecraft codex hook command test {}",
             process::id()
         ));
-        let script = root.join("hook probe.cmd");
         let _ = fs::remove_dir_all(&root);
         fs::create_dir_all(&root).unwrap();
-        fs::write(&script, b"@echo off\r\nexit /b 0\r\n").unwrap();
-
-        let command = hook_command(&script);
-        assert!(command.starts_with("powershell.exe "));
-        let status = Command::new("cmd.exe")
-            .args(["/d", "/s", "/c", &command])
-            .stdin(Stdio::null())
-            .stdout(Stdio::null())
-            .stderr(Stdio::null())
-            .status()
-            .unwrap();
-        assert!(status.success());
+        let executable = root.join("Code Craft.exe");
+        let command = hook_command(&executable);
+        assert!(command.contains("Code Craft.exe"));
+        assert!(command.contains(HOOK_ARGUMENT));
         let _ = fs::remove_dir_all(root);
     }
 

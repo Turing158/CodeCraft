@@ -606,10 +606,6 @@ fn capture_plan_request(payload: &Value) -> Result<(), String> {
 
     remove_stale_decision_file(&plan_decision_path(&request_id))?;
     write_hook_envelope(payload)?;
-    if approval_policy::load_settings().mode == approval_policy::ApprovalMode::Automatic {
-        print_plan_decision(payload, None);
-        return Ok(());
-    }
     if !app_is_running() {
         print_permission_decision("ask");
         return Ok(());
@@ -676,7 +672,10 @@ fn capture_tool_permission_request(payload: &Value) -> Result<(), String> {
 
     let approval_settings = approval_policy::load_settings();
     let risk = approval_policy::risk_for_claude_permission(payload);
-    if approval_policy::should_auto_approve(approval_settings.mode, risk) {
+    let tool = string_field(payload, "tool_name").unwrap_or_default();
+    if !approval_policy::requires_user_decision(tool)
+        && approval_policy::should_auto_approve(approval_settings.mode, risk)
+    {
         print_permission_decision("allow");
         return Ok(());
     }
@@ -1073,7 +1072,7 @@ pub(crate) fn install_claude_hooks(executable: &Path) -> Result<(), String> {
     } else {
         json!({})
     };
-    let command = format!("\"{}\" {HOOK_ARGUMENT}", executable.display());
+    let command = hook_command(executable);
 
     if !merge_hook_settings(&mut settings, &command)? {
         return Ok(());
@@ -1086,6 +1085,22 @@ pub(crate) fn install_claude_hooks(executable: &Path) -> Result<(), String> {
         serde_json::to_string_pretty(&settings).map_err(|error| error.to_string())?;
     serialized.push('\n');
     fs::write(settings_path, serialized).map_err(|error| error.to_string())
+}
+
+#[cfg(windows)]
+fn hook_command(executable: &Path) -> String {
+    // Claude already executes command hooks through a shell. Nesting another
+    // `cmd /c` makes that inner shell consume the hook JSON as commands instead
+    // of forwarding it to CodeCraft's stdin.
+    let executable = executable.display().to_string();
+    let escaped = executable.replace('"', "\"\"");
+    format!("\"{escaped}\" {HOOK_ARGUMENT}")
+}
+
+#[cfg(not(windows))]
+fn hook_command(executable: &Path) -> String {
+    let escaped = executable.display().to_string().replace('\'', "'\\''");
+    format!("'{escaped}' {HOOK_ARGUMENT}")
 }
 
 fn claude_settings_path() -> Result<PathBuf, String> {
@@ -1761,6 +1776,18 @@ fn unix_time_ms() -> u64 {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[cfg(windows)]
+    #[test]
+    fn windows_hook_command_relies_on_claudes_shell_and_quotes_the_executable() {
+        let command = hook_command(Path::new(r"C:\Program Files\CodeCraft\codecraft-tauri.exe"));
+
+        assert_eq!(
+            command,
+            r#""C:\Program Files\CodeCraft\codecraft-tauri.exe" --codecraft-claude-hook"#
+        );
+        assert!(!command.to_ascii_lowercase().contains("cmd.exe"));
+    }
 
     #[test]
     fn marks_a_session_as_stopped_after_stop() {

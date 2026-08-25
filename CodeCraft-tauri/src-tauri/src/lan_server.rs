@@ -39,6 +39,7 @@ use crate::{
     },
     lan_config::{self, LanBindMode, LanServerConfig},
     lan_net, ApprovalIntegrationState, ClaudeIntegrationState, CodexIntegrationState,
+    OpenCodeIntegrationState,
 };
 
 /// Custom header a write request must carry. Browsers cannot add it during a
@@ -221,6 +222,20 @@ fn snapshot_value(app: &tauri::AppHandle) -> Value {
         .ok()
         .and_then(|snapshot| serde_json::to_value(snapshot).ok())
         .unwrap_or(Value::Null);
+    let opencode = crate::opencode_snapshot(&app.state::<OpenCodeIntegrationState>())
+        .ok()
+        .and_then(|snapshot| serde_json::to_value(snapshot).ok())
+        .unwrap_or(Value::Null);
+    // Per-agent install state drives which agent cards the console shows. The
+    // desktop panel already relies on this list for its hook settings, so the
+    // LAN console reads the same source of truth.
+    let integrations = crate::hook_statuses(
+        &app.state::<CodexIntegrationState>(),
+        &app.state::<OpenCodeIntegrationState>(),
+    )
+    .ok()
+    .and_then(|list| serde_json::to_value(list).ok())
+    .unwrap_or(Value::Null);
     let approval_mode = app
         .state::<ApprovalIntegrationState>()
         .settings
@@ -240,6 +255,8 @@ fn snapshot_value(app: &tauri::AppHandle) -> Value {
         "approvalMode": approval_mode,
         "claude": claude,
         "codex": codex,
+        "opencode": opencode,
+        "integrations": integrations,
     })
 }
 
@@ -352,7 +369,11 @@ async fn post_auth(
         };
     }
 
-    let Ok(session) = state.auth.lock().map(|mut auth| auth.grant_session(address)) else {
+    let Ok(session) = state
+        .auth
+        .lock()
+        .map(|mut auth| auth.grant_session(address))
+    else {
         return json_error(StatusCode::INTERNAL_SERVER_ERROR, "无法创建会话");
     };
     state.touch_client();
@@ -461,6 +482,34 @@ struct ClaudePlanBody {
 struct CodexApprovalBody {
     request_id: String,
     decision: CodexApprovalDecision,
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct OpenCodeQuestionBody {
+    plugin_instance_id: String,
+    session_id: String,
+    request_id: String,
+    answers: Vec<Vec<String>>,
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct OpenCodePermissionBody {
+    plugin_instance_id: String,
+    session_id: String,
+    request_id: String,
+    action: String,
+    message: Option<String>,
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct OpenCodeGateBody {
+    plugin_instance_id: String,
+    session_id: String,
+    review_id: String,
+    action: String,
 }
 
 /// Runs a write handler after the shared access checks, then records the audit
@@ -601,9 +650,120 @@ async fn post_codex_approval(
     )
 }
 
+async fn post_opencode_question(
+    State(http_state): State<LanHttpState>,
+    ConnectInfo(client): ConnectInfo<SocketAddr>,
+    headers: HeaderMap,
+    Json(body): Json<OpenCodeQuestionBody>,
+) -> Response {
+    let app = http_state.app.clone();
+    with_write_access(
+        &http_state,
+        &headers,
+        client,
+        "opencode-question",
+        &body.request_id,
+        "answer",
+        || {
+            let state = app.state::<OpenCodeIntegrationState>();
+            let mut store = state.store.lock().map_err(|error| error.to_string())?;
+            store.drain_inbox()?;
+            store.submit_question(
+                &body.plugin_instance_id,
+                &body.session_id,
+                &body.request_id,
+                body.answers.clone(),
+            )
+        },
+    )
+}
+
+async fn post_opencode_question_reject(
+    State(http_state): State<LanHttpState>,
+    ConnectInfo(client): ConnectInfo<SocketAddr>,
+    headers: HeaderMap,
+    Json(body): Json<OpenCodeQuestionBody>,
+) -> Response {
+    let app = http_state.app.clone();
+    with_write_access(
+        &http_state,
+        &headers,
+        client,
+        "opencode-question",
+        &body.request_id,
+        "reject",
+        || {
+            let state = app.state::<OpenCodeIntegrationState>();
+            let mut store = state.store.lock().map_err(|error| error.to_string())?;
+            store.drain_inbox()?;
+            store.reject_question(&body.plugin_instance_id, &body.session_id, &body.request_id)
+        },
+    )
+}
+
+async fn post_opencode_permission(
+    State(http_state): State<LanHttpState>,
+    ConnectInfo(client): ConnectInfo<SocketAddr>,
+    headers: HeaderMap,
+    Json(body): Json<OpenCodePermissionBody>,
+) -> Response {
+    let app = http_state.app.clone();
+    with_write_access(
+        &http_state,
+        &headers,
+        client,
+        "opencode-permission",
+        &body.request_id,
+        &body.action,
+        || {
+            let state = app.state::<OpenCodeIntegrationState>();
+            let mut store = state.store.lock().map_err(|error| error.to_string())?;
+            store.drain_inbox()?;
+            store.submit_permission(
+                &body.plugin_instance_id,
+                &body.session_id,
+                &body.request_id,
+                &body.action,
+                body.message.clone(),
+            )
+        },
+    )
+}
+
+async fn post_opencode_gate(
+    State(http_state): State<LanHttpState>,
+    ConnectInfo(client): ConnectInfo<SocketAddr>,
+    headers: HeaderMap,
+    Json(body): Json<OpenCodeGateBody>,
+) -> Response {
+    let app = http_state.app.clone();
+    with_write_access(
+        &http_state,
+        &headers,
+        client,
+        "opencode-gate",
+        &body.review_id,
+        &body.action,
+        || {
+            let state = app.state::<OpenCodeIntegrationState>();
+            let mut store = state.store.lock().map_err(|error| error.to_string())?;
+            store.drain_inbox()?;
+            store.submit_gate(
+                &body.plugin_instance_id,
+                &body.session_id,
+                &body.review_id,
+                &body.action,
+            )
+        },
+    )
+}
+
 /// Adds the headers that keep session data out of caches and stop the page from
 /// being framed or sniffed.
-async fn security_headers(request: axum::extract::Request, next: axum::middleware::Next) -> Response {
+async fn security_headers(
+    request: axum::extract::Request,
+    next: axum::middleware::Next,
+) -> Response {
     let mut response = next.run(request).await;
     let headers = response.headers_mut();
     headers.insert(
@@ -636,6 +796,13 @@ fn router(app: tauri::AppHandle) -> Router {
         .route("/api/claude/question", post(post_claude_question))
         .route("/api/claude/plan", post(post_claude_plan))
         .route("/api/codex/approval", post(post_codex_approval))
+        .route("/api/opencode/question", post(post_opencode_question))
+        .route(
+            "/api/opencode/question/reject",
+            post(post_opencode_question_reject),
+        )
+        .route("/api/opencode/permission", post(post_opencode_permission))
+        .route("/api/opencode/gate", post(post_opencode_gate))
         .layer(DefaultBodyLimit::max(MAX_BODY_BYTES))
         .layer(axum::middleware::from_fn(security_headers))
         .with_state(LanHttpState { app })
@@ -823,11 +990,7 @@ mod tests {
     #[test]
     fn rotating_the_token_locks_the_browser_out_again() {
         let (state, headers) = state_with_session(true);
-        state
-            .auth
-            .lock()
-            .expect("auth lock")
-            .invalidate_all();
+        state.auth.lock().expect("auth lock").invalidate_all();
 
         assert_eq!(
             denied_status(check_access(&state, &headers, false)),

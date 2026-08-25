@@ -29,6 +29,9 @@ export async function refreshCodexPanel(): Promise<void> {
       ...latestSnapshot,
       connected: false,
       integrationError: `读取 Codex 状态失败：${String(error)}`,
+      // A failed hook read must not retain the previous hook-derived content.
+      sessions: [],
+      interactions: [],
     };
   }
   latestSnapshot = snapshot;

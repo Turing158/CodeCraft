@@ -17,8 +17,17 @@ import {
   type CodexSession,
   type CodexSnapshot,
 } from "../../src/codex-sessions";
+import {
+  openCodePermissionRequest,
+  openCodeQuestionRequest,
+  openCodeReviewKey,
+  openCodeStatusLabel,
+  type OpenCodeReview,
+  type OpenCodeSession,
+  type OpenCodeSnapshot,
+} from "../../src/opencode-sessions";
 
-export type ConsoleSource = "claude" | "codex";
+export type ConsoleSource = "claude" | "codex" | "opencode";
 
 export type PendingKind = "permission" | "question" | "plan";
 
@@ -43,6 +52,13 @@ export interface ConsolePending {
   permission?: ClaudePermissionRequest;
   question?: ClaudeQuestionRequest;
   plan?: ClaudePlanRequest;
+  openCode?: {
+    pluginInstanceId: string;
+    sessionId: string;
+    reviewId: string;
+    requestId?: string;
+    reviewType: OpenCodeReview["reviewType"];
+  };
 }
 
 export interface ConsoleEntry {
@@ -65,6 +81,10 @@ export interface ConsoleIntegration {
   connected: boolean;
   error: string | null;
   sessionCount: number;
+  /** Whether the agent tool itself is present on the LAN machine. */
+  agentInstalled: boolean;
+  /** Whether the CodeCraft hook is installed for this agent. */
+  hookInstalled: boolean;
 }
 
 export interface ConsoleSnapshot {
@@ -79,6 +99,16 @@ export interface RawSnapshot {
   allowApprovals?: boolean;
   claude?: ClaudeSessionSnapshot | null;
   codex?: CodexSnapshot | null;
+  opencode?: OpenCodeSnapshot | null;
+  integrations?: RawHookIntegration[] | null;
+}
+
+/** Per-agent install state, mirroring the desktop hook settings list. */
+export interface RawHookIntegration {
+  id?: string;
+  name?: string;
+  agentInstalled?: boolean;
+  hookInstalled?: boolean;
 }
 
 const isRecord = (value: unknown): value is Record<string, unknown> =>
@@ -96,6 +126,13 @@ const emptyCodex: CodexSnapshot = {
   version: 0,
   sessions: [],
   interactions: [],
+};
+
+const emptyOpenCode: OpenCodeSnapshot = {
+  connected: false,
+  integrationError: null,
+  sessions: [],
+  instances: [],
 };
 
 // Codex questions and plans arrive from an external terminal, so the console can
@@ -200,6 +237,80 @@ const claudeEntry = (session: ClaudeSession): ConsoleEntry => ({
   pending: claudePending(session),
 });
 
+const openCodePending = (
+  session: OpenCodeSession,
+): ConsolePending | null => {
+  const review = [...session.pendingReviews].sort(
+    (left, right) => left.capturedAt - right.capturedAt,
+  )[0];
+  if (!review) return null;
+  const target = {
+    pluginInstanceId: review.pluginInstanceId,
+    sessionId: review.sessionId,
+    reviewId: review.reviewId,
+    requestId: "requestId" in review ? review.requestId : undefined,
+    reviewType: review.reviewType,
+  };
+  if (review.reviewType === "question") {
+    return {
+      kind: "question",
+      requestId: openCodeReviewKey(review),
+      readOnly: false,
+      question: openCodeQuestionRequest(review),
+      openCode: target,
+    };
+  }
+  return {
+    kind: "permission",
+    requestId: openCodeReviewKey(review),
+    readOnly: false,
+    permission: openCodePermissionRequest(review, session),
+    openCode: target,
+  };
+};
+
+const sourceFromHookId = (id: string | undefined): ConsoleSource | undefined => {
+  if (id === "claudeCode") return "claude";
+  if (id === "codex") return "codex";
+  if (id === "openCode") return "opencode";
+  return undefined;
+};
+
+const integrationName = (source: ConsoleSource): string =>
+  source === "claude" ? "Claude Code" : source === "codex" ? "Codex" : "OpenCode";
+
+const sessionCountFor = (
+  source: ConsoleSource,
+  claudeLength: number,
+  codexLength: number,
+  opencodeLength: number,
+): number =>
+  source === "claude"
+    ? claudeLength
+    : source === "codex"
+      ? codexLength
+      : opencodeLength;
+
+const openCodeEntry = (session: OpenCodeSession): ConsoleEntry => ({
+  key: `opencode:${session.pluginInstanceId}:${session.id}`,
+  source: "opencode",
+  sessionId: session.id,
+  title: session.title,
+  status: session.status,
+  statusLabel: openCodeStatusLabel(session.status),
+  cwd: session.cwd,
+  updatedAt: session.updatedAt,
+  activities: session.activities.map((activity) => ({
+    id: activity.id,
+    tool: activity.tool,
+    summary: activity.summary,
+    status: activity.status,
+    updatedAt: activity.updatedAt,
+  })),
+  outputs: session.outputs.map((output) => ({ id: output.id, text: output.text })),
+  pending: openCodePending(session),
+});
+
 const codexEntry = (
   session: CodexSession,
   interactions: CodexInteraction[],
@@ -245,34 +356,126 @@ export const mergeSnapshot = (raw: RawSnapshot): ConsoleSnapshot => {
   const codex = isRecord(raw.codex)
     ? { ...emptyCodex, ...(raw.codex as CodexSnapshot) }
     : emptyCodex;
+  const opencode = isRecord(raw.opencode)
+    ? { ...emptyOpenCode, ...(raw.opencode as OpenCodeSnapshot) }
+    : emptyOpenCode;
 
   const entries = [
     ...claude.sessions.map(claudeEntry),
     ...codex.sessions.map((session) => codexEntry(session, codex.interactions)),
+    ...opencode.sessions.map(openCodeEntry),
   ].sort(compareEntries);
 
   return {
     generatedAt: typeof raw.generatedAt === "number" ? raw.generatedAt : 0,
     allowApprovals: raw.allowApprovals === true,
     entries,
-    integrations: [
+    integrations: buildIntegrations(
+      raw,
+      claude.sessions.length,
+      codex.sessions.length,
+      opencode.sessions.length,
+    ),
+  };
+};
+
+const buildIntegrations = (
+  raw: RawSnapshot,
+  claudeLength: number,
+  codexLength: number,
+  opencodeLength: number,
+): ConsoleIntegration[] => {
+  const hookStatuses = Array.isArray(raw.integrations) ? raw.integrations : [];
+  if (hookStatuses.length === 0) {
+    // Older console/servers without install state fall back to the basic
+    // connected summary. With no install report we cannot prove a hook is
+    // missing, so treat every agent as installed and keep it visible.
+    return [
       {
         source: "claude",
-        name: "Claude Code",
-        connected: claude.connected,
-        error: claude.integrationError ?? null,
-        sessionCount: claude.sessions.length,
+        name: integrationName("claude"),
+        connected: claudeConnected(raw),
+        error: integrationError(raw, "claude"),
+        sessionCount: claudeLength,
+        agentInstalled: true,
+        hookInstalled: true,
       },
       {
         source: "codex",
-        name: "Codex",
-        connected: codex.connected,
-        error: codex.integrationError ?? null,
-        sessionCount: codex.sessions.length,
+        name: integrationName("codex"),
+        connected: codexConnected(raw),
+        error: integrationError(raw, "codex"),
+        sessionCount: codexLength,
+        agentInstalled: true,
+        hookInstalled: true,
       },
-    ],
-  };
+      {
+        source: "opencode",
+        name: integrationName("opencode"),
+        connected: opencodeConnected(raw),
+        error: integrationError(raw, "opencode"),
+        sessionCount: opencodeLength,
+        agentInstalled: true,
+        hookInstalled: true,
+      },
+    ];
+  }
+
+  return hookStatuses.flatMap((status) => {
+    const source = sourceFromHookId(status.id);
+    if (!source) return [];
+    const connected =
+      source === "claude"
+        ? claudeConnected(raw)
+        : source === "codex"
+          ? codexConnected(raw)
+          : opencodeConnected(raw);
+    return [
+      {
+        source,
+        name: status.name ?? integrationName(source),
+        connected,
+        error: integrationError(raw, source),
+        sessionCount: sessionCountFor(source, claudeLength, codexLength, opencodeLength),
+        agentInstalled: status.agentInstalled === true,
+        hookInstalled: status.hookInstalled === true,
+      },
+    ];
+  });
 };
+
+const claudeConnected = (raw: RawSnapshot): boolean =>
+  isRecord(raw.claude) ? raw.claude.connected === true : false;
+const codexConnected = (raw: RawSnapshot): boolean =>
+  isRecord(raw.codex) ? raw.codex.connected === true : false;
+const opencodeConnected = (raw: RawSnapshot): boolean =>
+  isRecord(raw.opencode) ? raw.opencode.connected === true : false;
+
+const integrationError = (raw: RawSnapshot, source: ConsoleSource): string | null => {
+  const value =
+    source === "claude"
+      ? isRecord(raw.claude)
+        ? raw.claude.integrationError
+        : null
+      : source === "codex"
+        ? isRecord(raw.codex)
+          ? raw.codex.integrationError
+          : null
+        : isRecord(raw.opencode)
+          ? raw.opencode.integrationError
+          : null;
+  return (value ?? null) as string | null;
+};
+
+/** Whether an agent card should be shown: only when its hook is installed,
+ * mirroring the desktop's hook settings list. Agents the software reports as
+ * not installed never appear in the console. */
+export const integrationVisible = (integration: ConsoleIntegration): boolean =>
+  integration.hookInstalled;
+
+/** The two states the user wants on a card: hook missing, or session count. */
+export const integrationStatusLabel = (integration: ConsoleIntegration): string =>
+  integration.hookInstalled ? integration.sessionCount + " 个会话" : "hook未安装";
 
 export const pendingCount = (snapshot: ConsoleSnapshot): number =>
   snapshot.entries.filter((entry) => entry.pending !== null).length;

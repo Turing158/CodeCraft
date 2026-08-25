@@ -1,0 +1,95 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "CodeCraft OpenCode capability snapshot",
+  "type": "object",
+  "required": [
+    "protocolVersion",
+    "pluginVersion",
+    "pluginInstanceID",
+    "opencodeVersion",
+    "integrationChannel",
+    "question",
+    "permission",
+    "httpBridge",
+    "toolHooks",
+    "callCorrelation",
+    "planExit",
+    "editMetadata",
+    "heartbeat"
+  ],
+  "properties": {
+    "protocolVersion": { "type": "string", "pattern": "^[0-9]+\\.[0-9]+$" },
+    "pluginVersion": { "type": "string", "minLength": 1 },
+    "pluginInstanceID": { "type": "string", "minLength": 1 },
+    "opencodeVersion": { "type": "string", "minLength": 1 },
+    "integrationChannel": { "const": "localhostHttpBridge" },
+    "question": {
+      "type": "object",
+      "required": ["list", "reply", "reject"],
+      "properties": {
+        "list": { "type": "boolean" },
+        "reply": { "type": "boolean" },
+        "reject": { "type": "boolean" }
+      },
+      "additionalProperties": false
+    },
+    "permission": {
+      "type": "object",
+      "required": ["list", "reply", "once", "always", "reject"],
+      "properties": {
+        "list": { "type": "boolean" },
+        "reply": { "type": "boolean" },
+        "once": { "type": "boolean" },
+        "always": { "type": "boolean" },
+        "reject": { "type": "boolean" },
+        "transport": { "const": "localhostHttp" }
+      },
+      "additionalProperties": false
+    },
+    "httpBridge": {
+      "type": "object",
+      "required": [
+        "serverUrlFromPluginContext",
+        "questionWaitReleased",
+        "permissionWaitReleased",
+        "authenticationOwner",
+        "credentialsWrittenToIpc"
+      ],
+      "properties": {
+        "serverUrlFromPluginContext": { "const": true },
+        "stableVersion": { "type": "string" },
+        "devVersion": { "type": "string" },
+        "questionWaitReleased": { "const": true },
+        "permissionWaitReleased": { "const": true },
+        "authenticationOwner": { "const": "pluginProcess" },
+        "credentialsWrittenToIpc": { "const": false }
+      },
+      "additionalProperties": false
+    },
+    "toolHooks": {
+      "type": "object",
+      "required": ["before", "after", "asyncBefore", "rejectError"],
+      "properties": {
+        "before": { "type": "boolean" },
+        "after": { "type": "boolean" },
+        "asyncBefore": { "type": "boolean" },
+        "rejectError": { "type": "boolean" }
+      },
+      "additionalProperties": false
+    },
+    "callCorrelation": {
+      "type": "object",
+      "required": ["permissionTool", "questionTool", "planExitTool"],
+      "properties": {
+        "permissionTool": { "type": "boolean" },
+        "questionTool": { "type": "boolean" },
+        "planExitTool": { "type": "boolean" }
+      },
+      "additionalProperties": false
+    },
+    "planExit": { "type": "object" },
+    "editMetadata": { "type": "object" },
+    "heartbeat": { "type": "string", "format": "date-time" }
+  },
+  "additionalProperties": true
+}

@@ -38,6 +38,7 @@ src-tauri/icons/*
 src-tauri/icons/icon/*
 !src-tauri/icons/icon/claude.svg
 !src-tauri/icons/icon/openai.svg
+!src-tauri/icons/icon/opencode.svg
 !src-tauri/icons/icon/bone_block.svg
 !src-tauri/icons/icon/cat.svg
 !src-tauri/icons/icon/experience.svg

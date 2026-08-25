@@ -1,5 +1,6 @@
 import { invoke } from "@tauri-apps/api/core";
 import { getVersion } from "@tauri-apps/api/app";
+import { listen, type UnlistenFn } from "@tauri-apps/api/event";
 import {
   APPEARANCE_SETTINGS_STORAGE_KEY,
   clampAnimationSpeed,
@@ -38,10 +39,7 @@ import {
   type ClaudeSession,
   type ClaudeSessionSnapshot,
 } from "./claude-sessions";
-import {
-  initCodexPanel,
-  refreshCodexPanel,
-} from "./codex-panel";
+import { initCodexPanel, refreshCodexPanel } from "./codex-panel";
 import {
   codexInteractionFor,
   codexPendingInteraction,
@@ -52,11 +50,28 @@ import {
   type CodexSnapshot,
 } from "./codex-sessions";
 import {
+  openCodePendingReveal,
+  openCodePermissionRequest,
+  openCodeQuestionRequest,
+  openCodeReviewForSession,
+  openCodeReviewKey,
+  openCodeReviewsForSession,
+  openCodeSessionKey,
+  type OpenCodeReview,
+  type OpenCodeNativePermissionReview,
+  type OpenCodeStrictToolGateReview,
+  type OpenCodeSession,
+  type OpenCodeSnapshot,
+} from "./opencode-sessions";
+import {
   hasUnifiedWorkingSession,
   isCodexSession,
+  isOpenCodeSession,
   primaryUnifiedLiveSession,
+  unifiedSessionKey,
   unifiedSessionLiveContent,
   unifiedSessionLiveStatusText,
+  unifiedSessionSource,
   unifiedSessionStatusLabel,
   unifiedSessionVisualStatus,
   type UnifiedSession,
@@ -86,16 +101,11 @@ import {
   type ReviewContentView,
 } from "./content-view";
 import { DragScrollController } from "./drag-scroll";
-import {
-  ContextMenuController,
-  type ContextMenuItem,
-} from "./context-menu";
+import { ContextMenuController, type ContextMenuItem } from "./context-menu";
+import { TooltipController } from "./tooltip";
 import { PanelController } from "./panel-controller";
 import { panelClipPath } from "./panel-shape";
-import {
-  CARD_SIZE_SELECTOR,
-  CardSizeAnimator,
-} from "./card-size-animation";
+import { CARD_SIZE_SELECTOR, CardSizeAnimator } from "./card-size-animation";
 import { resolvePendingPermissionRequest } from "./permission-flow";
 import {
   createLocalQuestionSubmission,
@@ -109,7 +119,13 @@ import {
 } from "./question-flow";
 import { renderMarkdown, renderPlanMarkdown } from "./plan-markdown";
 import { resolvePendingPlanRequest } from "./plan-flow";
-import { initializeI18n } from "./i18n";
+import { currentLocale, initializeI18n, translateText } from "./i18n";
+import {
+  UP_TO_DATE_HOLD_MS,
+  resolveUpdateCheck,
+  resolvedLifecycle,
+  type UpdateLifecycle,
+} from "./update-check";
 import {
   DEFAULT_SOUND_SETTINGS,
   SOUND_EVENTS,
@@ -121,10 +137,7 @@ import {
   type SoundSessionFrame,
   type SoundSettings,
 } from "./sound-settings";
-import {
-  createSoundPlayer,
-  type PresetPreviewKind,
-} from "./sound-player";
+import { createSoundPlayer, type PresetPreviewKind } from "./sound-player";
 import {
   APPROVALS_RISK_HINT,
   ENABLE_CONFIRM_HINT,
@@ -161,6 +174,8 @@ import {
 } from "./working-square-images";
 
 initializeI18n();
+
+const translate = (value: string) => translateText(value, currentLocale());
 
 const rootElement = document.documentElement;
 const systemMotionPreference = window.matchMedia(
@@ -261,10 +276,7 @@ const applyInterfaceSettings = () => {
 };
 
 const currentAnimationSpeed = () =>
-  effectiveAnimationSpeed(
-    appearanceSettings,
-    systemMotionPreference.matches,
-  );
+  effectiveAnimationSpeed(appearanceSettings, systemMotionPreference.matches);
 
 const applyMotionToAnimation = (animation: Animation) => {
   const speed = currentAnimationSpeed();
@@ -318,9 +330,7 @@ const applyAppearanceSettings = (syncAnimations = true) => {
   rootElement.dataset.workingSquareDarkSvg =
     appearanceSettings.workingSquareDarkSvg;
   rootElement.dataset.motion = animationSpeed > 0 ? "on" : "off";
-  rootElement.dataset.transparency = transparencyActive
-    ? "on"
-    : "off";
+  rootElement.dataset.transparency = transparencyActive ? "on" : "off";
   rootElement.style.setProperty(
     "--panel-opacity",
     String(appearanceSettings.transparency),
@@ -368,10 +378,8 @@ document.addEventListener("transitionrun", handleAnimationStart, true);
 applyAppearanceSettings(false);
 applyInterfaceSettings();
 
-const codeCraftIconUrl = new URL(
-  "../src-tauri/icons/ico.svg",
-  import.meta.url,
-).href;
+const codeCraftIconUrl = new URL("../src-tauri/icons/ico.svg", import.meta.url)
+  .href;
 // Keep the small logo external because Tauri's CSP rejects Vite data URLs.
 const claudeCodeIconUrl = new URL(
   "../src-tauri/icons/icon/claude.svg?no-inline",
@@ -379,6 +387,10 @@ const claudeCodeIconUrl = new URL(
 ).href;
 const codexIconUrl = new URL(
   "../src-tauri/icons/icon/openai.svg",
+  import.meta.url,
+).href;
+const openCodeIconUrl = new URL(
+  "../src-tauri/icons/icon/opencode.svg?no-inline",
   import.meta.url,
 ).href;
 // The pack artwork stays external for the same CSP reason as the logo above:
@@ -407,11 +419,11 @@ const collapsedWorkingLeadSquare = panel?.querySelector<HTMLElement>(
   ".collapsed-working-flow__square:first-child",
 );
 const startupSequence = panel?.querySelector<HTMLElement>("#startup-sequence");
-const startupAppIcon = panel?.querySelector<HTMLImageElement>("#startup-app-icon");
+const startupAppIcon =
+  panel?.querySelector<HTMLImageElement>("#startup-app-icon");
 const panelViewStage = panel?.querySelector<HTMLElement>(".panel-view-stage");
-const sessionLiveView = panel?.querySelector<HTMLButtonElement>(
-  "#session-live-view",
-);
+const sessionLiveView =
+  panel?.querySelector<HTMLButtonElement>("#session-live-view");
 const sessionLiveCollapse = panel?.querySelector<HTMLButtonElement>(
   "#session-live-collapse",
 );
@@ -424,23 +436,47 @@ const sessionLiveTitle = panel?.querySelector<HTMLElement>(
 const sessionLiveStatusTextElement = panel?.querySelector<HTMLElement>(
   "#session-live-status-text",
 );
-const collapseHandle = panel?.querySelector<HTMLButtonElement>(
-  "#collapse-handle",
-);
-const integrationState = panel?.querySelector<HTMLElement>(
-  "#integration-state",
-);
+const collapseHandle =
+  panel?.querySelector<HTMLButtonElement>("#collapse-handle");
+const integrationState =
+  panel?.querySelector<HTMLElement>("#integration-state");
 const sessionSummary = panel?.querySelector<HTMLElement>("#session-summary");
 const sessionList = panel?.querySelector<HTMLUListElement>(
   "#claude-session-list",
 );
-const sessionSourceCards = panel?.querySelector<HTMLElement>("#session-source-cards");
-const claudeSessionCard = panel?.querySelector<HTMLElement>("#claude-session-card");
-const codexSessionCard = panel?.querySelector<HTMLElement>("#codex-session-card");
-const codexSessionList = panel?.querySelector<HTMLUListElement>("#codex-session-list");
-const claudeConnectionStatus = panel?.querySelector<HTMLButtonElement>("#claude-connection-status");
-const claudeSessionCardIcon = panel?.querySelector<HTMLImageElement>("#claude-session-card-icon");
-const codexSessionCardIcon = panel?.querySelector<HTMLImageElement>("#codex-session-card-icon");
+const sessionSourceCards = panel?.querySelector<HTMLElement>(
+  "#session-source-cards",
+);
+const claudeSessionCard = panel?.querySelector<HTMLElement>(
+  "#claude-session-card",
+);
+const codexSessionCard = panel?.querySelector<HTMLElement>(
+  "#codex-session-card",
+);
+const openCodeSessionCard = panel?.querySelector<HTMLElement>(
+  "#opencode-session-card",
+);
+const codexSessionList = panel?.querySelector<HTMLUListElement>(
+  "#codex-session-list",
+);
+const openCodeSessionList = panel?.querySelector<HTMLUListElement>(
+  "#opencode-session-list",
+);
+const claudeConnectionStatus = panel?.querySelector<HTMLButtonElement>(
+  "#claude-connection-status",
+);
+const openCodeConnectionStatus = panel?.querySelector<HTMLElement>(
+  "#opencode-connection-status",
+);
+const claudeSessionCardIcon = panel?.querySelector<HTMLImageElement>(
+  "#claude-session-card-icon",
+);
+const codexSessionCardIcon = panel?.querySelector<HTMLImageElement>(
+  "#codex-session-card-icon",
+);
+const openCodeSessionCardIcon = panel?.querySelector<HTMLImageElement>(
+  "#opencode-session-card-icon",
+);
 const sessionProduct = panel?.querySelector<HTMLElement>(".session-product");
 const sessionProductTrigger = panel?.querySelector<HTMLButtonElement>(
   "#session-product-trigger",
@@ -452,9 +488,8 @@ const sessionProductTitle = panel?.querySelector<HTMLElement>("#session-title");
 const sessionProductMenu = panel?.querySelector<HTMLElement>(
   "#session-product-menu",
 );
-const settingsOpenButton = panel?.querySelector<HTMLButtonElement>(
-  "#settings-open",
-);
+const settingsOpenButton =
+  panel?.querySelector<HTMLButtonElement>("#settings-open");
 const sessionView = panel?.querySelector<HTMLElement>("#session-view");
 const sessionDetailView = panel?.querySelector<HTMLElement>(
   "#session-detail-view",
@@ -474,9 +509,8 @@ const sessionActivityList = panel?.querySelector<HTMLOListElement>(
 );
 const sessionOutput = panel?.querySelector<HTMLElement>("#session-output");
 const settingsView = panel?.querySelector<HTMLElement>("#settings-view");
-const settingsBackButton = panel?.querySelector<HTMLButtonElement>(
-  "#settings-back",
-);
+const settingsBackButton =
+  panel?.querySelector<HTMLButtonElement>("#settings-back");
 const settingsNavShell = panel?.querySelector<HTMLElement>(
   "#settings-nav-shell",
 );
@@ -512,11 +546,11 @@ const sessionCleanupPresetOptions = panel
 const sessionCleanupCustom = panel?.querySelector<HTMLElement>(
   "#session-cleanup-custom",
 );
-const sessionCleanupCustomMinutesInput =
-  panel?.querySelector<HTMLInputElement>("#session-cleanup-custom-minutes");
-const topDragEnabledInput = panel?.querySelector<HTMLInputElement>(
-  "#top-drag-enabled",
+const sessionCleanupCustomMinutesInput = panel?.querySelector<HTMLInputElement>(
+  "#session-cleanup-custom-minutes",
 );
+const topDragEnabledInput =
+  panel?.querySelector<HTMLInputElement>("#top-drag-enabled");
 const windowPositionAdvancedToggle = panel?.querySelector<HTMLButtonElement>(
   "#window-position-advanced-toggle",
 );
@@ -535,17 +569,38 @@ const windowPositionPresetButtons = panel
     )
   : [];
 const hookSettings = panel?.querySelector<HTMLElement>("#hook-settings");
-const hookRefreshButton = panel?.querySelector<HTMLButtonElement>("#hook-refresh");
-const hookRefreshLabel = panel?.querySelector<HTMLElement>("#hook-refresh-label");
-const installedHookCard = panel?.querySelector<HTMLElement>("#installed-hook-card");
-const availableHookCard = panel?.querySelector<HTMLElement>("#available-hook-card");
-const installedHookList = panel?.querySelector<HTMLElement>("#installed-hook-list");
-const availableHookList = panel?.querySelector<HTMLElement>("#available-hook-list");
-const installedHookEmpty = panel?.querySelector<HTMLElement>("#installed-hook-empty");
-const availableHookEmpty = panel?.querySelector<HTMLElement>("#available-hook-empty");
-const installedHookCount = panel?.querySelector<HTMLElement>("#installed-hook-count");
-const availableHookCount = panel?.querySelector<HTMLElement>("#available-hook-count");
-const hookSettingsStatus = panel?.querySelector<HTMLElement>("#hook-settings-status");
+const hookRefreshButton =
+  panel?.querySelector<HTMLButtonElement>("#hook-refresh");
+const hookRefreshLabel = panel?.querySelector<HTMLElement>(
+  "#hook-refresh-label",
+);
+const installedHookCard = panel?.querySelector<HTMLElement>(
+  "#installed-hook-card",
+);
+const availableHookCard = panel?.querySelector<HTMLElement>(
+  "#available-hook-card",
+);
+const installedHookList = panel?.querySelector<HTMLElement>(
+  "#installed-hook-list",
+);
+const availableHookList = panel?.querySelector<HTMLElement>(
+  "#available-hook-list",
+);
+const installedHookEmpty = panel?.querySelector<HTMLElement>(
+  "#installed-hook-empty",
+);
+const availableHookEmpty = panel?.querySelector<HTMLElement>(
+  "#available-hook-empty",
+);
+const installedHookCount = panel?.querySelector<HTMLElement>(
+  "#installed-hook-count",
+);
+const availableHookCount = panel?.querySelector<HTMLElement>(
+  "#available-hook-count",
+);
+const hookSettingsStatus = panel?.querySelector<HTMLElement>(
+  "#hook-settings-status",
+);
 const lanSettings = panel?.querySelector<HTMLElement>("#lan-settings");
 const lanState = panel?.querySelector<HTMLElement>("#lan-state");
 const lanEnabledInput = panel?.querySelector<HTMLInputElement>("#lan-enabled");
@@ -560,15 +615,20 @@ const lanAdvancedToggle = panel?.querySelector<HTMLButtonElement>(
 const lanAdvanced = panel?.querySelector<HTMLElement>("#lan-advanced");
 const lanAdvancedLock = panel?.querySelector<HTMLElement>("#lan-advanced-lock");
 const lanPortInput = panel?.querySelector<HTMLInputElement>("#lan-port");
-const lanPortApplyButton = panel?.querySelector<HTMLButtonElement>("#lan-port-apply");
+const lanPortApplyButton =
+  panel?.querySelector<HTMLButtonElement>("#lan-port-apply");
 const lanTokenText = panel?.querySelector<HTMLElement>("#lan-token");
-const lanTokenRevealButton = panel?.querySelector<HTMLButtonElement>("#lan-token-reveal");
-const lanTokenCopyButton = panel?.querySelector<HTMLButtonElement>("#lan-token-copy");
-const lanTokenRotateButton = panel?.querySelector<HTMLButtonElement>("#lan-token-rotate");
+const lanTokenRevealButton =
+  panel?.querySelector<HTMLButtonElement>("#lan-token-reveal");
+const lanTokenCopyButton =
+  panel?.querySelector<HTMLButtonElement>("#lan-token-copy");
+const lanTokenRotateButton =
+  panel?.querySelector<HTMLButtonElement>("#lan-token-rotate");
 const lanAllowApprovalsInput = panel?.querySelector<HTMLInputElement>(
   "#lan-allow-approvals",
 );
-const lanAuditRemoteInput = panel?.querySelector<HTMLInputElement>("#lan-audit-remote");
+const lanAuditRemoteInput =
+  panel?.querySelector<HTMLInputElement>("#lan-audit-remote");
 const lanClients = panel?.querySelector<HTMLElement>("#lan-clients");
 const lanClientCount = panel?.querySelector<HTMLElement>("#lan-client-count");
 const lanLastClient = panel?.querySelector<HTMLElement>("#lan-last-client");
@@ -600,9 +660,8 @@ const interfaceScaleSettings = panel?.querySelector<HTMLElement>(
 const interfaceCustomSettings = panel?.querySelector<HTMLElement>(
   "#interface-custom-settings",
 );
-const interfaceScaleInput = panel?.querySelector<HTMLInputElement>(
-  "#interface-scale",
-);
+const interfaceScaleInput =
+  panel?.querySelector<HTMLInputElement>("#interface-scale");
 const interfaceScaleOutput = panel?.querySelector<HTMLOutputElement>(
   "#interface-scale-output",
 );
@@ -612,9 +671,8 @@ const interfaceFontScaleInput = panel?.querySelector<HTMLInputElement>(
 const interfaceFontScaleOutput = panel?.querySelector<HTMLOutputElement>(
   "#interface-font-scale-output",
 );
-const interfaceWidthInput = panel?.querySelector<HTMLInputElement>(
-  "#interface-width",
-);
+const interfaceWidthInput =
+  panel?.querySelector<HTMLInputElement>("#interface-width");
 const interfaceWidthOutput = panel?.querySelector<HTMLOutputElement>(
   "#interface-width-output",
 );
@@ -630,9 +688,8 @@ const interfaceMaxHeightInput = panel?.querySelector<HTMLInputElement>(
 const interfaceMaxHeightOutput = panel?.querySelector<HTMLOutputElement>(
   "#interface-max-height-output",
 );
-const interfacePaddingInput = panel?.querySelector<HTMLInputElement>(
-  "#interface-padding",
-);
+const interfacePaddingInput =
+  panel?.querySelector<HTMLInputElement>("#interface-padding");
 const interfacePaddingOutput = panel?.querySelector<HTMLOutputElement>(
   "#interface-padding-output",
 );
@@ -641,6 +698,39 @@ const aboutAppIcon = panel?.querySelector<HTMLImageElement>("#about-app-icon");
 const aboutVersion = panel?.querySelector<HTMLElement>("#about-version");
 const aboutDetailVersion = panel?.querySelector<HTMLElement>(
   "#about-detail-version",
+);
+const aboutUpdateCheckButton = panel?.querySelector<HTMLButtonElement>(
+  "#about-update-check-button",
+);
+const aboutUpdateNoneButton = panel?.querySelector<HTMLButtonElement>(
+  "#about-update-none-button",
+);
+const aboutUpdateDownloadButton = panel?.querySelector<HTMLButtonElement>(
+  "#about-update-download-button",
+);
+const aboutUpdateStatusText = panel?.querySelector<HTMLElement>(
+  "#about-update-status-text",
+);
+const aboutUpdateStatusDetail = panel?.querySelector<HTMLElement>(
+  "#about-update-status-detail",
+);
+const aboutUpdateStatusIcon = panel?.querySelector<HTMLElement>(
+  "#about-update-status-icon",
+);
+const aboutUpdateStatusIconSvg = panel?.querySelector<SVGSVGElement>(
+  "#about-update-status-icon-svg",
+);
+const aboutUpdateCheckLabel = panel?.querySelector<HTMLElement>(
+  "#about-update-check-label",
+);
+const aboutUpdateCheckSpinner = panel?.querySelector<HTMLElement>(
+  "#about-update-check-spinner",
+);
+const aboutUpdateDownloadLabel = panel?.querySelector<HTMLElement>(
+  "#about-update-download-label",
+);
+const aboutUpdateDownloadSpinner = panel?.querySelector<HTMLElement>(
+  "#about-update-download-spinner",
 );
 const themeModeInputs = panel
   ? Array.from(
@@ -665,8 +755,9 @@ const motionModeInputs = panel
       panel.querySelectorAll<HTMLInputElement>('input[name="motion-mode"]'),
     )
   : [];
-const startupAnimationModeFieldset =
-  panel?.querySelector<HTMLFieldSetElement>("#startup-animation-mode");
+const startupAnimationModeFieldset = panel?.querySelector<HTMLFieldSetElement>(
+  "#startup-animation-mode",
+);
 const startupAnimationModeInputs = panel
   ? Array.from(
       panel.querySelectorAll<HTMLInputElement>(
@@ -677,32 +768,47 @@ const startupAnimationModeInputs = panel
 const animationSpeedSetting = panel?.querySelector<HTMLElement>(
   "#animation-speed-setting",
 );
-const animationSpeedInput = panel?.querySelector<HTMLInputElement>(
-  "#animation-speed",
-);
+const animationSpeedInput =
+  panel?.querySelector<HTMLInputElement>("#animation-speed");
 const animationSpeedValue = panel?.querySelector<HTMLOutputElement>(
   "#animation-speed-value",
 );
 const soundSettings = panel?.querySelector<HTMLElement>("#sound-settings");
-const soundEnabledInput = panel?.querySelector<HTMLInputElement>("#sound-enabled");
-const soundVolumeInput = panel?.querySelector<HTMLInputElement>("#sound-volume");
-const soundVolumeOutput = panel?.querySelector<HTMLOutputElement>("#sound-volume-output");
-const customSoundSettings = panel?.querySelector<HTMLElement>("#custom-sound-settings");
-const customSoundStatus = panel?.querySelector<HTMLElement>("#custom-sound-status");
+const soundEnabledInput =
+  panel?.querySelector<HTMLInputElement>("#sound-enabled");
+const soundVolumeInput =
+  panel?.querySelector<HTMLInputElement>("#sound-volume");
+const soundVolumeOutput = panel?.querySelector<HTMLOutputElement>(
+  "#sound-volume-output",
+);
+const customSoundSettings = panel?.querySelector<HTMLElement>(
+  "#custom-sound-settings",
+);
+const customSoundStatus = panel?.querySelector<HTMLElement>(
+  "#custom-sound-status",
+);
 const soundPackInputs = panel
-  ? Array.from(panel.querySelectorAll<HTMLInputElement>('input[name="sound-pack"]'))
+  ? Array.from(
+      panel.querySelectorAll<HTMLInputElement>('input[name="sound-pack"]'),
+    )
   : [];
 const soundPackPreviewButtons = panel
-  ? Array.from(panel.querySelectorAll<HTMLButtonElement>("[data-sound-pack-preview]"))
+  ? Array.from(
+      panel.querySelectorAll<HTMLButtonElement>("[data-sound-pack-preview]"),
+    )
   : [];
 const soundPackIconImages = panel
-  ? Array.from(panel.querySelectorAll<HTMLImageElement>("[data-sound-pack-icon]"))
+  ? Array.from(
+      panel.querySelectorAll<HTMLImageElement>("[data-sound-pack-icon]"),
+    )
   : [];
 const customSoundInputs = panel
   ? Array.from(panel.querySelectorAll<HTMLInputElement>("[data-custom-sound]"))
   : [];
 const customSoundPreviewButtons = panel
-  ? Array.from(panel.querySelectorAll<HTMLButtonElement>("[data-custom-sound-preview]"))
+  ? Array.from(
+      panel.querySelectorAll<HTMLButtonElement>("[data-custom-sound-preview]"),
+    )
   : [];
 const transparencyInput = panel?.querySelector<HTMLInputElement>(
   "#transparency-value",
@@ -723,9 +829,7 @@ const textTransparencyOutput = panel?.querySelector<HTMLOutputElement>(
   "#text-transparency-output",
 );
 const settingsNavItems = panel
-  ? Array.from(
-      panel.querySelectorAll<HTMLButtonElement>(".settings-nav__item"),
-    )
+  ? Array.from(panel.querySelectorAll<HTMLButtonElement>(".settings-nav__item"))
   : [];
 const questionView = panel?.querySelector<HTMLElement>("#question-view");
 const questionProgress = panel?.querySelector<HTMLElement>(
@@ -737,9 +841,8 @@ const questionPreview = panel?.querySelector<HTMLElement>("#question-preview");
 const questionFullText = panel?.querySelector<HTMLElement>(
   "#question-full-text",
 );
-const questionBackButton = panel?.querySelector<HTMLButtonElement>(
-  "#question-back",
-);
+const questionBackButton =
+  panel?.querySelector<HTMLButtonElement>("#question-back");
 const questionAnswerBlock = panel?.querySelector<HTMLElement>(
   "#question-answer-block",
 );
@@ -754,67 +857,67 @@ const questionExtraBlock = panel?.querySelector<HTMLElement>(
 const questionExtraInput = panel?.querySelector<HTMLTextAreaElement>(
   "#question-extra-input",
 );
-const questionActionsBlock = panel?.querySelector<HTMLElement>(
-  "#question-actions",
-);
-const questionPreviousButton = panel?.querySelector<HTMLButtonElement>(
-  "#question-previous",
-);
+const questionActionsBlock =
+  panel?.querySelector<HTMLElement>("#question-actions");
+const questionPreviousButton =
+  panel?.querySelector<HTMLButtonElement>("#question-previous");
 const questionOpenCodexButton = panel?.querySelector<HTMLButtonElement>(
   "#question-open-codex",
 );
-const questionNextButton = panel?.querySelector<HTMLButtonElement>(
-  "#question-next",
-);
-const questionSubmitButton = panel?.querySelector<HTMLButtonElement>(
-  "#question-submit",
+const questionRejectButton =
+  panel?.querySelector<HTMLButtonElement>("#question-reject");
+const questionNextButton =
+  panel?.querySelector<HTMLButtonElement>("#question-next");
+const questionSubmitButton =
+  panel?.querySelector<HTMLButtonElement>("#question-submit");
+const questionSubmitStatus = panel?.querySelector<HTMLElement>(
+  "#question-submit-status",
 );
 const permissionView = panel?.querySelector<HTMLElement>("#permission-view");
-const permissionBackButton = panel?.querySelector<HTMLButtonElement>(
-  "#permission-back",
-);
+const permissionBackButton =
+  panel?.querySelector<HTMLButtonElement>("#permission-back");
 const permissionTool = panel?.querySelector<HTMLElement>("#permission-tool");
 const permissionSummaryText = panel?.querySelector<HTMLElement>(
   "#permission-summary-text",
 );
 const permissionCwd = panel?.querySelector<HTMLElement>("#permission-cwd");
-const permissionAllowButton = panel?.querySelector<HTMLButtonElement>(
-  "#permission-allow",
+const permissionSubmitStatus = panel?.querySelector<HTMLElement>(
+  "#permission-submit-status",
 );
+const permissionAllowButton =
+  panel?.querySelector<HTMLButtonElement>("#permission-allow");
 const permissionAlwaysAllowButton = panel?.querySelector<HTMLButtonElement>(
   "#permission-always-allow",
 );
-const permissionDenyButton = panel?.querySelector<HTMLButtonElement>(
-  "#permission-deny",
-);
+const permissionDenyButton =
+  panel?.querySelector<HTMLButtonElement>("#permission-deny");
 const planView = panel?.querySelector<HTMLElement>("#plan-view");
 const planBackButton = panel?.querySelector<HTMLButtonElement>("#plan-back");
 const planTool = panel?.querySelector<HTMLElement>("#plan-tool");
 const planPreview = panel?.querySelector<HTMLElement>("#plan-preview");
-const planSummaryText = panel?.querySelector<HTMLElement>(
-  "#plan-summary-text",
-);
+const planSummaryText = panel?.querySelector<HTMLElement>("#plan-summary-text");
 const planFullText = panel?.querySelector<HTMLElement>("#plan-full-text");
 const planCwd = panel?.querySelector<HTMLElement>("#plan-cwd");
+const planSubmitStatus = panel?.querySelector<HTMLElement>(
+  "#plan-submit-status",
+);
 const planAutoButton = panel?.querySelector<HTMLButtonElement>("#plan-auto");
 const planAutoRememberButton = panel?.querySelector<HTMLButtonElement>(
   "#plan-auto-remember",
 );
-const planCustomInput = panel?.querySelector<HTMLInputElement>(
-  "#plan-custom-input",
-);
+const planCustomInput =
+  panel?.querySelector<HTMLTextAreaElement>("#plan-custom-input");
 const planCustomSubmitButton = panel?.querySelector<HTMLButtonElement>(
   "#plan-custom-submit",
 );
-const planActionBadge = panel?.querySelector<HTMLElement>(
-  "#plan-action-badge",
-);
-const planOpenCodexButton = panel?.querySelector<HTMLButtonElement>(
-  "#plan-open-codex",
-);
+const planActionBadge = panel?.querySelector<HTMLElement>("#plan-action-badge");
+const planOpenCodexButton =
+  panel?.querySelector<HTMLButtonElement>("#plan-open-codex");
 
-const setSourceStatusLabel = (button: HTMLButtonElement, label: string) => {
-  const labelElement = button.querySelector<HTMLElement>(".session-source-card__status-label");
+const setSourceStatusLabel = (button: HTMLElement, label: string) => {
+  const labelElement = button.querySelector<HTMLElement>(
+    ".session-source-card__status-label",
+  );
   if (labelElement) {
     labelElement.textContent = label;
   } else {
@@ -864,10 +967,14 @@ if (
   !sessionSourceCards ||
   !claudeSessionCard ||
   !codexSessionCard ||
+  !openCodeSessionCard ||
   !codexSessionList ||
+  !openCodeSessionList ||
   !claudeConnectionStatus ||
+  !openCodeConnectionStatus ||
   !claudeSessionCardIcon ||
   !codexSessionCardIcon ||
+  !openCodeSessionCardIcon ||
   !sessionProduct ||
   !sessionProductTrigger ||
   !sessionProductIcon ||
@@ -961,6 +1068,17 @@ if (
   !aboutAppIcon ||
   !aboutVersion ||
   !aboutDetailVersion ||
+  !aboutUpdateCheckButton ||
+  !aboutUpdateNoneButton ||
+  !aboutUpdateDownloadButton ||
+  !aboutUpdateCheckLabel ||
+  !aboutUpdateCheckSpinner ||
+  !aboutUpdateDownloadLabel ||
+  !aboutUpdateDownloadSpinner ||
+  !aboutUpdateStatusText ||
+  !aboutUpdateStatusDetail ||
+  !aboutUpdateStatusIcon ||
+  !aboutUpdateStatusIconSvg ||
   themeModeInputs.length !== 3 ||
   motionModeInputs.length !== 3 ||
   !startupAnimationModeFieldset ||
@@ -1002,13 +1120,16 @@ if (
   !questionActionsBlock ||
   !questionPreviousButton ||
   !questionOpenCodexButton ||
+  !questionRejectButton ||
   !questionNextButton ||
   !questionSubmitButton ||
+  !questionSubmitStatus ||
   !permissionView ||
   !permissionBackButton ||
   !permissionTool ||
   !permissionSummaryText ||
   !permissionCwd ||
+  !permissionSubmitStatus ||
   !permissionAllowButton ||
   !permissionAlwaysAllowButton ||
   !permissionDenyButton ||
@@ -1019,6 +1140,7 @@ if (
   !planSummaryText ||
   !planFullText ||
   !planCwd ||
+  !planSubmitStatus ||
   !planAutoButton ||
   !planAutoRememberButton ||
   !planCustomInput ||
@@ -1037,7 +1159,10 @@ const loadSoundPreference = (): SoundSettings => {
       window.localStorage.getItem(SOUND_SETTINGS_STORAGE_KEY),
     );
   } catch {
-    return { ...DEFAULT_SOUND_SETTINGS, customFiles: { ...DEFAULT_SOUND_SETTINGS.customFiles } };
+    return {
+      ...DEFAULT_SOUND_SETTINGS,
+      customFiles: { ...DEFAULT_SOUND_SETTINGS.customFiles },
+    };
   }
 };
 
@@ -1118,12 +1243,16 @@ let activeNativeAnimations = 0;
 let panelShapeFrame: number | undefined;
 let sessionRefreshTimer: ReturnType<typeof setInterval> | undefined;
 let refreshingSessions = false;
+let refreshingOpenCodeSessions = false;
 let selectedSessionId: string | undefined;
 let selectedCodexSessionId: string | undefined;
-let selectedSessionSource: "claude" | "codex" = "claude";
+let selectedOpenCodeSessionKey: string | undefined;
+let selectedSessionSource: "claude" | "codex" | "opencode" = "claude";
 let lastRefreshError: string | undefined;
+let lastOpenCodeRefreshError: string | undefined;
 let sessionItems = new Map<string, HTMLLIElement>();
 let codexSessionItems = new Map<string, HTMLLIElement>();
+let openCodeSessionItems = new Map<string, HTMLLIElement>();
 let latestCodexSnapshot: CodexSnapshot = {
   connected: false,
   integrationError: null,
@@ -1133,6 +1262,17 @@ let latestCodexSnapshot: CodexSnapshot = {
 };
 let dismissedCodexInteractionId: string | undefined;
 let lastAutoRevealedCodexInteractionId: string | undefined;
+let latestOpenCodeSnapshot: OpenCodeSnapshot = {
+  connected: false,
+  integrationError: null,
+  sessions: [],
+  instances: [],
+};
+let dismissedOpenCodeReviewId: string | undefined;
+let lastAutoRevealedOpenCodeReviewId: string | undefined;
+let submittedOpenCodeReviewId: string | undefined;
+let followupOpenCodeReviewId: string | undefined;
+let activeOpenCodeReview: OpenCodeReview | undefined;
 let displayedContentView: ContentView = "sessions";
 let requestedContentView: ContentView = "sessions";
 let questionOriginView: ContentView | undefined;
@@ -1145,13 +1285,14 @@ let latestClaudeSnapshot: ClaudeSessionSnapshot = {
   sessions: [],
 };
 const soundFrames = new Map<string, SoundSessionFrame>();
-const soundSourcePrimed: Record<"claude" | "codex", boolean> = {
+const soundSourcePrimed: Record<"claude" | "codex" | "opencode", boolean> = {
   claude: false,
   codex: false,
+  opencode: false,
 };
 
 const observeSoundFrames = (
-  source: "claude" | "codex",
+  source: "claude" | "codex" | "opencode",
   frames: Map<string, SoundSessionFrame>,
 ) => {
   const primed = soundSourcePrimed[source];
@@ -1228,6 +1369,35 @@ const observeCodexSounds = (
     ),
   );
 };
+const openCodeSoundFrame = (session: OpenCodeSession): SoundSessionFrame => {
+  const review = openCodeReviewForSession(session);
+  return {
+    status: session.status,
+    activityIds: session.activities.map((activity) => activity.id),
+    failedActivityIds: session.activities
+      .filter((activity) => activity.status === "failed")
+      .map((activity) => activity.id),
+    permissionId:
+      review &&
+      (review.reviewType === "nativePermission" ||
+        review.reviewType === "strictToolGate")
+        ? openCodeReviewKey(review)
+        : null,
+    planId: null,
+  };
+};
+
+const observeOpenCodeSounds = (sessions: OpenCodeSession[]) => {
+  observeSoundFrames(
+    "opencode",
+    new Map(
+      sessions.map((session) => [
+        openCodeSessionKey(session),
+        openCodeSoundFrame(session),
+      ]),
+    ),
+  );
+};
 let renderedDetailSignature: string | undefined;
 let contentViewTransitionTimer: ReturnType<typeof setTimeout> | undefined;
 let incomingViewFrame: number | undefined;
@@ -1235,12 +1405,13 @@ let settingsPanelTransition: Animation | undefined;
 let settingsPanelTransitionToken = 0;
 let displayedSettingsSection = "general";
 let requestedSettingsSection = "general";
-type SessionProductId = "all" | "claude-code" | "codex";
+type SessionProductId = "all" | "claude-code" | "codex" | "opencode";
+type SessionSourceProductId = Exclude<SessionProductId, "all">;
 type SessionProduct = {
   id: SessionProductId;
   triggerLabel: string;
   optionLabel: string;
-  kind: "codecraft" | "claude" | "codex";
+  kind: "codecraft" | "claude" | "codex" | "opencode";
   iconUrl: string;
 };
 
@@ -1266,7 +1437,15 @@ const sessionProducts: SessionProduct[] = [
     kind: "codex",
     iconUrl: codexIconUrl,
   },
+  {
+    id: "opencode",
+    triggerLabel: "OpenCode",
+    optionLabel: "OpenCode",
+    kind: "opencode",
+    iconUrl: openCodeIconUrl,
+  },
 ];
+const installedSessionProductIds = new Set<SessionSourceProductId>();
 let selectedSessionProductId: SessionProductId = "all";
 const SESSION_PRODUCT_MENU_TRANSITION_MS = 180;
 const SESSION_PRODUCT_MENU_FADE_MS = 150;
@@ -1283,7 +1462,7 @@ let sessionCleanupSelectionPending = false;
 let questionOptionsMeasureFrame: number | undefined;
 let renderedQuestionRequestId: string | undefined;
 let activeQuestionRequest: ClaudeQuestionRequest | undefined;
-let activeQuestionSource: "claude" | "codex" = "claude";
+let activeQuestionSource: "claude" | "codex" | "opencode" = "claude";
 let activeCodexQuestionThreadId: string | undefined;
 let activeQuestionIndex = 0;
 let questionDrafts: QuestionDraft[] = [];
@@ -1295,7 +1474,7 @@ let manuallyHiddenPermissionRequestId: string | undefined;
 let lastAutoRevealedPermissionRequestId: string | undefined;
 let renderedPermissionRequestId: string | undefined;
 let activePermissionRequest: ClaudePermissionRequest | undefined;
-let activePermissionSource: "claude" | "codex" = "claude";
+let activePermissionSource: "claude" | "codex" | "opencode" = "claude";
 let locallySubmittedPermissionRequestId: string | undefined;
 let planOriginView: ContentView | undefined;
 let manuallyHiddenPlanRequestId: string | undefined;
@@ -1358,21 +1537,20 @@ const CONTENT_VIEW_TRANSITION_MS = 220;
 // Review content grows immediately so the native panel never chases an
 // intermediate height. Shrinking keeps a short transition for continuity.
 const QUESTION_LAYOUT_TRANSITION_MS = 90;
-const QUESTION_LAYOUT_TRANSITION_EASING =
-  "cubic-bezier(0.2, 0.7, 0.35, 0.95)";
+const QUESTION_LAYOUT_TRANSITION_EASING = "cubic-bezier(0.2, 0.7, 0.35, 0.95)";
 const QUESTION_TEXT_FADE_OUT_MS = 110;
 const QUESTION_TEXT_FADE_IN_MS = 150;
 const QUESTION_OPTION_ENTER_MS = 220;
 const QUESTION_EXTRA_TRANSITION_MS = 90;
 const QUESTION_ACTION_TRANSITION_MS = 90;
+const REOPEN_REQUESTED_EVENT = "reopen-requested";
 const isTauriRuntime = "__TAURI_INTERNALS__" in window;
 
 aboutAppIcon.src = codeCraftIconUrl;
 
 for (const image of soundPackIconImages) {
   const pack = image.dataset.soundPackIcon as
-    | Exclude<SoundPackId, "custom">
-    | undefined;
+    Exclude<SoundPackId, "custom"> | undefined;
   const iconUrl = pack ? soundPackIconUrls[pack] : undefined;
   if (iconUrl) image.src = iconUrl;
 }
@@ -1384,12 +1562,153 @@ const syncAboutVersion = async () => {
     const version = await getVersion();
     aboutVersion.textContent = version;
     aboutDetailVersion.textContent = version;
+    installedCodeVersion = version;
   } catch (error: unknown) {
     console.error("Unable to read the CodeCraft version", error);
   }
+  // Whatever the update check resolved with the placeholder version must be
+  // re-evaluated now that the installed version is known for certain.
+  applyUpdateCheckState();
 };
 
 void syncAboutVersion();
+
+const GITHUB_RELEASES_API_URL =
+  "https://api.github.com/repos/Turing158/CodeCraft/releases?per_page=1";
+
+/** Latest upstream release tag, or null when the release feed is unreachable. */
+let installedCodeVersion = "0.1.1";
+let latestReleaseTag: string | null | undefined;
+let autoUpdateCheckStarted = false;
+let updateLifecycle: UpdateLifecycle = "idle";
+let upToDateHoldTimer: number | undefined;
+
+const cancelUpToDateHold = (): void => {
+  if (upToDateHoldTimer === undefined) return;
+  window.clearTimeout(upToDateHoldTimer);
+  upToDateHoldTimer = undefined;
+};
+
+const scheduleUpToDateHold = (): void => {
+  cancelUpToDateHold();
+  upToDateHoldTimer = window.setTimeout(() => {
+    upToDateHoldTimer = undefined;
+    if (updateLifecycle !== "upToDate") return;
+    updateLifecycle = "idle";
+    applyUpdateCheckState();
+  }, UP_TO_DATE_HOLD_MS);
+};
+
+const resolvedState = (): "download" | "upToDate" | "noInfo" =>
+  resolveUpdateCheck(installedCodeVersion, latestReleaseTag);
+
+/**
+ * Applies the global update state to the About section. Checking and
+ * downloading show a loading animation, resolved results stay visible, and
+ * "无需更新" reverts back to "检查更新" once its five-minute hold expires.
+ */
+const applyUpdateCheckState = (): void => {
+  const checking = updateLifecycle === "checking";
+  const downloading = updateLifecycle === "downloading";
+
+  aboutUpdateCheckButton.hidden =
+    updateLifecycle !== "idle" && updateLifecycle !== "checking";
+  aboutUpdateCheckButton.disabled = checking;
+  aboutUpdateCheckButton.classList.toggle("is-loading", checking);
+  aboutUpdateCheckLabel.textContent = checking ? "检测中" : "检查更新";
+  aboutUpdateCheckSpinner.hidden = !checking;
+
+  aboutUpdateNoneButton.hidden = updateLifecycle !== "upToDate";
+  aboutUpdateNoneButton.disabled = updateLifecycle !== "upToDate";
+
+  aboutUpdateDownloadButton.hidden =
+    updateLifecycle !== "download" && updateLifecycle !== "downloading";
+  aboutUpdateDownloadButton.disabled = downloading;
+  aboutUpdateDownloadButton.classList.toggle("is-loading", downloading);
+  aboutUpdateDownloadLabel.textContent = downloading ? "下载中" : "下载更新";
+  aboutUpdateDownloadSpinner.hidden = !downloading;
+
+  aboutUpdateStatusIcon.classList.toggle("is-busy", checking || downloading);
+
+  if (checking) {
+    aboutUpdateStatusText.textContent = "正在检测更新";
+    aboutUpdateStatusDetail.textContent = "正在获取最新版本信息，请稍候…";
+  } else if (downloading) {
+    aboutUpdateStatusText.textContent = "正在下载更新";
+    aboutUpdateStatusDetail.textContent = "正在打开下载页面，请稍候…";
+  } else if (updateLifecycle === "download") {
+    aboutUpdateStatusText.textContent = "发现新版本";
+    aboutUpdateStatusDetail.textContent = "有可用的新版本，可下载更新。";
+  } else if (updateLifecycle === "upToDate") {
+    aboutUpdateStatusText.textContent = "已是最新版本";
+    aboutUpdateStatusDetail.textContent = "当前版本与最新版本一致。";
+  } else {
+    aboutUpdateStatusText.textContent = "未获取到更新信息";
+    aboutUpdateStatusDetail.textContent = "未能获取最新版本信息，可点击检查更新。";
+  }
+};
+
+const fetchLatestReleaseTag = async (): Promise<void> => {
+  try {
+    const response = await fetch(GITHUB_RELEASES_API_URL);
+    if (!response.ok) throw new Error(`GitHub release API returned ${response.status}`);
+    const releases: unknown = await response.json();
+    const firstRelease = Array.isArray(releases) ? releases[0] : undefined;
+    const tagName =
+      firstRelease && typeof firstRelease === "object"
+        ? (firstRelease as Record<string, unknown>).tag_name
+        : undefined;
+    latestReleaseTag =
+      typeof tagName === "string" && tagName !== "" ? tagName : undefined;
+  } catch (error: unknown) {
+    console.error("Unable to check the latest CodeCraft release", error);
+    latestReleaseTag = undefined;
+  }
+};
+
+/** Runs a check once and keeps the resolved state on the About card. */
+const checkForUpdate = async (): Promise<void> => {
+  if (updateLifecycle === "checking" || updateLifecycle === "downloading")
+    return;
+  cancelUpToDateHold();
+  updateLifecycle = "checking";
+  applyUpdateCheckState();
+  try {
+    await fetchLatestReleaseTag();
+  } finally {
+    updateLifecycle = resolvedLifecycle(resolvedState());
+    applyUpdateCheckState();
+    if (updateLifecycle === "upToDate") scheduleUpToDateHold();
+  }
+};
+
+/** Starts the automatic check only once so the state stays global. */
+const ensureAutoUpdateCheck = (): void => {
+  if (autoUpdateCheckStarted) return;
+  autoUpdateCheckStarted = true;
+  void checkForUpdate();
+};
+
+aboutUpdateCheckButton.addEventListener("click", () => {
+  if (updateLifecycle === "checking" || updateLifecycle === "downloading")
+    return;
+  void checkForUpdate();
+});
+
+aboutUpdateDownloadButton.addEventListener("click", () => {
+  if (updateLifecycle === "checking" || updateLifecycle === "downloading")
+    return;
+  updateLifecycle = "downloading";
+  applyUpdateCheckState();
+  void invoke("open_release_page")
+    .catch((error: unknown) => {
+      console.error("Unable to open the release page", error);
+    })
+    .finally(() => {
+      updateLifecycle = resolvedLifecycle(resolvedState());
+      applyUpdateCheckState();
+    });
+});
 
 const measureQuestionViewContentHeight = () => {
   const previousMaxHeight = questionView.style.maxHeight;
@@ -1409,12 +1728,14 @@ const measurePanelContentHeight = () => {
           ? settingsView
           : requestedContentView === "permission"
             ? permissionView
-              : requestedContentView === "plan"
-                ? planView
-                : sessionView;
+            : requestedContentView === "plan"
+              ? planView
+              : sessionView;
   const contentHeight =
     activeView === questionView
       ? measureQuestionViewContentHeight()
+      : activeView === sessionView
+        ? activeView.offsetHeight
       : activeView.scrollHeight;
   const customSizing = interfaceSettings.mode === "custom";
   const minimumHeight = customSizing
@@ -1448,16 +1769,30 @@ const syncPanelShape = () => {
   const shapeContentHeight = rootElement.hasAttribute("data-startup-phase")
     ? STARTUP_PANEL_HEIGHT
     : expandedPanelHeight;
+  // Either value can briefly be stale while the native window resizes: the
+  // viewport can retain the old expanded height for short content, while the
+  // body can retain its expanded layout after collapse. The smaller height is
+  // the visible boundary that the CSS outline must stay inside.
+  const measuredPanelHeight = panelBody.offsetHeight;
+  const viewportPanelHeight = window.innerHeight / currentInterfaceScale();
+  const panelHeight =
+    measuredPanelHeight > 0
+      ? Math.min(measuredPanelHeight, viewportPanelHeight)
+      : viewportPanelHeight;
   panelBody.style.clipPath = panelClipPath(
-    window.innerHeight / currentInterfaceScale(),
+    panelHeight,
     shapeContentHeight,
     liveCollapsedHeightActive
       ? {
           collapsedHeight: LIVE_COLLAPSED_HEIGHT,
           collapsedCornerProgress: LIVE_COLLAPSED_CORNER_PROGRESS,
+          interfaceScale: currentInterfaceScale(),
           panelWidth: currentPanelWidth(),
         }
-      : { panelWidth: currentPanelWidth() },
+      : {
+          interfaceScale: currentInterfaceScale(),
+          panelWidth: currentPanelWidth(),
+        },
   );
 };
 
@@ -1546,7 +1881,9 @@ const revealPanelForAttention = async (focusTarget?: HTMLElement) => {
   if (isTauriRuntime) {
     await invoke("show_panel_for_attention");
   }
-  window.requestAnimationFrame(() => focusTarget?.focus({ preventScroll: true }));
+  window.requestAnimationFrame(() =>
+    focusTarget?.focus({ preventScroll: true }),
+  );
 };
 
 let collapsedWorkingFlowFinishing = false;
@@ -1697,7 +2034,10 @@ const switchContentView = (target: ContentView) => {
       "panel-view--forward",
       "panel-view--backward",
     );
-    incomingView.classList.remove("panel-view--forward", "panel-view--backward");
+    incomingView.classList.remove(
+      "panel-view--forward",
+      "panel-view--backward",
+    );
     displayedContentView = target;
   }, CONTENT_VIEW_TRANSITION_MS);
 
@@ -1733,7 +2073,12 @@ const hasSelectedSessionDetail = () =>
     ? latestCodexSnapshot.sessions.some(
         (session) => session.id === selectedCodexSessionId,
       )
-    : latestSessions.some((session) => session.id === selectedSessionId);
+    : selectedSessionSource === "opencode"
+      ? latestOpenCodeSnapshot.sessions.some(
+          (session) =>
+            openCodeSessionKey(session) === selectedOpenCodeSessionKey,
+        )
+      : latestSessions.some((session) => session.id === selectedSessionId);
 
 const returnViewForReview = (origin: ContentView | undefined) =>
   reviewReturnView(origin, hasSelectedSessionDetail());
@@ -1827,8 +2172,7 @@ const scheduleQuestionOptionsMeasurement = () => {
 
 const refreshQuestionPreviewClippedState = () => {
   const measure = () => {
-    const clipped =
-      questionText.scrollHeight > questionText.clientHeight + 1;
+    const clipped = questionText.scrollHeight > questionText.clientHeight + 1;
     questionPreview.dataset.clipped = String(clipped);
     if (clipped) {
       questionPreview.setAttribute("aria-describedby", "question-popover");
@@ -1908,13 +2252,10 @@ const swapQuestionText = (
 
   setText(previousText);
   const state: TextSwapState = { nextText, animation: null };
-  const fadeOut = element.animate(
-    [{ opacity: 1 }, { opacity: 0 }],
-    {
-      duration: QUESTION_TEXT_FADE_OUT_MS,
-      easing: QUESTION_LAYOUT_TRANSITION_EASING,
-    },
-  );
+  const fadeOut = element.animate([{ opacity: 1 }, { opacity: 0 }], {
+    duration: QUESTION_TEXT_FADE_OUT_MS,
+    easing: QUESTION_LAYOUT_TRANSITION_EASING,
+  });
   state.animation = fadeOut;
   questionTextSwaps.set(element, state);
 
@@ -1924,13 +2265,10 @@ const swapQuestionText = (
       if (questionTextSwaps.get(element) !== state) return;
       setText(nextText);
       onSettled?.();
-      const fadeIn = element.animate(
-        [{ opacity: 0 }, { opacity: 1 }],
-        {
-          duration: QUESTION_TEXT_FADE_IN_MS,
-          easing: QUESTION_LAYOUT_TRANSITION_EASING,
-        },
-      );
+      const fadeIn = element.animate([{ opacity: 0 }, { opacity: 1 }], {
+        duration: QUESTION_TEXT_FADE_IN_MS,
+        easing: QUESTION_LAYOUT_TRANSITION_EASING,
+      });
       state.animation = fadeIn;
       fadeIn.addEventListener(
         "finish",
@@ -2103,12 +2441,12 @@ const setActionButtonVisible = (
           paddingRight: `${startPadding}px`,
           opacity: String(startOpacity),
         },
-      {
-        flexGrow: "1",
-        paddingLeft: "12px",
-        paddingRight: "12px",
-        opacity: "1",
-      },
+        {
+          flexGrow: "1",
+          paddingLeft: "12px",
+          paddingRight: "12px",
+          opacity: "1",
+        },
       ],
       {
         duration: QUESTION_ACTION_TRANSITION_MS,
@@ -2202,10 +2540,7 @@ const setActionNavVisible = (visible: boolean, animate: boolean) => {
     };
     questionActionsBlock.style.opacity = "0";
     const animation = questionActionsBlock.animate(
-      [
-        { opacity: "0" },
-        { opacity: "1" },
-      ],
+      [{ opacity: "0" }, { opacity: "1" }],
       {
         duration: QUESTION_ACTION_TRANSITION_MS,
         easing: QUESTION_LAYOUT_TRANSITION_EASING,
@@ -2285,9 +2620,7 @@ const syncQuestionAnswerState = (
     "aria-expanded",
     String(!state.draft.collapsed),
   );
-  const collapseLabel = state.draft.collapsed
-    ? "展开回答选项"
-    : "收起回答选项";
+  const collapseLabel = state.draft.collapsed ? "展开回答选项" : "收起回答选项";
   answerCollapseToggle.ariaLabel = collapseLabel;
   answerCollapseToggle.title = collapseLabel;
 
@@ -2307,23 +2640,17 @@ const syncQuestionAnswerState = (
   );
   const showOpenCodex =
     activeQuestionSource === "codex" && state.question.readOnly === true;
-  setActionNavVisible(actions.size > 0 || showOpenCodex, animate);
+  const showReject = activeQuestionSource === "opencode";
+  setActionNavVisible(actions.size > 0 || showOpenCodex || showReject, animate);
   setActionButtonVisible(
     questionPreviousButton,
     actions.has("previous"),
     animate,
   );
   setActionButtonVisible(questionOpenCodexButton, showOpenCodex, animate);
-  setActionButtonVisible(
-    questionNextButton,
-    actions.has("next"),
-    animate,
-  );
-  setActionButtonVisible(
-    questionSubmitButton,
-    actions.has("submit"),
-    animate,
-  );
+  setActionButtonVisible(questionRejectButton, showReject, animate);
+  setActionButtonVisible(questionNextButton, actions.has("next"), animate);
+  setActionButtonVisible(questionSubmitButton, actions.has("submit"), animate);
   if (!collapseStateChanged && layout) {
     animateQuestionLayout(layout);
   }
@@ -2479,13 +2806,10 @@ const renderCurrentQuestion = (animate = false) => {
 
       if (!previous) {
         button.style.opacity = "0";
-        const entrance = button.animate(
-          [{ opacity: 0 }, { opacity: 1 }],
-          {
-            duration: QUESTION_OPTION_ENTER_MS,
-            easing: QUESTION_LAYOUT_TRANSITION_EASING,
-          },
-        );
+        const entrance = button.animate([{ opacity: 0 }, { opacity: 1 }], {
+          duration: QUESTION_OPTION_ENTER_MS,
+          easing: QUESTION_LAYOUT_TRANSITION_EASING,
+        });
         const finish = () => button.style.removeProperty("opacity");
         entrance.addEventListener("finish", finish, { once: true });
         entrance.addEventListener("cancel", finish, { once: true });
@@ -2525,7 +2849,6 @@ const renderCurrentQuestion = (animate = false) => {
         }
       }
     }
-
   }
 
   const previousExtraVisible =
@@ -2576,6 +2899,32 @@ const renderQuestionRequest = (request: ClaudeQuestionRequest) => {
   renderCurrentQuestion(animate);
 };
 
+const setQuestionSubmitStatus = (
+  message: string | undefined,
+  state: "pending" | "success" | "error" = "pending",
+) => {
+  questionSubmitStatus.textContent = message ?? "";
+  questionSubmitStatus.hidden = !message;
+  if (message) questionSubmitStatus.dataset.state = state;
+  else delete questionSubmitStatus.dataset.state;
+};
+
+const syncOpenCodeQuestionStatus = (review: OpenCodeReview) => {
+  if (review.reviewType !== "question") return;
+  if (review.submitting) {
+    setQuestionSubmitStatus(translate("正在回传回答…"));
+  } else if (review.submissionError) {
+    setQuestionSubmitStatus(
+      `${translate("回传失败：")}${review.submissionError}`,
+      "error",
+    );
+  } else if (openCodeReviewKey(review) === followupOpenCodeReviewId) {
+    setQuestionSubmitStatus(translate("上一条已处理，这是新的问题"), "success");
+  } else {
+    setQuestionSubmitStatus(undefined);
+  }
+};
+
 const clearActiveQuestionRequest = () => {
   renderedQuestionRequestId = undefined;
   activeQuestionRequest = undefined;
@@ -2583,6 +2932,11 @@ const clearActiveQuestionRequest = () => {
   questionDrafts = [];
   activeCodexQuestionThreadId = undefined;
   renderedQuestionContent = undefined;
+  questionSubmitButton.disabled = false;
+  questionRejectButton.disabled = false;
+  questionSubmitStatus.hidden = true;
+  questionSubmitStatus.textContent = "";
+  delete questionSubmitStatus.dataset.state;
 
   for (const state of questionTextSwaps.values()) {
     state.animation?.cancel();
@@ -2606,7 +2960,10 @@ const clearActiveQuestionRequest = () => {
 
 const showQuestionAt = (questionIndex: number) => {
   if (!activeQuestionRequest) return;
-  if (questionIndex < 0 || questionIndex >= activeQuestionRequest.questions.length) {
+  if (
+    questionIndex < 0 ||
+    questionIndex >= activeQuestionRequest.questions.length
+  ) {
     return;
   }
 
@@ -2619,11 +2976,12 @@ questionBackButton.addEventListener("click", () => {
 
   if (activeQuestionSource === "codex") {
     dismissedCodexInteractionId = activeQuestionRequest.id;
+  } else if (activeQuestionSource === "opencode") {
+    dismissedOpenCodeReviewId = activeQuestionRequest.id;
   } else {
     manuallyHiddenQuestionRequestId = activeQuestionRequest.id;
   }
-  const returnView =
-    returnViewForReview(questionOriginView);
+  const returnView = returnViewForReview(questionOriginView);
   questionOriginView = undefined;
   switchContentView(returnView);
 
@@ -2709,6 +3067,40 @@ questionOpenCodexButton.addEventListener("click", () => {
   );
 });
 
+questionRejectButton.addEventListener("click", async () => {
+  const review = activeOpenCodeReview;
+  if (
+    activeQuestionSource !== "opencode" ||
+    review?.reviewType !== "question"
+  ) {
+    return;
+  }
+  questionRejectButton.disabled = true;
+  questionSubmitButton.disabled = true;
+  let submittedToOpenCode = false;
+  try {
+    await invoke("reject_opencode_question", {
+      pluginInstanceId: review.pluginInstanceId,
+      sessionId: review.sessionId,
+      requestId: review.requestId,
+    });
+    dismissedOpenCodeReviewId = undefined;
+    submittedOpenCodeReviewId = openCodeReviewKey(review);
+    followupOpenCodeReviewId = undefined;
+    setQuestionSubmitStatus(translate("正在回传回答…"));
+    submittedToOpenCode = true;
+  } catch (error) {
+    console.error("Unable to reject the OpenCode question", error);
+    const message = error instanceof Error ? error.message : String(error);
+    setQuestionSubmitStatus(`${translate("回传失败：")}${message}`, "error");
+  } finally {
+    if (!submittedToOpenCode) {
+      questionSubmitButton.disabled = false;
+      questionRejectButton.disabled = false;
+    }
+  }
+});
+
 questionNextButton.addEventListener("click", () => {
   const state = currentQuestionState();
   if (
@@ -2745,27 +3137,58 @@ questionSubmitButton.addEventListener("click", async () => {
     state.request,
     questionDrafts,
   );
-  const returnView =
-    returnViewForReview(questionOriginView);
+  const returnView = returnViewForReview(questionOriginView);
   questionSubmitButton.disabled = true;
+  let submittedToOpenCode = false;
 
   try {
-    await invoke("submit_claude_question_answer", {
-      requestId: submission.requestId,
-      answers: submission.answers,
-    });
-    localQuestionSubmissions.set(state.request.id, {
-      ...submission,
-      contentSignature: questionRequestContentSignature(state.request),
-    });
-    locallySubmittedQuestionRequestId = state.request.id;
+    if (activeQuestionSource === "opencode") {
+      const review = activeOpenCodeReview;
+      if (review?.reviewType !== "question") return;
+      dismissedOpenCodeReviewId = undefined;
+      await invoke("submit_opencode_question", {
+        pluginInstanceId: review.pluginInstanceId,
+        sessionId: review.sessionId,
+        requestId: review.requestId,
+        answers: submission.answers.map((answer) => [
+          ...answer.selectedOptionLabels.filter((label) => label !== "其他"),
+          ...(answer.extraText?.trim() ? [answer.extraText.trim()] : []),
+        ]),
+      });
+      submittedOpenCodeReviewId = openCodeReviewKey(review);
+      followupOpenCodeReviewId = undefined;
+      questionRejectButton.disabled = true;
+      setQuestionSubmitStatus(translate("正在回传回答…"));
+      submittedToOpenCode = true;
+    } else {
+      await invoke("submit_claude_question_answer", {
+        requestId: submission.requestId,
+        answers: submission.answers,
+      });
+    }
+    if (submittedToOpenCode) return;
+    if (activeQuestionSource === "claude") {
+      localQuestionSubmissions.set(state.request.id, {
+        ...submission,
+        contentSignature: questionRequestContentSignature(state.request),
+      });
+      locallySubmittedQuestionRequestId = state.request.id;
+    }
     clearActiveQuestionRequest();
     questionOriginView = undefined;
     switchContentView(returnView);
   } catch (error) {
     console.error("Unable to submit question answers", error);
+    if (activeQuestionSource === "opencode") {
+      const message = error instanceof Error ? error.message : String(error);
+      setQuestionSubmitStatus(`${translate("回传失败：")}${message}`, "error");
+    }
   } finally {
-    questionSubmitButton.disabled = false;
+    if (!submittedToOpenCode) {
+      questionSubmitButton.disabled = false;
+      if (activeQuestionSource === "opencode")
+        questionRejectButton.disabled = false;
+    }
   }
 });
 
@@ -2804,6 +3227,9 @@ const renderPermissionRequest = (request: ClaudePermissionRequest) => {
     permissionCwd.textContent = "";
     permissionCwd.title = "";
   }
+  permissionSubmitStatus.hidden = true;
+  permissionSubmitStatus.textContent = "";
+  delete permissionSubmitStatus.dataset.state;
 };
 
 const clearActivePermissionRequest = () => {
@@ -2813,6 +3239,54 @@ const clearActivePermissionRequest = () => {
   permissionCwd.textContent = "";
   permissionCwd.hidden = true;
   permissionAlwaysAllowButton.hidden = false;
+  permissionSubmitStatus.hidden = true;
+  permissionSubmitStatus.textContent = "";
+  delete permissionSubmitStatus.dataset.state;
+};
+
+const setPermissionSubmitStatus = (
+  message: string | undefined,
+  state: "pending" | "success" | "error" = "pending",
+) => {
+  permissionSubmitStatus.textContent = message ?? "";
+  permissionSubmitStatus.hidden = !message;
+  if (message) permissionSubmitStatus.dataset.state = state;
+  else delete permissionSubmitStatus.dataset.state;
+};
+
+const syncOpenCodePermissionStatus = (
+  review: OpenCodeNativePermissionReview | OpenCodeStrictToolGateReview,
+) => {
+  const alwaysLabel = permissionAlwaysAllowButton.querySelector(
+    ".question-option__label",
+  );
+  const alwaysDescription = permissionAlwaysAllowButton.querySelector(
+    ".question-option__description",
+  );
+  const isStrictGate = review.reviewType === "strictToolGate";
+  if (alwaysLabel) {
+    alwaysLabel.textContent = isStrictGate ? "本会话允许相同调用" : "始终允许";
+  }
+  if (alwaysDescription) {
+    alwaysDescription.textContent = isStrictGate
+      ? "仅匹配相同工具和参数范围"
+      : "执行并记住，之后不再询问";
+  }
+  if (review.submitting) {
+    setPermissionSubmitStatus(translate("正在回传决定…"));
+  } else if (review.submissionError) {
+    setPermissionSubmitStatus(
+      `${translate("回传失败：")}${review.submissionError}`,
+      "error",
+    );
+  } else if (openCodeReviewKey(review) === followupOpenCodeReviewId) {
+    setPermissionSubmitStatus(
+      translate("上一条已处理，这是新的审批请求"),
+      "success",
+    );
+  } else {
+    setPermissionSubmitStatus(undefined);
+  }
 };
 
 const setPermissionButtonsDisabled = (disabled: boolean) => {
@@ -2827,9 +3301,9 @@ const submitPermissionDecision = async (decision: PermissionDecision) => {
   const request = activePermissionRequest;
   if (!request) return;
 
-  const returnView =
-    returnViewForReview(permissionOriginView);
+  const returnView = returnViewForReview(permissionOriginView);
   setPermissionButtonsDisabled(true);
+  let submittedToOpenCode = false;
 
   try {
     if (activePermissionSource === "codex") {
@@ -2842,11 +3316,48 @@ const submitPermissionDecision = async (decision: PermissionDecision) => {
               ? "accept"
               : "decline",
       });
+    } else if (activePermissionSource === "opencode") {
+      const review = activeOpenCodeReview;
+      if (review?.reviewType === "nativePermission") {
+        await invoke("submit_opencode_permission", {
+          pluginInstanceId: review.pluginInstanceId,
+          sessionId: review.sessionId,
+          requestId: review.requestId,
+          action:
+            decision === "allowAlways"
+              ? "always"
+              : decision === "allow"
+                ? "once"
+                : "reject",
+          message: null,
+        });
+      } else if (review?.reviewType === "strictToolGate") {
+        await invoke("submit_opencode_tool_gate", {
+          pluginInstanceId: review.pluginInstanceId,
+          sessionId: review.sessionId,
+          reviewId: review.reviewId,
+          action:
+            decision === "allowAlways"
+              ? "allowSession"
+              : decision === "allow"
+                ? "allowOnce"
+                : "reject",
+        });
+      } else {
+        return;
+      }
+      submittedOpenCodeReviewId = openCodeReviewKey(review);
+      followupOpenCodeReviewId = undefined;
+      submittedToOpenCode = true;
     } else {
       await invoke("submit_claude_permission_decision", {
         requestId: request.id,
         decision,
       });
+    }
+    if (submittedToOpenCode) {
+      setPermissionSubmitStatus(translate("正在回传决定…"));
+      return;
     }
     if (activePermissionSource === "codex") {
       dismissedCodexInteractionId = request.id;
@@ -2857,12 +3368,16 @@ const submitPermissionDecision = async (decision: PermissionDecision) => {
     permissionOriginView = undefined;
     switchContentView(returnView);
   } catch (error) {
-    console.error(
-      "Unable to submit the permission decision",
-      error,
-    );
+    console.error("Unable to submit the permission decision", error);
+    if (activePermissionSource === "opencode") {
+      const message = error instanceof Error ? error.message : String(error);
+      setPermissionSubmitStatus(
+        `${translate("回传失败：")}${message}`,
+        "error",
+      );
+    }
   } finally {
-    setPermissionButtonsDisabled(false);
+    if (!submittedToOpenCode) setPermissionButtonsDisabled(false);
   }
 };
 
@@ -2871,11 +3386,12 @@ permissionBackButton.addEventListener("click", () => {
 
   if (activePermissionSource === "codex") {
     dismissedCodexInteractionId = activePermissionRequest.id;
+  } else if (activePermissionSource === "opencode") {
+    dismissedOpenCodeReviewId = activePermissionRequest.id;
   } else {
     manuallyHiddenPermissionRequestId = activePermissionRequest.id;
   }
-  const returnView =
-    returnViewForReview(permissionOriginView);
+  const returnView = returnViewForReview(permissionOriginView);
   permissionOriginView = undefined;
   switchContentView(returnView);
 
@@ -2902,11 +3418,19 @@ permissionDenyButton.addEventListener("click", () => {
 
 const syncPlanSourceControls = () => {
   const isCodexPlan = activePlanSource === "codex";
-  planAutoButton.hidden = isCodexPlan;
-  planAutoRememberButton.hidden = isCodexPlan;
-  planCustomInput.hidden = isCodexPlan;
-  planCustomSubmitButton.hidden = isCodexPlan;
+  const isClaudePlan = activePlanSource === "claude";
+  planView.dataset.planSource = activePlanSource;
+  planAutoButton.hidden = !isClaudePlan;
+  planAutoRememberButton.hidden = !isClaudePlan;
+  planCustomInput.hidden = !isClaudePlan;
+  planCustomSubmitButton.hidden = !isClaudePlan;
   planOpenCodexButton.hidden = !isCodexPlan;
+  planCustomInput.placeholder = translate("请输入需要修改的内容");
+  planCustomInput.setAttribute(
+    "aria-label",
+    translate("自定义指令"),
+  );
+  planCustomSubmitButton.textContent = translate("提交");
   planActionBadge.textContent = isCodexPlan
     ? "在原 Codex 中选择"
     : "点击后立即回传";
@@ -2959,6 +3483,7 @@ const clearActivePlanRequest = () => {
   planCwd.textContent = "";
   planCwd.hidden = true;
   planCustomInput.value = "";
+  setPlanSubmitStatus(undefined);
 };
 
 const setPlanButtonsDisabled = (disabled: boolean) => {
@@ -2969,17 +3494,23 @@ const setPlanButtonsDisabled = (disabled: boolean) => {
   planOpenCodexButton.disabled = disabled;
 };
 
+const setPlanSubmitStatus = (
+  message: string | undefined,
+  state: "pending" | "success" | "error" = "pending",
+) => {
+  planSubmitStatus.textContent = message ?? "";
+  planSubmitStatus.hidden = !message;
+  if (message) planSubmitStatus.dataset.state = state;
+  else delete planSubmitStatus.dataset.state;
+};
+
 type PlanExecutionMode = "auto";
 
-const submitPlanDecision = async (
-  mode: PlanExecutionMode,
-  note?: string,
-) => {
+const submitPlanDecision = async (mode: PlanExecutionMode, note?: string) => {
   const request = activePlanRequest;
   if (!request || activePlanSource !== "claude") return;
 
-  const returnView =
-    returnViewForReview(planOriginView);
+  const returnView = returnViewForReview(planOriginView);
   setPlanButtonsDisabled(true);
 
   try {
@@ -3007,8 +3538,7 @@ planBackButton.addEventListener("click", () => {
   } else {
     manuallyHiddenPlanRequestId = activePlanRequest.id;
   }
-  const returnView =
-    returnViewForReview(planOriginView);
+  const returnView = returnViewForReview(planOriginView);
   planOriginView = undefined;
   switchContentView(returnView);
 
@@ -3034,6 +3564,7 @@ planCustomSubmitButton.addEventListener("click", () => {
 });
 
 planCustomInput.addEventListener("keydown", (event) => {
+  if (activePlanSource !== "claude") return;
   if (event.key !== "Enter" || event.isComposing) return;
   event.preventDefault();
   planCustomSubmitButton.click();
@@ -3057,8 +3588,17 @@ const createSessionProductIcon = (
   return image;
 };
 
+const visibleSessionProducts = () =>
+  sessionProducts.filter(
+    (product) =>
+      product.id === "all" ||
+      installedSessionProductIds.has(product.id as SessionSourceProductId),
+  );
+
 const selectedSessionProduct = () =>
-  sessionProducts.find((product) => product.id === selectedSessionProductId)!;
+  visibleSessionProducts().find(
+    (product) => product.id === selectedSessionProductId,
+  ) ?? sessionProducts[0];
 
 const sessionProductOptionButtons = () =>
   Array.from(
@@ -3079,9 +3619,10 @@ const updateSessionProductTrigger = () => {
 };
 
 const renderSessionProductMenu = () => {
+  const visibleProducts = visibleSessionProducts();
   const orderedProducts = [
     selectedSessionProduct(),
-    ...sessionProducts.filter(
+    ...visibleProducts.filter(
       (product) => product.id !== selectedSessionProductId,
     ),
   ];
@@ -3127,6 +3668,10 @@ const renderSessionProductMenu = () => {
   });
 
   sessionProductMenu.replaceChildren(...options);
+  sessionProductMenu.style.setProperty(
+    "--session-product-menu-height",
+    `${orderedProducts.length * 30 + 2}px`,
+  );
 };
 
 const syncSessionProductWidth = () => {
@@ -3195,14 +3740,53 @@ const animateSessionProductOptionToFirst = async (
 
 const syncProductVisibility = () => {
   const showClaude =
-    selectedSessionProductId === "all" ||
-    selectedSessionProductId === "claude-code";
+    installedSessionProductIds.has("claude-code") &&
+    (selectedSessionProductId === "all" ||
+      selectedSessionProductId === "claude-code");
   const showCodex =
-    selectedSessionProductId === "all" || selectedSessionProductId === "codex";
+    installedSessionProductIds.has("codex") &&
+    (selectedSessionProductId === "all" ||
+      selectedSessionProductId === "codex");
+  const showOpenCode =
+    installedSessionProductIds.has("opencode") &&
+    (selectedSessionProductId === "all" ||
+      selectedSessionProductId === "opencode");
   claudeSessionCard.hidden = !showClaude;
   codexSessionCard.hidden = !showCodex;
+  openCodeSessionCard.hidden = !showOpenCode;
   sessionSourceCards.dataset.filter = selectedSessionProductId;
   renderSessionSummary();
+};
+
+const sessionProductIdForHookAgent = (
+  id: string,
+): SessionSourceProductId | undefined => {
+  if (id === "claudeCode") return "claude-code";
+  if (id === "codex") return "codex";
+  if (id === "openCode") return "opencode";
+  return undefined;
+};
+
+const syncInstalledSessionProducts = (
+  statuses: ReadonlyArray<{ id: string; hookInstalled: boolean }>,
+) => {
+  installedSessionProductIds.clear();
+  for (const status of statuses) {
+    if (!status.hookInstalled) continue;
+    const productId = sessionProductIdForHookAgent(status.id);
+    if (productId) installedSessionProductIds.add(productId);
+  }
+
+  if (
+    selectedSessionProductId !== "all" &&
+    !installedSessionProductIds.has(selectedSessionProductId)
+  ) {
+    selectedSessionProductId = "all";
+  }
+
+  updateSessionProductTrigger();
+  syncProductVisibility();
+  syncSessionProductWidth();
 };
 
 const selectSessionProductOption = async (
@@ -3280,7 +3864,7 @@ const openSessionProductMenu = (focusIndex = 0) => {
 sessionProductTrigger.addEventListener("click", () => {
   if (sessionProductMenu.hidden) {
     openSessionProductMenu();
-    } else {
+  } else {
     closeSessionProductMenu(true);
   }
 });
@@ -3288,7 +3872,9 @@ sessionProductTrigger.addEventListener("click", () => {
 sessionProductTrigger.addEventListener("keydown", (event) => {
   if (event.key !== "ArrowDown" && event.key !== "ArrowUp") return;
   event.preventDefault();
-  openSessionProductMenu(event.key === "ArrowUp" ? sessionProducts.length - 1 : 0);
+  openSessionProductMenu(
+    event.key === "ArrowUp" ? sessionProducts.length - 1 : 0,
+  );
 });
 
 sessionProductMenu.addEventListener("keydown", (event) => {
@@ -3311,7 +3897,9 @@ sessionProductMenu.addEventListener("keydown", (event) => {
   if (!["ArrowDown", "ArrowUp", "Home", "End"].includes(event.key)) return;
   event.preventDefault();
   const options = sessionProductOptionButtons();
-  const currentIndex = options.indexOf(document.activeElement as HTMLButtonElement);
+  const currentIndex = options.indexOf(
+    document.activeElement as HTMLButtonElement,
+  );
   const nextIndex =
     event.key === "Home"
       ? 0
@@ -3335,6 +3923,7 @@ updateSessionProductTrigger();
 syncSessionProductWidth();
 claudeSessionCardIcon.src = claudeCodeIconUrl;
 codexSessionCardIcon.src = codexIconUrl;
+openCodeSessionCardIcon.src = openCodeIconUrl;
 
 claudeConnectionStatus.addEventListener("click", () => {
   if (claudeConnectionStatus.dataset.connected === "true") return;
@@ -3362,10 +3951,7 @@ const activityStatusLabel = (status: string) => {
   }
 };
 
-const createPixelStatusSvg = (
-  status: string,
-  className: string,
-) => {
+const createPixelStatusSvg = (status: string, className: string) => {
   const svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
   svg.classList.add(className);
   svg.dataset.status = status;
@@ -3384,7 +3970,10 @@ const createPixelStatusSvg = (
     [6, 12, 4, 3],
   ];
   pixels.forEach(([x, y, width, height], index) => {
-    const pixel = document.createElementNS("http://www.w3.org/2000/svg", "rect");
+    const pixel = document.createElementNS(
+      "http://www.w3.org/2000/svg",
+      "rect",
+    );
     pixel.classList.add("pixel-status__pixel");
     pixel.dataset.pixel = String(index);
     pixel.setAttribute("x", String(x));
@@ -3402,6 +3991,7 @@ sessionLiveStatus.replaceChildren(sessionLiveStatusIcon);
 const latestUnifiedSessions = (): UnifiedSession[] => [
   ...latestSessions,
   ...latestCodexSnapshot.sessions,
+  ...latestOpenCodeSnapshot.sessions,
 ];
 
 const collapsedPanelHeight = () =>
@@ -3567,24 +4157,26 @@ const syncCollapsedSessionState = () => {
 
 const renderSessionDetail = (session: UnifiedSession) => {
   const signature = JSON.stringify([
-    session.id,
+    unifiedSessionKey(session),
     session.status,
     session.title,
     session.activities,
     session.outputs,
+    isOpenCodeSession(session) ? session.pendingReviews : null,
   ]);
   if (signature === renderedDetailSignature) return;
 
   const previousSessionId = sessionDetailView.dataset.sessionId;
+  const sessionKey = unifiedSessionKey(session);
   const outputWasAtEnd =
-    previousSessionId !== session.id ||
+    previousSessionId !== sessionKey ||
     sessionOutput.scrollHeight -
       sessionOutput.scrollTop -
       sessionOutput.clientHeight <
       24;
 
   renderedDetailSignature = signature;
-  sessionDetailView.dataset.sessionId = session.id;
+  sessionDetailView.dataset.sessionId = sessionKey;
   sessionDetailView.dataset.sessionStatus = session.status;
   sessionDetailTitle.textContent = session.title;
   sessionDetailTitle.title = session.title;
@@ -3597,9 +4189,10 @@ const renderSessionDetail = (session: UnifiedSession) => {
   const runningCount = session.activities.filter(
     (activity) => activity.status === "running",
   ).length;
-  activitySummary.textContent = runningCount > 0
-    ? `${runningCount} 项执行中`
-    : `${session.activities.length} 项记录`;
+  activitySummary.textContent =
+    runningCount > 0
+      ? `${runningCount} 项执行中`
+      : `${session.activities.length} 项记录`;
 
   if (session.activities.length === 0) {
     const empty = document.createElement("li");
@@ -3618,7 +4211,7 @@ const renderSessionDetail = (session: UnifiedSession) => {
 
       const statusText = document.createElement("span");
       statusText.className = "sr-only";
-        statusText.textContent = activityStatusLabel(activity.status);
+      statusText.textContent = activityStatusLabel(activity.status);
 
       const content = document.createElement("span");
       content.className = "activity-item__content";
@@ -3648,15 +4241,14 @@ const renderSessionDetail = (session: UnifiedSession) => {
     empty.textContent = "等待 Claude 产生可读取的转录输出";
     sessionOutput.replaceChildren(empty);
   } else {
-    sessionOutput.replaceChildren(
-      ...session.outputs.map((output) => {
-        const entry = document.createElement("article");
-        entry.className = "output-entry markdown-content";
-        entry.dataset.outputId = output.id;
-        entry.innerHTML = renderMarkdown(output.text);
-        return entry;
-      }),
-    );
+    const outputEntries = session.outputs.map((output) => {
+      const entry = document.createElement("article");
+      entry.className = "output-entry markdown-content";
+      entry.dataset.outputId = output.id;
+      entry.innerHTML = renderMarkdown(output.text);
+      return entry;
+    });
+    sessionOutput.replaceChildren(...outputEntries);
   }
 
   if (outputWasAtEnd) {
@@ -3715,15 +4307,25 @@ const setSelectedSession = (sessionId: string) => {
 };
 
 const setSelectedCodexSession = (sessionId: string) => {
-  const session = latestCodexSnapshot.sessions.find((item) => item.id === sessionId);
+  const session = latestCodexSnapshot.sessions.find(
+    (item) => item.id === sessionId,
+  );
   if (!session) return;
   selectedCodexSessionId = sessionId;
   selectedSessionSource = "codex";
   selectedSessionId = undefined;
-  for (const button of codexSessionList.querySelectorAll<HTMLButtonElement>(".session-button")) {
-    button.setAttribute("aria-pressed", String(button.dataset.sessionId === sessionId));
+  for (const button of codexSessionList.querySelectorAll<HTMLButtonElement>(
+    ".session-button",
+  )) {
+    button.setAttribute(
+      "aria-pressed",
+      String(button.dataset.sessionId === sessionId),
+    );
   }
-  const interaction = codexInteractionFor(session, latestCodexSnapshot.interactions);
+  const interaction = codexInteractionFor(
+    session,
+    latestCodexSnapshot.interactions,
+  );
   if (interaction && !interaction.resolved) {
     renderCodexInteraction(interaction, session, false);
     return;
@@ -3733,24 +4335,114 @@ const setSelectedCodexSession = (sessionId: string) => {
   sessionDetailBack.focus({ preventScroll: true });
 };
 
+const showOpenCodeReview = (
+  session: OpenCodeSession,
+  review: OpenCodeReview,
+  shouldAutoReveal: boolean,
+) => {
+  activeOpenCodeReview = review;
+  const reveal = (view: ReviewContentView, focusTarget?: HTMLElement) => {
+    if (requestedContentView !== view) {
+      rememberReviewOrigin(view);
+      switchContentView(view);
+    }
+    if (!shouldAutoReveal || !collapseExpandSettings.approvalAutoExpand) return;
+    void revealPanelForAttention(focusTarget).catch((error: unknown) => {
+      console.error("Unable to reveal the OpenCode review", error);
+    });
+  };
+  if (review.reviewType === "question") {
+    activeQuestionSource = "opencode";
+    renderQuestionRequest(openCodeQuestionRequest(review));
+    syncOpenCodeQuestionStatus(review);
+    questionSubmitButton.disabled = review.submitting;
+    questionRejectButton.disabled = review.submitting;
+    reveal("question", questionSubmitButton);
+    return;
+  }
+  activePermissionSource = "opencode";
+  renderPermissionRequest(openCodePermissionRequest(review, session));
+  syncOpenCodePermissionStatus(review);
+  setPermissionButtonsDisabled(review.submitting);
+  reveal("permission", permissionAllowButton);
+};
+
+const setSelectedOpenCodeSession = (sessionKey: string) => {
+  const session = latestOpenCodeSnapshot.sessions.find(
+    (item) => openCodeSessionKey(item) === sessionKey,
+  );
+  if (!session) return;
+  selectedOpenCodeSessionKey = sessionKey;
+  selectedSessionSource = "opencode";
+  selectedSessionId = undefined;
+  selectedCodexSessionId = undefined;
+  for (const button of openCodeSessionList.querySelectorAll<HTMLButtonElement>(
+    ".session-button",
+  )) {
+    button.setAttribute(
+      "aria-pressed",
+      String(button.dataset.sessionKey === sessionKey),
+    );
+  }
+  const review = openCodeReviewForSession(session);
+  if (review) {
+    showOpenCodeReview(session, review, false);
+    return;
+  }
+  renderSessionDetail(session);
+  switchContentView("detail");
+  sessionDetailBack.focus({ preventScroll: true });
+};
+
 const renderSessionSummary = () => {
-  const claudeActiveCount = latestSessions.filter((session) => session.status !== "idle").length;
-  const codexActiveCount = latestCodexSnapshot.sessions.filter((session) => session.status !== "idle").length;
-  const count = selectedSessionProductId === "all"
-    ? claudeActiveCount + codexActiveCount
-    : selectedSessionProductId === "codex"
-      ? codexActiveCount
-      : claudeActiveCount;
-  const connected = selectedSessionProductId === "all"
-    ? latestClaudeSnapshot.connected && latestCodexSnapshot.connected
-    : selectedSessionProductId === "codex"
-      ? latestCodexSnapshot.connected
-      : latestClaudeSnapshot.connected;
+  const claudeActiveCount = latestSessions.filter(
+    (session) => session.status !== "idle",
+  ).length;
+  const codexActiveCount = latestCodexSnapshot.sessions.filter(
+    (session) => session.status !== "idle",
+  ).length;
+  const openCodeActiveCount = latestOpenCodeSnapshot.sessions.filter(
+    (session) => session.status !== "idle",
+  ).length;
+  const activeCounts: Record<SessionSourceProductId, number> = {
+    "claude-code": claudeActiveCount,
+    codex: codexActiveCount,
+    opencode: openCodeActiveCount,
+  };
+  const connectionStates: Record<SessionSourceProductId, boolean> = {
+    "claude-code": latestClaudeSnapshot.connected,
+    codex: latestCodexSnapshot.connected,
+    opencode: isOpenCodeHookHealthy(),
+  };
+  const selectedSources =
+    selectedSessionProductId === "all"
+      ? [...installedSessionProductIds]
+      : installedSessionProductIds.has(selectedSessionProductId)
+        ? [selectedSessionProductId]
+        : [];
+  const count = selectedSources.reduce(
+    (total, source) => total + activeCounts[source],
+    0,
+  );
+  const connected =
+    selectedSources.length > 0 &&
+    selectedSources.every((source) => connectionStates[source]);
   integrationState.dataset.connected = String(connected);
   sessionSummary.textContent = `${count} 个活跃`;
 };
 
 const renderCodexSnapshot = (snapshot: CodexSnapshot) => {
+  // Codex sessions have no source other than the CodeCraft hook. Keep the UI
+  // fail-closed while Hook status is unknown or reports it uninstalled.
+  if (isTauriRuntime && isCodexHookKnownUninstalled()) {
+    snapshot = {
+      ...snapshot,
+      connected: false,
+      integrationError: snapshot.integrationError ?? "Codex Hook 未安装",
+      sessions: [],
+      interactions: [],
+    };
+  }
   const visibleSessions = filterAutoCleanedSessions(
     snapshot.sessions,
     sessionCleanupSettings,
@@ -3774,13 +4466,19 @@ const renderCodexSnapshot = (snapshot: CodexSnapshot) => {
   }
   observeCodexSounds(snapshot.sessions, snapshot.interactions);
   latestCodexSnapshot = snapshot;
-  if (!snapshot.sessions.some((session) => session.id === selectedCodexSessionId)) {
+  if (
+    !snapshot.sessions.some((session) => session.id === selectedCodexSessionId)
+  ) {
     selectedCodexSessionId = undefined;
     if (selectedSessionSource === "codex") {
       renderedDetailSignature = undefined;
     }
   }
-  renderUnifiedSessionList(codexSessionList, snapshot.sessions, codexSessionItems);
+  renderUnifiedSessionList(
+    codexSessionList,
+    snapshot.sessions,
+    codexSessionItems,
+  );
   renderSessionSummary();
   syncCollapsedSessionState();
 
@@ -3789,17 +4487,26 @@ const renderCodexSnapshot = (snapshot: CodexSnapshot) => {
     snapshot.interactions,
   );
   if (!pendingEntry) {
-    if (requestedContentView === "question" && activeQuestionSource === "codex") {
+    if (
+      requestedContentView === "question" &&
+      activeQuestionSource === "codex"
+    ) {
       const returnView = returnViewForReview(questionOriginView);
       questionOriginView = undefined;
       clearActiveQuestionRequest();
       switchContentView(returnView);
-    } else if (requestedContentView === "permission" && activePermissionSource === "codex") {
+    } else if (
+      requestedContentView === "permission" &&
+      activePermissionSource === "codex"
+    ) {
       const returnView = returnViewForReview(permissionOriginView);
       permissionOriginView = undefined;
       clearActivePermissionRequest();
       switchContentView(returnView);
-    } else if (requestedContentView === "plan" && activePlanSource === "codex") {
+    } else if (
+      requestedContentView === "plan" &&
+      activePlanSource === "codex"
+    ) {
       const returnView = returnViewForReview(planOriginView);
       planOriginView = undefined;
       clearActivePlanRequest();
@@ -3811,7 +4518,8 @@ const renderCodexSnapshot = (snapshot: CodexSnapshot) => {
   }
   const { interaction: pending, session } = pendingEntry;
   if (pending.requestId === dismissedCodexInteractionId) return;
-  const shouldAutoReveal = pending.requestId !== lastAutoRevealedCodexInteractionId;
+  const shouldAutoReveal =
+    pending.requestId !== lastAutoRevealedCodexInteractionId;
   renderCodexInteraction(pending, session, shouldAutoReveal);
   if (shouldAutoReveal) lastAutoRevealedCodexInteractionId = pending.requestId;
 };
@@ -3868,8 +4576,126 @@ const renderCodexInteraction = (
   reveal("permission");
 };
 
+const renderOpenCodeSnapshot = (snapshot: OpenCodeSnapshot) => {
+  snapshot = {
+    ...snapshot,
+    sessions: filterAutoCleanedSessions(
+      snapshot.sessions,
+      sessionCleanupSettings,
+    ),
+  };
+  observeOpenCodeSounds(snapshot.sessions);
+  latestOpenCodeSnapshot = snapshot;
+  syncOpenCodeHookStatus();
+
+  if (
+    !snapshot.sessions.some(
+      (session) => openCodeSessionKey(session) === selectedOpenCodeSessionKey,
+    )
+  ) {
+    selectedOpenCodeSessionKey = undefined;
+    if (selectedSessionSource === "opencode")
+      renderedDetailSignature = undefined;
+  }
+  renderUnifiedSessionList(
+    openCodeSessionList,
+    snapshot.sessions,
+    openCodeSessionItems,
+  );
+  const selectedOpenCodeSession = snapshot.sessions.find(
+    (session) => openCodeSessionKey(session) === selectedOpenCodeSessionKey,
+  );
+  if (
+    selectedSessionSource === "opencode" &&
+    requestedContentView === "detail" &&
+    selectedOpenCodeSession
+  ) {
+    renderSessionDetail(selectedOpenCodeSession);
+  }
+  renderSessionSummary();
+  syncCollapsedSessionState();
+
+  const pendingReveal = openCodePendingReveal(
+    snapshot.sessions,
+    lastAutoRevealedOpenCodeReviewId,
+    dismissedOpenCodeReviewId,
+  );
+  const pendingEntry = pendingReveal;
+  if (submittedOpenCodeReviewId) {
+    const submittedStillPending = snapshot.sessions.some((session) =>
+      openCodeReviewsForSession(session).some(
+        (review) => openCodeReviewKey(review) === submittedOpenCodeReviewId,
+      ),
+    );
+    if (!submittedStillPending) {
+      submittedOpenCodeReviewId = undefined;
+      followupOpenCodeReviewId = pendingEntry
+        ? openCodeReviewKey(pendingEntry.review)
+        : undefined;
+    }
+  }
+  if (!pendingEntry) {
+    if (
+      (requestedContentView === "question" &&
+        activeQuestionSource === "opencode") ||
+      (requestedContentView === "permission" &&
+        activePermissionSource === "opencode")
+    ) {
+      const origin =
+        requestedContentView === "question"
+          ? questionOriginView
+          : permissionOriginView;
+      const returnView = returnViewForReview(origin);
+      clearActiveQuestionRequest();
+      clearActivePermissionRequest();
+      activeOpenCodeReview = undefined;
+      switchContentView(returnView);
+    }
+    dismissedOpenCodeReviewId = undefined;
+    lastAutoRevealedOpenCodeReviewId = undefined;
+    followupOpenCodeReviewId = undefined;
+    return;
+  }
+
+  const reviewId = pendingReveal.reviewId;
+  if (pendingReveal.dismissed) return;
+  const shouldAutoReveal = pendingReveal.shouldAutoReveal;
+  showOpenCodeReview(
+    pendingEntry.session,
+    pendingEntry.review,
+    shouldAutoReveal,
+  );
+  if (shouldAutoReveal) lastAutoRevealedOpenCodeReviewId = reviewId;
+};
+
+const refreshOpenCodeSessions = async () => {
+  if (refreshingOpenCodeSessions || !isTauriRuntime) return;
+  refreshingOpenCodeSessions = true;
+  try {
+    const snapshot = await invoke<OpenCodeSnapshot>("list_opencode_sessions");
+    renderOpenCodeSnapshot(snapshot);
+    lastOpenCodeRefreshError = undefined;
+  } catch (error: unknown) {
+    const message = error instanceof Error ? error.message : String(error);
+    renderOpenCodeSnapshot({
+      connected: false,
+      integrationError: message,
+      sessions: [],
+      instances: [],
+    });
+    if (message !== lastOpenCodeRefreshError) {
+      console.error("Unable to refresh OpenCode sessions", error);
+      lastOpenCodeRefreshError = message;
+    }
+  } finally {
+    refreshingOpenCodeSessions = false;
+  }
+};
+
 sessionDetailBack.addEventListener("click", () => {
   selectedSessionId = undefined;
+  selectedCodexSessionId = undefined;
+  selectedOpenCodeSessionKey = undefined;
   renderedDetailSignature = undefined;
   switchContentView("sessions");
 });
@@ -3888,8 +4714,7 @@ const settingsSectionNames: Record<string, string> = {
   lan: "局域网",
   about: "关于",
 };
-const settingsSectionPlaceholders: Record<string, string> = {
-};
+const settingsSectionPlaceholders: Record<string, string> = {};
 
 const formatAnimationSpeed = (speed: number) => `${speed.toFixed(2)}×`;
 
@@ -3974,7 +4799,9 @@ const syncWindowPositionControls = () => {
     const preset = Number(button.dataset.positionPreset);
     button.setAttribute(
       "aria-pressed",
-      String(Math.abs(preset - windowPositionSettings.horizontalPosition) < 0.005),
+      String(
+        Math.abs(preset - windowPositionSettings.horizontalPosition) < 0.005,
+      ),
     );
   }
 };
@@ -4094,9 +4921,7 @@ const scheduleNativeInterfaceLayout = () => {
   });
 };
 
-const updateInterfaceSettings = (
-  nextSettings: Partial<InterfaceSettings>,
-) => {
+const updateInterfaceSettings = (nextSettings: Partial<InterfaceSettings>) => {
   interfaceSettings = normalizeInterfaceSettings({
     ...interfaceSettings,
     ...nextSettings,
@@ -4283,8 +5108,7 @@ const openSessionCleanupMenu = (focusIndex = 0) => {
 const selectSessionCleanupOption = async (option: HTMLButtonElement) => {
   if (sessionCleanupSelectionPending) return;
   const preset = option.dataset.cleanupPreset as
-    | SessionCleanupPreset
-    | undefined;
+    SessionCleanupPreset | undefined;
   if (!preset) return;
 
   sessionCleanupSelectionPending = true;
@@ -4428,7 +5252,9 @@ const refreshApprovalSettings = async () => {
   approvalSettings = loadApprovalSettings();
   if (isTauriRuntime) {
     try {
-      approvalSettings = await invoke<ApprovalSettings>("get_approval_settings");
+      approvalSettings = await invoke<ApprovalSettings>(
+        "get_approval_settings",
+      );
     } catch {
       // The browser fallback keeps the control usable during preview builds.
     }
@@ -4448,9 +5274,12 @@ const updateApprovalSettings = async (mode: ApprovalMode) => {
   }
   if (isTauriRuntime) {
     try {
-      approvalSettings = await invoke<ApprovalSettings>("set_approval_settings", {
-        mode,
-      });
+      approvalSettings = await invoke<ApprovalSettings>(
+        "set_approval_settings",
+        {
+          mode,
+        },
+      );
     } catch (error) {
       console.error("Unable to save approval settings", error);
     }
@@ -4517,12 +5346,25 @@ approvalAutoExpandInput.addEventListener("change", () => {
 
 syncCollapseExpandControls();
 
-type HookAgentId = "claudeCode" | "codex";
+type HookAgentId = "claudeCode" | "codex" | "openCode";
 type HookIntegrationStatus = {
   id: HookAgentId;
   name: string;
   agentInstalled: boolean;
   hookInstalled: boolean;
+  installState?:
+    | "notInstalled"
+    | "installed"
+    | "syncedRestartRequired"
+    | "modified"
+    | "conflict"
+    | "incompatible"
+    | "error";
+  installPath?: string;
+  bundledVersion?: string;
+  installedVersion?: string;
+  runningVersions?: string[];
+  error?: string;
 };
 type HookOperation = { id: HookAgentId; installing: boolean };
 
@@ -4535,9 +5377,56 @@ let hookRefreshLabelTransitionToken = 0;
 let hookRefreshLabelAnimation: Animation | undefined;
 
 const browserHookIntegrations: HookIntegrationStatus[] = [
-  { id: "claudeCode", name: "Claude Code", agentInstalled: true, hookInstalled: true },
+  {
+    id: "claudeCode",
+    name: "Claude Code",
+    agentInstalled: true,
+    hookInstalled: true,
+  },
   { id: "codex", name: "Codex", agentInstalled: true, hookInstalled: false },
+  {
+    id: "openCode",
+    name: "OpenCode",
+    agentInstalled: true,
+    hookInstalled: false,
+  },
 ];
+
+const openCodeHookIntegration = () =>
+  hookIntegrations.find((status) => status.id === "openCode");
+
+const codexHookIntegration = () =>
+  hookIntegrations.find((status) => status.id === "codex");
+
+const isCodexHookKnownUninstalled = () => {
+  const status = codexHookIntegration();
+  return status !== undefined && !status.hookInstalled;
+};
+
+const isOpenCodeHookHealthy = () => {
+  const status = openCodeHookIntegration();
+  return Boolean(status?.hookInstalled && !status.error);
+};
+
+const syncOpenCodeHookStatus = () => {
+  const status = openCodeHookIntegration();
+  const healthy = isOpenCodeHookHealthy();
+  const restartRequired =
+    status?.installState === "syncedRestartRequired" ||
+    latestOpenCodeSnapshot.instances.some((instance) => instance.restartRequired);
+  setSourceStatusLabel(
+    openCodeConnectionStatus,
+    restartRequired ? "需重启 OpenCode" : healthy ? "Hook 正常" : "Hook 异常",
+  );
+  openCodeConnectionStatus.dataset.connected = String(healthy && !restartRequired);
+  openCodeConnectionStatus.title = restartRequired
+    ? "请重启 OpenCode 以加载新版 Hook"
+    : healthy
+    ? "OpenCode Hook 正常；启动 OpenCode 后即可同步会话"
+    : (status?.error ??
+      latestOpenCodeSnapshot.integrationError ??
+      "OpenCode Hook 未安装");
+};
 
 const setHookSettingsError = (message?: string) => {
   hookSettingsStatus.hidden = !message;
@@ -4596,8 +5485,11 @@ const syncHookRefreshButton = () => {
   );
 };
 
-const hookIconUrl = (id: HookAgentId) =>
-  id === "claudeCode" ? claudeCodeIconUrl : codexIconUrl;
+const hookIconUrl = (id: HookAgentId) => {
+  if (id === "claudeCode") return claudeCodeIconUrl;
+  if (id === "openCode") return openCodeIconUrl;
+  return codexIconUrl;
+};
 
 const createHookAgentButton = (status: HookIntegrationStatus) => {
   const button = document.createElement("button");
@@ -4606,7 +5498,12 @@ const createHookAgentButton = (status: HookIntegrationStatus) => {
 
   const mark = document.createElement("span");
   mark.className = "hook-agent-button__mark";
-  mark.dataset.agent = status.id === "claudeCode" ? "claude" : "codex";
+  mark.dataset.agent =
+    status.id === "claudeCode"
+      ? "claude"
+      : status.id === "openCode"
+        ? "opencode"
+        : "codex";
   mark.setAttribute("aria-hidden", "true");
   const image = document.createElement("img");
   image.alt = "";
@@ -4618,7 +5515,10 @@ const createHookAgentButton = (status: HookIntegrationStatus) => {
   const name = document.createElement("strong");
   name.textContent = status.name;
   const detail = document.createElement("small");
-  detail.textContent = "CodeCraft 会话同步与审阅 Hook";
+  detail.textContent =
+    status.id === "openCode" && status.installPath
+      ? status.installPath
+      : "CodeCraft 会话同步与审阅 Hook";
   copy.append(name, detail);
 
   const state = document.createElement("span");
@@ -4634,11 +5534,22 @@ const syncHookAgentButton = (
   status: HookIntegrationStatus,
 ) => {
   const state = button.querySelector<HTMLElement>(".hook-agent-button__state")!;
-  const activeOperation = hookOperation?.id === status.id ? hookOperation : undefined;
+  const activeOperation =
+    hookOperation?.id === status.id ? hookOperation : undefined;
+  const detail = button.querySelector<HTMLElement>(
+    ".hook-agent-button__copy small",
+  );
+  if (detail) {
+    detail.textContent =
+      status.id === "openCode" && status.installPath
+        ? status.installPath
+        : "CodeCraft 会话同步与审阅 Hook";
+  }
   button.dataset.agentInstalled = String(status.agentInstalled);
   button.dataset.busy = String(activeOperation !== undefined);
   button.dataset.refreshing = String(hookRefreshing);
-  button.disabled = hookRefreshing || hookOperation !== undefined || !status.agentInstalled;
+  button.disabled =
+    hookRefreshing || hookOperation !== undefined || !status.agentInstalled;
   button.setAttribute(
     "aria-label",
     !status.agentInstalled
@@ -4647,13 +5558,17 @@ const syncHookAgentButton = (
   );
   button.title = !status.agentInstalled
     ? `未检测到 ${status.name}，无法操作 Hook`
-    : `点击${status.hookInstalled ? "卸载" : "安装"} ${status.name} Hook`;
+    : status.error
+      ? status.error
+      : `点击${status.hookInstalled ? "卸载" : "安装"} ${status.name} Hook`;
 
   state.replaceChildren();
   if (activeOperation) {
     state.dataset.kind = "operation";
     const text = document.createElement("span");
-    text.textContent = activeOperation.installing ? "安装Hook中..." : "卸载Hook中...";
+    text.textContent = activeOperation.installing
+      ? "安装Hook中..."
+      : "卸载Hook中...";
     const spinner = document.createElement("span");
     spinner.className = "hook-spinner";
     spinner.setAttribute("aria-hidden", "true");
@@ -4661,15 +5576,25 @@ const syncHookAgentButton = (
   } else if (!status.agentInstalled) {
     state.dataset.kind = "missing";
     state.textContent = "未安装";
+  } else if (status.installState === "syncedRestartRequired") {
+    state.dataset.kind = "action";
+    state.textContent = "已同步 · 重启生效";
+  } else if (
+    status.id === "openCode" &&
+    latestOpenCodeSnapshot.instances.some((instance) => instance.restartRequired)
+  ) {
+    state.dataset.kind = "action";
+    state.textContent = "请重启 OpenCode";
+  } else if (status.error) {
+    state.dataset.kind = "missing";
+    state.textContent = "需处理";
   } else {
     state.dataset.kind = "action";
     state.textContent = status.hookInstalled ? "卸载" : "安装";
   }
 };
 
-const animateHookLayout = (
-  firstRects: Map<HookAgentId, DOMRect>,
-) => {
+const animateHookLayout = (firstRects: Map<HookAgentId, DOMRect>) => {
   for (const [id, button] of hookAgentButtons) {
     const first = firstRects.get(id);
     if (!first || !button.isConnected) continue;
@@ -4685,7 +5610,6 @@ const animateHookLayout = (
       { duration: 320, easing: "cubic-bezier(0.22, 1, 0.36, 1)" },
     );
   }
-
 };
 
 const renderHookIntegrations = (
@@ -4695,17 +5619,35 @@ const renderHookIntegrations = (
   const firstRects = new Map<HookAgentId, DOMRect>();
   if (animate && !hookSettings.hidden) {
     for (const [id, button] of hookAgentButtons) {
-      if (button.isConnected) firstRects.set(id, button.getBoundingClientRect());
+      if (button.isConnected)
+        firstRects.set(id, button.getBoundingClientRect());
     }
   }
 
   hookIntegrations = nextStatuses;
+  syncInstalledSessionProducts(nextStatuses);
+  syncOpenCodeHookStatus();
+  if (isTauriRuntime && isCodexHookKnownUninstalled()) {
+    // Removing a Hook must clear any already-rendered Codex detail or pending
+    // request immediately; waiting for the next session poll leaves stale
+    // agent content visible for one refresh interval.
+    renderCodexSnapshot({
+      ...latestCodexSnapshot,
+      connected: false,
+      integrationError: latestCodexSnapshot.integrationError ?? "Codex Hook 未安装",
+      sessions: [],
+      interactions: [],
+    });
+  }
   const installed = nextStatuses.filter((status) => status.hookInstalled);
   const available = nextStatuses.filter((status) => !status.hookInstalled);
   for (const status of nextStatuses) {
-    const button = hookAgentButtons.get(status.id) ?? createHookAgentButton(status);
+    const button =
+      hookAgentButtons.get(status.id) ?? createHookAgentButton(status);
     syncHookAgentButton(button, status);
-    (status.hookInstalled ? installedHookList : availableHookList).append(button);
+    (status.hookInstalled ? installedHookList : availableHookList).append(
+      button,
+    );
   }
   installedHookCount.textContent = String(installed.length);
   availableHookCount.textContent = String(available.length);
@@ -4742,18 +5684,18 @@ const refreshHookIntegrations = async () => {
 const fadeHookOperation = async (id: HookAgentId) => {
   const state = hookAgentButtons
     .get(id)
-    ?.querySelector<HTMLElement>('.hook-agent-button__state[data-kind="operation"]');
+    ?.querySelector<HTMLElement>(
+      '.hook-agent-button__state[data-kind="operation"]',
+    );
   if (!state) return;
   try {
-    await state
-      .animate(
-        [
-          { opacity: 1, transform: "translateX(0)" },
-          { opacity: 0, transform: "translateX(7px)" },
-        ],
-        { duration: 140, easing: "ease-in" },
-      )
-      .finished;
+    await state.animate(
+      [
+        { opacity: 1, transform: "translateX(0)" },
+        { opacity: 0, transform: "translateX(7px)" },
+      ],
+      { duration: 140, easing: "ease-in" },
+    ).finished;
   } catch {
     // A newer render owns the state.
   }
@@ -4761,15 +5703,19 @@ const fadeHookOperation = async (id: HookAgentId) => {
 
 async function toggleAgentHook(id: HookAgentId) {
   const status = hookIntegrations.find((item) => item.id === id);
-  if (!status || !status.agentInstalled || hookOperation || hookRefreshing) return;
+  if (!status || !status.agentInstalled || hookOperation || hookRefreshing)
+    return;
   hookOperation = { id, installing: !status.hookInstalled };
   setHookSettingsError();
   renderHookIntegrations(hookIntegrations, false);
   try {
     if (isTauriRuntime) {
-      await invoke(status.hookInstalled ? "uninstall_agent_hook" : "install_agent_hook", {
-        agent: id,
-      });
+      await invoke(
+        status.hookInstalled ? "uninstall_agent_hook" : "install_agent_hook",
+        {
+          agent: id,
+        },
+      );
     } else {
       await new Promise((resolve) => window.setTimeout(resolve, 650));
       const preview = browserHookIntegrations.find((item) => item.id === id);
@@ -4783,11 +5729,16 @@ async function toggleAgentHook(id: HookAgentId) {
     await fadeHookOperation(id);
     hookOperation = undefined;
     renderHookIntegrations(hookIntegrations, false);
-    setHookSettingsError(`${status.hookInstalled ? "卸载" : "安装"} Hook 失败：${String(error)}`);
+    setHookSettingsError(
+      `${status.hookInstalled ? "卸载" : "安装"} Hook 失败：${String(error)}`,
+    );
   }
 }
 
-hookRefreshButton.addEventListener("click", () => void refreshHookIntegrations());
+hookRefreshButton.addEventListener(
+  "click",
+  () => void refreshHookIntegrations(),
+);
 
 const LAN_STATUS_INTERVAL_MS = 1500;
 
@@ -4902,10 +5853,7 @@ const playLanCardHeight = (card: HTMLElement, plan: LanCardHeightPlan) => {
             { height: `${plan.from}px`, opacity: 0 },
             { height: `${plan.to}px`, opacity: 1 },
           ]
-        : [
-            { height: `${plan.from}px` },
-            { height: `${plan.to}px` },
-          ];
+        : [{ height: `${plan.from}px` }, { height: `${plan.to}px` }];
 
   if (hideOnFinish) card.hidden = false;
   card.style.overflow = "hidden";
@@ -5161,7 +6109,10 @@ const applyLanSettings = () => {
   // Client activity only means something once the server is listening.
   lanClients.hidden = !lanStatus.running;
   lanClientCount.textContent = String(lanStatus.clientCount);
-  lanLastClient.textContent = lastClientLabel(lanStatus.lastClientAt, Date.now());
+  lanLastClient.textContent = lastClientLabel(
+    lanStatus.lastClientAt,
+    Date.now(),
+  );
 
   lanAdvancedToggle.setAttribute("aria-expanded", String(lanAdvancedExpanded));
   lanAdvanced.hidden = !lanAdvancedExpanded;
@@ -5179,7 +6130,10 @@ const applyLanSettings = () => {
 
   // While the server runs and nothing else needs saying, the notice line
   // states whether the browser can act or only watch.
-  if (lanStatus.running && (lanError.hidden || lanError.dataset.tone === "hint")) {
+  if (
+    lanStatus.running &&
+    (lanError.hidden || lanError.dataset.tone === "hint")
+  ) {
     setLanNotice(lanReadOnlyHint(lanStatus), "hint");
   } else if (!lanStatus.running && lanError.dataset.tone === "hint") {
     setLanNotice();
@@ -5195,7 +6149,10 @@ const renderLanSettings = () => {
 
 const refreshLanStatus = async () => {
   try {
-    const [config, status] = await Promise.all([readLanConfig(), readLanStatus()]);
+    const [config, status] = await Promise.all([
+      readLanConfig(),
+      readLanStatus(),
+    ]);
     lanConfig = config;
     lanStatus = status;
     if (status.lastError && !status.running) {
@@ -5216,7 +6173,8 @@ const applyLanConfig = async (changes: LanConfigChanges) => {
     lanStatus = await writeLanConfig(changes);
     lanConfig = await readLanConfig();
     if (changes.enabled === true) rememberLanAcknowledged();
-    if (changes.allowApprovals === true) setLanNotice(APPROVALS_RISK_HINT, "warn");
+    if (changes.allowApprovals === true)
+      setLanNotice(APPROVALS_RISK_HINT, "warn");
   } catch (error) {
     setLanNotice(String(error));
     await refreshLanStatus().catch(() => undefined);
@@ -5358,10 +6316,7 @@ const syncTransparencyControls = () => {
   );
 };
 
-const setWorkingSquareImageStatus = (
-  message?: string,
-  tone?: "error",
-) => {
+const setWorkingSquareImageStatus = (message?: string, tone?: "error") => {
   if (!workingSquareImageStatus) return;
   workingSquareImageStatus.textContent = message ?? "";
   workingSquareImageStatus.hidden = !message;
@@ -5376,13 +6331,11 @@ const syncWorkingSquareImagePreviews = () => {
       systemThemePreference.matches,
     );
     if (!theme) continue;
-    button.style.backgroundImage = cssImageUrl(
-      workingSquareImageUrlFor(theme),
-    );
+    button.style.backgroundImage = cssImageUrl(workingSquareImageUrlFor(theme));
     button.dataset.custom = String(
       Boolean(
         workingSquareImageFileFor(theme) &&
-          workingSquareImageStore.urlFor(theme),
+        workingSquareImageStore.urlFor(theme),
       ),
     );
   }
@@ -5447,6 +6400,9 @@ const syncSettingsPanel = (selectedItem: HTMLButtonElement) => {
     settingsSectionPlaceholders[section] ??
     `${settingsSectionNames[section] ?? "此分类"}设置内容待添加`;
   if (showsHookSettings) void refreshHookIntegrations();
+  if (showsAboutSettings && isTauriRuntime) {
+    ensureAutoUpdateCheck();
+  }
   if (showsLanSettings) {
     void refreshLanStatus();
     startLanStatusPolling();
@@ -5490,6 +6446,9 @@ const transitionSettingsPanel = async (selectedItem: HTMLButtonElement) => {
   syncSettingsPanel(selectedItem);
   settingsPanel.scrollTop = 0;
   displayedSettingsSection = targetSection;
+  // Switching settings sections can change the panel's measured height. Mark
+  // this layout refresh so the native window follows the content smoothly.
+  schedulePanelContentRefresh(true);
 
   const incomingAnimation = settingsPanel.animate(
     [
@@ -5545,7 +6504,10 @@ const revealSettingsNavItem = (item: HTMLButtonElement) => {
   const visibleRight = visibleLeft + settingsNav.clientWidth;
 
   if (itemLeft < visibleLeft) {
-    settingsNav.scrollTo({ left: Math.max(0, itemLeft - 8), behavior: "smooth" });
+    settingsNav.scrollTo({
+      left: Math.max(0, itemLeft - 8),
+      behavior: "smooth",
+    });
   } else if (itemRight > visibleRight) {
     settingsNav.scrollTo({
       left: itemRight - settingsNav.clientWidth + 8,
@@ -5777,9 +6739,12 @@ for (const button of customSoundPreviewButtons) {
 }
 
 topDragEnabledInput.addEventListener("change", () => {
-  updateWindowPositionSettings({
-    topDragEnabled: topDragEnabledInput.checked,
-  }, false);
+  updateWindowPositionSettings(
+    {
+      topDragEnabled: topDragEnabledInput.checked,
+    },
+    false,
+  );
 });
 
 windowPositionAdvancedToggle.addEventListener("click", () => {
@@ -5911,10 +6876,7 @@ workingSquareImageInput?.addEventListener("change", () => {
     return;
   }
   if (validation === "unsupported") {
-    setWorkingSquareImageStatus(
-      "请选择 PNG、SVG 或其他图片文件。",
-      "error",
-    );
+    setWorkingSquareImageStatus("请选择 PNG、SVG 或其他图片文件。", "error");
     return;
   }
 
@@ -5939,10 +6901,7 @@ workingSquareImageInput?.addEventListener("change", () => {
     })
     .catch(() => {
       if (requestToken !== workingSquareImageRequestToken) return;
-      setWorkingSquareImageStatus(
-        "保存工作方块图片失败，请重试。",
-        "error",
-      );
+      setWorkingSquareImageStatus("保存工作方块图片失败，请重试。", "error");
     });
 });
 
@@ -6054,12 +7013,15 @@ const renderUnifiedSessionList = (
   }
   const nextItems = new Map<string, HTMLLIElement>();
   for (const session of sessions) {
-    const item = items.get(session.id) ?? createSessionButton(session);
+    const key = unifiedSessionKey(session);
+    const item = items.get(key) ?? createSessionButton(session);
     updateSessionButton(item, session);
-    nextItems.set(session.id, item);
+    nextItems.set(key, item);
   }
   for (const stale of items.values()) stale.remove();
-  list.replaceChildren(...sessions.map((session) => nextItems.get(session.id)!));
+  list.replaceChildren(
+    ...sessions.map((session) => nextItems.get(unifiedSessionKey(session))!),
+  );
   items.clear();
   nextItems.forEach((item, id) => items.set(id, item));
 };
@@ -6072,21 +7034,26 @@ const createSessionButton = (session: UnifiedSession): HTMLLIElement => {
   button.className = "session-button";
   button.type = "button";
   button.dataset.sessionId = session.id;
-  button.dataset.sessionSource = isCodexSession(session) ? "codex" : "claude";
+  button.dataset.sessionKey = unifiedSessionKey(session);
+  button.dataset.sessionSource = unifiedSessionSource(session);
   button.dataset.sessionStatus = session.status;
   button.setAttribute(
     "aria-pressed",
     String(
       isCodexSession(session)
         ? session.id === selectedCodexSessionId
-        : session.id === selectedSessionId,
+        : isOpenCodeSession(session)
+          ? openCodeSessionKey(session) === selectedOpenCodeSessionKey
+          : session.id === selectedSessionId,
     ),
   );
   button.title = `${unifiedSessionStatusLabel(session)} · ${session.title}`;
   button.addEventListener("click", () =>
     isCodexSession(session)
       ? setSelectedCodexSession(session.id)
-      : setSelectedSession(session.id),
+      : isOpenCodeSession(session)
+        ? setSelectedOpenCodeSession(openCodeSessionKey(session))
+        : setSelectedSession(session.id),
   );
 
   const statusIcon = createPixelStatusSvg(session.status, "pixel-status");
@@ -6138,10 +7105,12 @@ const updateSessionButton = (
 ) => {
   const button = listItem.querySelector<HTMLButtonElement>(".session-button");
   const statusLabel = button?.querySelector<HTMLSpanElement>(".sr-only");
-  const title =
-    button?.querySelector<HTMLSpanElement>(".session-button__title");
-  const content =
-    button?.querySelector<HTMLSpanElement>(".session-button__content");
+  const title = button?.querySelector<HTMLSpanElement>(
+    ".session-button__title",
+  );
+  const content = button?.querySelector<HTMLSpanElement>(
+    ".session-button__content",
+  );
   const time = button?.querySelector<HTMLTimeElement>(".session-button__time");
   const statusIcon = button?.querySelector<SVGElement>(".pixel-status");
   if (!button || !statusLabel || !title || !content || !time || !statusIcon) {
@@ -6151,13 +7120,16 @@ const updateSessionButton = (
   if (button.dataset.sessionStatus !== session.status) {
     button.dataset.sessionStatus = session.status;
   }
-  button.dataset.sessionSource = isCodexSession(session) ? "codex" : "claude";
+  button.dataset.sessionKey = unifiedSessionKey(session);
+  button.dataset.sessionSource = unifiedSessionSource(session);
   button.setAttribute(
     "aria-pressed",
     String(
       isCodexSession(session)
         ? session.id === selectedCodexSessionId
-        : session.id === selectedSessionId,
+        : isOpenCodeSession(session)
+          ? openCodeSessionKey(session) === selectedOpenCodeSessionKey
+          : session.id === selectedSessionId,
     ),
   );
   button.title = `${unifiedSessionStatusLabel(session)} · ${session.title}`;
@@ -6185,7 +7157,8 @@ const renderSessionSnapshot = (snapshot: ClaudeSessionSnapshot) => {
   observeClaudeSounds(snapshot.sessions);
   latestClaudeSnapshot = snapshot;
   latestSessions = snapshot.sessions;
-  integrationState.title = snapshot.integrationError ?? "Claude Code Hook 已连接";
+  integrationState.title =
+    snapshot.integrationError ?? "Claude Code Hook 已连接";
   setSourceStatusLabel(
     claudeConnectionStatus,
     snapshot.connected ? "Hook 正常" : "Hook 异常",
@@ -6194,7 +7167,7 @@ const renderSessionSnapshot = (snapshot: ClaudeSessionSnapshot) => {
   claudeConnectionStatus.disabled = snapshot.connected;
   claudeConnectionStatus.title = snapshot.connected
     ? "Claude Code Hook 连接正常"
-    : snapshot.integrationError ?? "点击重新安装并连接 Claude Code Hook";
+    : (snapshot.integrationError ?? "点击重新安装并连接 Claude Code Hook");
   renderSessionSummary();
 
   if (snapshot.sessions.length === 0) {
@@ -6202,7 +7175,9 @@ const renderSessionSnapshot = (snapshot: ClaudeSessionSnapshot) => {
     selectedSessionId = undefined;
     renderedDetailSignature = undefined;
   } else {
-    if (!snapshot.sessions.some((session) => session.id === selectedSessionId)) {
+    if (
+      !snapshot.sessions.some((session) => session.id === selectedSessionId)
+    ) {
       selectedSessionId = undefined;
       renderedDetailSignature = undefined;
     }
@@ -6289,8 +7264,7 @@ const renderSessionSnapshot = (snapshot: ClaudeSessionSnapshot) => {
     manuallyHiddenQuestionRequestId = undefined;
     activeQuestionSource = "claude";
     lastAutoRevealedQuestionRequestId = undefined;
-    const returnView =
-      returnViewForReview(questionOriginView);
+    const returnView = returnViewForReview(questionOriginView);
     questionOriginView = undefined;
     clearActiveQuestionRequest();
     if (shouldRestoreReviewOrigin("question", requestedContentView)) {
@@ -6328,8 +7302,7 @@ const renderSessionSnapshot = (snapshot: ClaudeSessionSnapshot) => {
   } else if (activePlanSource === "claude") {
     manuallyHiddenPlanRequestId = undefined;
     lastAutoRevealedPlanRequestId = undefined;
-    const returnView =
-      returnViewForReview(planOriginView);
+    const returnView = returnViewForReview(planOriginView);
     planOriginView = undefined;
     clearActivePlanRequest();
     if (shouldRestoreReviewOrigin("plan", requestedContentView)) {
@@ -6372,8 +7345,7 @@ const renderSessionSnapshot = (snapshot: ClaudeSessionSnapshot) => {
     manuallyHiddenPermissionRequestId = undefined;
     activePermissionSource = "claude";
     lastAutoRevealedPermissionRequestId = undefined;
-    const returnView =
-      returnViewForReview(permissionOriginView);
+    const returnView = returnViewForReview(permissionOriginView);
     permissionOriginView = undefined;
     clearActivePermissionRequest();
     if (shouldRestoreReviewOrigin("permission", requestedContentView)) {
@@ -6409,21 +7381,27 @@ const refreshClaudeSessions = async () => {
 };
 
 let panelContentResizeFrame: number | undefined;
+let panelContentResizeAnimate = false;
 
 const refreshPanelForContent = () => {
   panelContentResizeFrame = undefined;
+  const animateHeight = panelContentResizeAnimate;
+  panelContentResizeAnimate = false;
   if (!refreshExpandedPanelHeight()) return;
 
   syncPanelShape();
-  void controller.contentResized().catch((error: unknown) => {
+  void controller.contentResized(animateHeight).catch((error: unknown) => {
     console.error("Unable to resize the CodeCraft panel", error);
   });
 };
 
-const schedulePanelContentRefresh = () => {
+const schedulePanelContentRefresh = (animateHeight = false) => {
+  panelContentResizeAnimate ||= animateHeight;
   if (panelContentResizeFrame !== undefined) return;
 
-  panelContentResizeFrame = window.requestAnimationFrame(refreshPanelForContent);
+  panelContentResizeFrame = window.requestAnimationFrame(
+    refreshPanelForContent,
+  );
 };
 
 const panelContentResizeObserver = new ResizeObserver(() => {
@@ -6508,9 +7486,10 @@ const contextMenu = new ContextMenuController<CodeCraftContextData>(
       const workingSquareOption = target.closest<HTMLElement>(
         ".theme-switch__option",
       );
-      const workingSquareTarget = workingSquareOption?.querySelector<HTMLElement>(
-        "[data-working-square-image-theme]",
-      )?.dataset.workingSquareImageTheme;
+      const workingSquareTarget =
+        workingSquareOption?.querySelector<HTMLElement>(
+          "[data-working-square-image-theme]",
+        )?.dataset.workingSquareImageTheme;
       const workingSquareTheme = workingSquareImageThemeForTarget(
         workingSquareTarget,
         systemThemePreference.matches,
@@ -6522,7 +7501,8 @@ const contextMenu = new ContextMenuController<CodeCraftContextData>(
         };
       }
 
-      const sessionButton = target.closest<HTMLButtonElement>(".session-button");
+      const sessionButton =
+        target.closest<HTMLButtonElement>(".session-button");
       const sessionSource = sessionButton?.dataset.sessionSource;
       if (
         sessionButton?.dataset.sessionId &&
@@ -6552,7 +7532,8 @@ const contextMenu = new ContextMenuController<CodeCraftContextData>(
           icon: "refresh",
           visible: isWorkingSquare,
           disabled:
-            !workingSquareTheme || !workingSquareImageFileFor(workingSquareTheme),
+            !workingSquareTheme ||
+            !workingSquareImageFileFor(workingSquareTheme),
           onSelect: () => {
             if (workingSquareTheme) {
               void resetWorkingSquareImage(workingSquareTheme);
@@ -6597,6 +7578,7 @@ const contextMenu = new ContextMenuController<CodeCraftContextData>(
           onSelect: () => {
             void refreshClaudeSessions();
             void refreshCodexPanel();
+            void refreshOpenCodeSessions();
           },
         },
         { type: "separator", id: "panel-actions-end" },
@@ -6636,20 +7618,47 @@ const contextMenu = new ContextMenuController<CodeCraftContextData>(
 );
 
 syncProductVisibility();
+void refreshHookIntegrations();
 
-void runStartupSequence();
+// Themed hover tooltips replace the native `title` tooltips. The controller
+// follows the cursor and keeps the tooltip open while it stays inside the
+// source element, so it also works on the collapsed panel and settings.
+const tooltip = new TooltipController();
+
+const startupSequencePromise = runStartupSequence();
+let stopReopenRequestedListener: UnlistenFn | undefined;
+
+const handleReopenRequest = async () => {
+  if (!(await invoke<boolean>("take_reopen_request"))) return;
+
+  await startupSequencePromise;
+  if (!(await controller.revealIfCollapsed())) return;
+
+  await invoke("show_panel_for_attention");
+};
 
 if (isTauriRuntime) {
+  void listen(REOPEN_REQUESTED_EVENT, () => {
+    void handleReopenRequest().catch((error: unknown) => {
+      console.error("Unable to reopen the CodeCraft panel", error);
+    });
+  })
+    .then((unlisten) => {
+      stopReopenRequestedListener = unlisten;
+      return handleReopenRequest();
+    })
+    .catch((error: unknown) => {
+      console.error("Unable to register the CodeCraft reopen handler", error);
+    });
   initCodexPanel(renderCodexSnapshot);
   void refreshClaudeSessions();
   void refreshCodexPanel();
-  sessionRefreshTimer = setInterval(
-    () => {
-      void refreshClaudeSessions();
-      void refreshCodexPanel();
-    },
-    SESSION_REFRESH_INTERVAL_MS,
-  );
+  void refreshOpenCodeSessions();
+  sessionRefreshTimer = setInterval(() => {
+    void refreshClaudeSessions();
+    void refreshCodexPanel();
+    void refreshOpenCodeSessions();
+  }, SESSION_REFRESH_INTERVAL_MS);
 } else {
   const previewParameters = new URLSearchParams(window.location.search);
   const previewQuestionEnabled = previewParameters.has("previewQuestion");
@@ -6930,6 +7939,10 @@ let panelDragPendingDelta = 0;
 let panelDragMoveInFlight = false;
 
 const flushPanelDragMovement = async () => {
+  if (document.documentElement.dataset.panelState !== "expanded") {
+    panelDragPendingDelta = 0;
+    return;
+  }
   if (panelDragMoveInFlight || Math.abs(panelDragPendingDelta) < 0.01) return;
   const delta = panelDragPendingDelta;
   panelDragPendingDelta = 0;
@@ -6943,10 +7956,14 @@ const flushPanelDragMovement = async () => {
       );
       updateWindowPositionSettings({ horizontalPosition }, false);
     } else {
-      updateWindowPositionSettings({
-        horizontalPosition:
-          windowPositionSettings.horizontalPosition + delta / window.innerWidth,
-      }, false);
+      updateWindowPositionSettings(
+        {
+          horizontalPosition:
+            windowPositionSettings.horizontalPosition +
+            delta / window.innerWidth,
+        },
+        false,
+      );
     }
   } catch (error: unknown) {
     console.error("Unable to drag the CodeCraft panel", error);
@@ -6969,7 +7986,13 @@ const endPanelPositionDrag = (event: PointerEvent) => {
 };
 
 panelDragRegion.addEventListener("pointerdown", (event) => {
-  if (!windowPositionSettings.topDragEnabled || event.button !== 0) return;
+  if (
+    !windowPositionSettings.topDragEnabled ||
+    document.documentElement.dataset.panelState !== "expanded" ||
+    event.button !== 0
+  ) {
+    return;
+  }
   event.preventDefault();
   panelDragPointerId = event.pointerId;
   panelDragLastScreenX = event.screenX;
@@ -6980,6 +8003,10 @@ panelDragRegion.addEventListener("pointerdown", (event) => {
 
 panelDragRegion.addEventListener("pointermove", (event) => {
   if (event.pointerId !== panelDragPointerId) return;
+  if (document.documentElement.dataset.panelState !== "expanded") {
+    endPanelPositionDrag(event);
+    return;
+  }
   event.preventDefault();
   panelDragPendingDelta += event.screenX - panelDragLastScreenX;
   panelDragLastScreenX = event.screenX;
@@ -7042,7 +8069,9 @@ panel.addEventListener("focusout", (event) => {
 });
 
 window.addEventListener("beforeunload", () => {
+  stopReopenRequestedListener?.();
   contextMenu.destroy();
+  tooltip.destroy();
   activeNativeAnimations = 0;
   if (panelShapeFrame !== undefined) {
     window.cancelAnimationFrame(panelShapeFrame);
@@ -7101,7 +8130,10 @@ window.addEventListener("beforeunload", () => {
     "codecraft:locale-change",
     handleLocaleLayoutChange,
   );
-  systemMotionPreference.removeEventListener("change", handleSystemMotionChange);
+  systemMotionPreference.removeEventListener(
+    "change",
+    handleSystemMotionChange,
+  );
   document.removeEventListener("animationstart", handleAnimationStart, true);
   document.removeEventListener("transitionrun", handleAnimationStart, true);
   Element.prototype.animate = nativeElementAnimate;

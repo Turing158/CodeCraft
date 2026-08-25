@@ -1,6 +1,6 @@
 [package]
 name = "codecraft-tauri"
-version = "0.1.0"
+version = "0.1.1"
 description = "A compact, always-on-top desktop toolbar"
 authors = ["CodeCraft"]
 edition = "2021"
@@ -21,11 +21,13 @@ tauri-build = { version = "2", features = [] }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 tauri = { version = "2", features = ["tray-icon", "custom-protocol"] }
+tauri-plugin-single-instance = "2"
 axum = { version = "0.8.9", default-features = false, features = ["http1", "json", "tokio", "query"] }
 tokio = { version = "1.53.1", features = ["rt-multi-thread", "net", "sync", "time", "macros"] }
 tokio-stream = { version = "0.1.19", default-features = false, features = ["sync", "time"] }
 uuid = { version = "1.24.0", features = ["v4"] }
 qrcode = { version = "0.14.1", default-features = false, features = ["svg"] }
+sha2 = "0.10"
 
 [target.'cfg(windows)'.dependencies]
-windows = { version = "0.61", features = ["Win32_Graphics_Gdi", "Win32_System_Threading", "Win32_UI_WindowsAndMessaging", "Win32_NetworkManagement_IpHelper", "Win32_NetworkManagement_Ndis", "Win32_Networking_WinSock"] }
+windows = { version = "0.61", features = ["Win32_Graphics_Gdi", "Win32_Storage_FileSystem", "Win32_System_Threading", "Win32_UI_WindowsAndMessaging", "Win32_NetworkManagement_IpHelper", "Win32_NetworkManagement_Ndis", "Win32_Networking_WinSock", "Win32_UI_Shell"] }

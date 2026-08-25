@@ -286,6 +286,21 @@ impl Default for CodexStore {
 }
 
 impl CodexStore {
+    /// Drop all hook-derived state when the integration is unavailable.
+    ///
+    /// Hook events are kept only in memory, but leaving them around after an
+    /// uninstall would make old Codex sessions reappear until the process is
+    /// restarted (and could also keep them eligible for auto-reveal).
+    pub(crate) fn clear(&mut self) {
+        if self.sessions.is_empty() && self.interactions.is_empty() && self.responded.is_empty() {
+            return;
+        }
+        self.sessions.clear();
+        self.interactions.clear();
+        self.responded.clear();
+        self.bump();
+    }
+
     pub(crate) fn set_integration_error(&mut self, error: Option<String>) {
         let connected = error.is_none();
         if self.connected == connected && self.error == error {
@@ -785,6 +800,24 @@ mod tests {
         assert!(store.resolve_hook_approval("hook-permission-1").unwrap());
         assert!(!store.resolve_hook_approval("hook-permission-1").unwrap());
         assert!(!store.hook_approval_is_pending("hook-permission-1"));
+    }
+
+    #[test]
+    fn clear_removes_hook_sessions_and_interactions() {
+        let mut store = CodexStore::default();
+        store.apply(CodexEvent::HookApproval {
+            request_id: "hook-permission-clear".to_string(),
+            thread_id: "session-clear".to_string(),
+            tool: "Shell".to_string(),
+            summary: "dir".to_string(),
+            cwd: None,
+            allow_session: false,
+        });
+
+        store.clear();
+        let snapshot = store.snapshot();
+        assert!(snapshot.sessions.is_empty());
+        assert!(snapshot.interactions.is_empty());
     }
 
     #[test]

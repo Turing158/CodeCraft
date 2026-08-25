@@ -2,7 +2,7 @@ use std::{
     env,
     path::Path,
     sync::{
-        atomic::{AtomicU64, Ordering},
+        atomic::{AtomicBool, AtomicU64, Ordering},
         Mutex,
     },
     thread,
@@ -13,7 +13,7 @@ use serde::{Deserialize, Serialize};
 use tauri::{
     menu::{Menu, MenuItem},
     tray::TrayIconBuilder,
-    LogicalSize, Manager, PhysicalPosition, PhysicalSize, WebviewWindow,
+    Emitter, LogicalSize, Manager, PhysicalPosition, PhysicalSize, WebviewWindow,
 };
 
 mod approval_policy;
@@ -24,6 +24,8 @@ mod lan_auth;
 mod lan_config;
 mod lan_net;
 mod lan_server;
+mod opencode;
+mod opencode_hook;
 
 pub use claude_hook::capture_claude_hook;
 pub use codex_hook::capture_codex_hook;
@@ -39,9 +41,13 @@ const SHRINK_DURATION: Duration = Duration::from_millis(140);
 const POSITION_DURATION: Duration = Duration::from_millis(180);
 const ANIMATION_FRAME_INTERVAL: Duration = Duration::from_millis(16);
 const PANEL_INSET: f64 = 12.0;
+// Keep the native window region aligned with the webview's visible bottom corners.
+const MIN_VISIBLE_BOTTOM_CORNER_RADIUS: f64 = 12.0;
+const REOPEN_REQUESTED_EVENT: &str = "reopen-requested";
 
 static PANEL_ANIMATION_GENERATION: AtomicU64 = AtomicU64::new(0);
 static PANEL_POSITION_ANIMATION_GENERATION: AtomicU64 = AtomicU64::new(0);
+static REOPEN_REQUESTED: AtomicBool = AtomicBool::new(false);
 static PANEL_RESIZE_LOCK: Mutex<()> = Mutex::new(());
 static PANEL_POSITION_LOCK: Mutex<()> = Mutex::new(());
 
@@ -63,6 +69,12 @@ struct CodexIntegrationState {
     hook_error: Mutex<Option<String>>,
 }
 
+#[derive(Default)]
+struct OpenCodeIntegrationState {
+    store: Mutex<opencode::OpenCodeStore>,
+    hook_error: Mutex<Option<String>>,
+}
+
 struct PanelWindowState {
     horizontal_position: Mutex<f64>,
 }
@@ -73,6 +85,20 @@ impl Default for PanelWindowState {
             horizontal_position: Mutex::new(0.5),
         }
     }
+}
+
+#[derive(Clone, Copy)]
+struct PanelShapeRequest {
+    panel_width: f64,
+    interface_scale: f64,
+    content_height: f64,
+    collapsed_height: f64,
+    collapsed_corner_progress: f64,
+}
+
+#[derive(Default)]
+struct PanelShapeState {
+    request: Mutex<Option<PanelShapeRequest>>,
 }
 
 #[derive(Serialize)]
@@ -88,6 +114,7 @@ struct ClaudeSessionSnapshot {
 enum HookAgentId {
     ClaudeCode,
     Codex,
+    OpenCode,
 }
 
 impl HookAgentId {
@@ -95,6 +122,7 @@ impl HookAgentId {
         match self {
             Self::ClaudeCode => "claude",
             Self::Codex => "codex",
+            Self::OpenCode => "opencode",
         }
     }
 
@@ -102,6 +130,7 @@ impl HookAgentId {
         match self {
             Self::ClaudeCode => "Claude Code",
             Self::Codex => "Codex",
+            Self::OpenCode => "OpenCode",
         }
     }
 }
@@ -113,6 +142,12 @@ struct HookIntegrationStatus {
     name: &'static str,
     agent_installed: bool,
     hook_installed: bool,
+    install_state: Option<opencode_hook::OpenCodeHookInstallState>,
+    install_path: Option<String>,
+    bundled_version: Option<String>,
+    installed_version: Option<String>,
+    running_versions: Vec<String>,
+    error: Option<String>,
 }
 
 fn command_is_installed(command: &str) -> bool {
@@ -164,14 +199,28 @@ fn install_codex_hooks(executable: &Path, project_dir: Option<&Path>) -> Result<
     codex_hook::install_codex_hooks(executable, project_dir)
 }
 
-fn hook_statuses(state: &CodexIntegrationState) -> Result<Vec<HookIntegrationStatus>, String> {
+pub(crate) fn hook_statuses(
+    state: &CodexIntegrationState,
+    opencode_state: &OpenCodeIntegrationState,
+) -> Result<Vec<HookIntegrationStatus>, String> {
     let project_dir = codex_hook_project_dir(state)?;
+    let opencode = opencode_hook::status_and_sync()?;
+    *opencode_state
+        .hook_error
+        .lock()
+        .map_err(|error| error.to_string())? = opencode.error.clone();
     Ok(vec![
         HookIntegrationStatus {
             id: HookAgentId::ClaudeCode,
             name: HookAgentId::ClaudeCode.display_name(),
             agent_installed: agent_is_installed(HookAgentId::ClaudeCode, state)?,
             hook_installed: claude_hook::claude_hooks_installed()?,
+            install_state: None,
+            install_path: None,
+            bundled_version: None,
+            installed_version: None,
+            running_versions: Vec::new(),
+            error: None,
         },
         HookIntegrationStatus {
             id: HookAgentId::Codex,
@@ -180,6 +229,24 @@ fn hook_statuses(state: &CodexIntegrationState) -> Result<Vec<HookIntegrationSta
             hook_installed: codex_hook::codex_hooks_installed(
                 project_dir.as_deref().map(Path::new),
             )?,
+            install_state: None,
+            install_path: None,
+            bundled_version: None,
+            installed_version: None,
+            running_versions: Vec::new(),
+            error: None,
+        },
+        HookIntegrationStatus {
+            id: HookAgentId::OpenCode,
+            name: HookAgentId::OpenCode.display_name(),
+            agent_installed: agent_is_installed(HookAgentId::OpenCode, state)?,
+            hook_installed: opencode.installed(),
+            install_state: Some(opencode.state),
+            install_path: Some(opencode.install_path),
+            bundled_version: Some(opencode.bundled_version.to_string()),
+            installed_version: opencode.installed_version,
+            running_versions: opencode.running_versions,
+            error: opencode.error,
         },
     ])
 }
@@ -219,6 +286,30 @@ fn normalized_corner_progress(value: Option<f64>) -> f64 {
         .clamp(0.0, 1.0)
 }
 
+fn collapsed_strip_shape(
+    panel_width: f64,
+    interface_scale: f64,
+    collapsed_height: f64,
+) -> PanelShapeGeometry {
+    let panel_inset = PANEL_INSET * interface_scale;
+    let panel_right_inset = panel_width - panel_inset;
+    let top_corner_radius = 1.75 * interface_scale;
+
+    PanelShapeGeometry {
+        outer_edge: panel_inset - top_corner_radius,
+        outer_control: panel_inset - top_corner_radius / 2.0,
+        shoulder_control_y: top_corner_radius * 2.0 / 3.0,
+        shoulder_y: top_corner_radius,
+        corner_radius: 0.0,
+        lower_corner_y: collapsed_height,
+        lower_inner_edge: panel_inset,
+        lower_outer_edge: panel_right_inset,
+        right_outer_control: panel_right_inset + top_corner_radius / 2.0,
+        right_outer_edge: panel_right_inset + top_corner_radius,
+        bottom: collapsed_height,
+    }
+}
+
 fn panel_shape_geometry(
     panel_width: f64,
     interface_scale: f64,
@@ -231,19 +322,30 @@ fn panel_shape_geometry(
     let panel_right_inset = panel_width - panel_inset;
     let expanded_height = content_height.max(collapsed_height);
     let height = window_height.clamp(collapsed_height, expanded_height);
+    if collapsed_corner_progress == 0.0 && height <= collapsed_height + 1e-9 {
+        return collapsed_strip_shape(panel_width, interface_scale, collapsed_height);
+    }
     let height_progress = if expanded_height == collapsed_height {
         0.0
     } else {
         (height - collapsed_height) / (expanded_height - collapsed_height)
     };
     let corner_progress = interpolate(collapsed_corner_progress, 1.0, height_progress);
-    let corner_radius = interpolate(4.0, 6.0, corner_progress) * interface_scale;
+    // Keep the lower curve below the upper shoulder. GDI's PathToRegion can
+    // flatten a self-intersecting short path into a square-ended region.
+    let requested_corner_radius = (interpolate(4.0, 6.0, corner_progress) * interface_scale)
+        .max(MIN_VISIBLE_BOTTOM_CORNER_RADIUS * corner_progress);
+    let shoulder_y = interpolate(0.0, 9.0 * interface_scale, corner_progress);
+    let max_width_corner_radius = ((panel_right_inset - panel_inset) / 2.0).max(0.0);
+    let corner_radius = requested_corner_radius
+        .min((height - shoulder_y).max(0.0))
+        .min(max_width_corner_radius);
 
     PanelShapeGeometry {
         outer_edge: interpolate(panel_inset, 0.0, corner_progress),
         outer_control: interpolate(panel_inset, 7.0 * interface_scale, corner_progress),
         shoulder_control_y: interpolate(0.0, 4.0 * interface_scale, corner_progress),
-        shoulder_y: interpolate(0.0, 9.0 * interface_scale, corner_progress),
+        shoulder_y,
         corner_radius,
         lower_corner_y: height - corner_radius,
         lower_inner_edge: panel_inset + corner_radius,
@@ -760,6 +862,7 @@ fn animate_panel_height(
             collapsed_height,
             collapsed_corner_progress,
         )?;
+        drop(_resize_guard);
 
         if progress >= 1.0 {
             return Ok(());
@@ -772,6 +875,7 @@ fn animate_panel_height(
 #[tauri::command]
 async fn set_panel_expanded(
     window: WebviewWindow,
+    shape_state: tauri::State<'_, PanelShapeState>,
     expanded: bool,
     panel_width: f64,
     interface_scale: f64,
@@ -786,6 +890,19 @@ async fn set_panel_expanded(
     let content_height = normalized_expanded_height(height, interface_scale);
     let collapsed_height = normalized_collapsed_height(collapsed_height, interface_scale);
     let collapsed_corner_progress = normalized_corner_progress(collapsed_corner_progress);
+    {
+        let mut request = shape_state
+            .request
+            .lock()
+            .map_err(|error| error.to_string())?;
+        *request = Some(PanelShapeRequest {
+            panel_width,
+            interface_scale,
+            content_height,
+            collapsed_height,
+            collapsed_corner_progress,
+        });
+    }
     let target_height = if expanded {
         content_height
     } else {
@@ -851,6 +968,11 @@ fn show_panel_for_attention(window: WebviewWindow) -> Result<(), String> {
     window.show().map_err(|error| error.to_string())?;
     window.unminimize().map_err(|error| error.to_string())?;
     window.set_focus().map_err(|error| error.to_string())
+}
+
+#[tauri::command]
+fn take_reopen_request() -> bool {
+    REOPEN_REQUESTED.swap(false, Ordering::AcqRel)
 }
 
 fn codex_window_score(title: &str, process_name: &str, hints: &[String]) -> u16 {
@@ -1051,8 +1173,145 @@ fn claude_hook_install(state: tauri::State<'_, ClaudeIntegrationState>) -> Resul
 #[tauri::command]
 fn list_hook_integrations(
     state: tauri::State<'_, CodexIntegrationState>,
+    opencode_state: tauri::State<'_, OpenCodeIntegrationState>,
 ) -> Result<Vec<HookIntegrationStatus>, String> {
-    hook_statuses(&state)
+    hook_statuses(&state, &opencode_state)
+}
+
+#[tauri::command]
+fn list_opencode_sessions(
+    state: tauri::State<'_, OpenCodeIntegrationState>,
+) -> Result<opencode::OpenCodeSnapshot, String> {
+    opencode_snapshot(&state)
+}
+
+pub(crate) fn opencode_snapshot(
+    state: &OpenCodeIntegrationState,
+) -> Result<opencode::OpenCodeSnapshot, String> {
+    let hook_error = state
+        .hook_error
+        .lock()
+        .map_err(|error| error.to_string())?
+        .clone();
+    state
+        .store
+        .lock()
+        .map_err(|error| error.to_string())?
+        .snapshot(hook_error)
+}
+
+#[tauri::command]
+fn submit_opencode_question(
+    plugin_instance_id: String,
+    session_id: String,
+    request_id: String,
+    answers: Vec<Vec<String>>,
+    state: tauri::State<'_, OpenCodeIntegrationState>,
+) -> Result<(), String> {
+    let mut store = state.store.lock().map_err(|error| error.to_string())?;
+    store.drain_inbox()?;
+    store.submit_question(&plugin_instance_id, &session_id, &request_id, answers)
+}
+
+#[tauri::command]
+fn reject_opencode_question(
+    plugin_instance_id: String,
+    session_id: String,
+    request_id: String,
+    state: tauri::State<'_, OpenCodeIntegrationState>,
+) -> Result<(), String> {
+    let mut store = state.store.lock().map_err(|error| error.to_string())?;
+    store.drain_inbox()?;
+    store.reject_question(&plugin_instance_id, &session_id, &request_id)
+}
+
+#[tauri::command]
+fn submit_opencode_permission(
+    plugin_instance_id: String,
+    session_id: String,
+    request_id: String,
+    action: String,
+    message: Option<String>,
+    state: tauri::State<'_, OpenCodeIntegrationState>,
+) -> Result<(), String> {
+    let mut store = state.store.lock().map_err(|error| error.to_string())?;
+    store.drain_inbox()?;
+    store.submit_permission(
+        &plugin_instance_id,
+        &session_id,
+        &request_id,
+        &action,
+        message,
+    )
+}
+
+#[tauri::command]
+fn submit_opencode_tool_gate(
+    plugin_instance_id: String,
+    session_id: String,
+    review_id: String,
+    action: String,
+    state: tauri::State<'_, OpenCodeIntegrationState>,
+) -> Result<(), String> {
+    let mut store = state.store.lock().map_err(|error| error.to_string())?;
+    store.drain_inbox()?;
+    store.submit_gate(&plugin_instance_id, &session_id, &review_id, &action)
+}
+
+async fn wait_for_opencode_decision(
+    state: &OpenCodeIntegrationState,
+    decision_id: &str,
+) -> Result<(), String> {
+    let deadline = Instant::now() + Duration::from_secs(15);
+    loop {
+        {
+            let mut store = state.store.lock().map_err(|error| error.to_string())?;
+            store.drain_inbox()?;
+            if let Some(receipt) = store.take_decision_receipt(decision_id) {
+                return if receipt.result == "applied" {
+                    Ok(())
+                } else {
+                    Err(receipt
+                        .error
+                        .unwrap_or_else(|| "OpenCode rejected the session action".to_string()))
+                };
+            }
+        }
+        if Instant::now() >= deadline {
+            return Err("Timed out waiting for OpenCode to apply the session action".to_string());
+        }
+        tokio::time::sleep(Duration::from_millis(50)).await;
+    }
+}
+
+#[tauri::command]
+async fn switch_opencode_agent(
+    plugin_instance_id: String,
+    session_id: String,
+    agent: String,
+    state: tauri::State<'_, OpenCodeIntegrationState>,
+) -> Result<(), String> {
+    let decision_id = {
+        let mut store = state.store.lock().map_err(|error| error.to_string())?;
+        store.drain_inbox()?;
+        store.switch_agent(&plugin_instance_id, &session_id, &agent)?
+    };
+    wait_for_opencode_decision(&state, &decision_id).await
+}
+
+#[tauri::command]
+async fn send_opencode_session_message(
+    plugin_instance_id: String,
+    session_id: String,
+    message: String,
+    state: tauri::State<'_, OpenCodeIntegrationState>,
+) -> Result<(), String> {
+    let decision_id = {
+        let mut store = state.store.lock().map_err(|error| error.to_string())?;
+        store.drain_inbox()?;
+        store.send_message(&plugin_instance_id, &session_id, &message)?
+    };
+    wait_for_opencode_decision(&state, &decision_id).await
 }
 
 #[tauri::command]
@@ -1060,6 +1319,7 @@ async fn install_agent_hook(agent: HookAgentId, app: tauri::AppHandle) -> Result
     tauri::async_runtime::spawn_blocking(move || {
         let claude_state = app.state::<ClaudeIntegrationState>();
         let codex_state = app.state::<CodexIntegrationState>();
+        let opencode_state = app.state::<OpenCodeIntegrationState>();
         if !agent_is_installed(agent, &codex_state)? {
             return Err(format!("{} 未安装", agent.display_name()));
         }
@@ -1086,6 +1346,13 @@ async fn install_agent_hook(agent: HookAgentId, app: tauri::AppHandle) -> Result
                     .map_err(|error| error.to_string())?
                     .set_integration_error(None);
             }
+            HookAgentId::OpenCode => {
+                let status = opencode_hook::install()?;
+                *opencode_state
+                    .hook_error
+                    .lock()
+                    .map_err(|error| error.to_string())? = status.error;
+            }
         }
         Ok(())
     })
@@ -1098,6 +1365,7 @@ async fn uninstall_agent_hook(agent: HookAgentId, app: tauri::AppHandle) -> Resu
     tauri::async_runtime::spawn_blocking(move || {
         let claude_state = app.state::<ClaudeIntegrationState>();
         let codex_state = app.state::<CodexIntegrationState>();
+        let opencode_state = app.state::<OpenCodeIntegrationState>();
         if !agent_is_installed(agent, &codex_state)? {
             return Err(format!("{} 未安装", agent.display_name()));
         }
@@ -1119,11 +1387,19 @@ async fn uninstall_agent_hook(agent: HookAgentId, app: tauri::AppHandle) -> Resu
                     .hook_error
                     .lock()
                     .map_err(|error| error.to_string())? = Some(message.clone());
-                codex_state
+                let mut store = codex_state
                     .hook_store
                     .lock()
-                    .map_err(|error| error.to_string())?
-                    .set_integration_error(Some(message));
+                    .map_err(|error| error.to_string())?;
+                store.clear();
+                store.set_integration_error(Some(message));
+            }
+            HookAgentId::OpenCode => {
+                opencode_hook::uninstall()?;
+                *opencode_state
+                    .hook_error
+                    .lock()
+                    .map_err(|error| error.to_string())? = Some("OpenCode Hook 未安装".to_string());
             }
         }
         Ok(())
@@ -1150,6 +1426,7 @@ fn set_approval_settings(
 ) -> Result<approval_policy::ApprovalSettings, String> {
     let settings = approval_policy::ApprovalSettings { mode };
     approval_policy::save_settings(&settings)?;
+    opencode_hook::sync_approval_mode(settings.mode)?;
     *state.settings.lock().map_err(|error| error.to_string())? = settings.clone();
     Ok(settings)
 }
@@ -1215,6 +1492,30 @@ fn list_codex_sessions(
 
 /// Shared snapshot builder for the desktop panel and the LAN console.
 fn codex_snapshot(state: &CodexIntegrationState) -> Result<codex::CodexSnapshot, String> {
+    let project_dir = codex_hook_project_dir(state)?;
+    let hook_status = codex_hook::codex_hooks_installed(project_dir.as_deref().map(Path::new));
+
+    // Codex state is exclusively hook-derived. Fail closed so an uninstall or
+    // an invalid hooks.json cannot leave stale sessions visible in either UI.
+    let hook_installed = match hook_status {
+        Ok(installed) => installed,
+        Err(error) => {
+            let mut store = state.hook_store.lock().map_err(|lock| lock.to_string())?;
+            let _ = codex_hook::drain_inbox_events();
+            store.clear();
+            store.set_integration_error(Some(error));
+            return Ok(store.snapshot());
+        }
+    };
+
+    if !hook_installed {
+        let mut store = state.hook_store.lock().map_err(|error| error.to_string())?;
+        let _ = codex_hook::drain_inbox_events();
+        store.clear();
+        store.set_integration_error(Some("Codex Hook 未安装".to_string()));
+        return Ok(store.snapshot());
+    }
+
     drain_codex_hook_events(state)?;
     let integration_error = state
         .hook_error
@@ -1227,6 +1528,17 @@ fn codex_snapshot(state: &CodexIntegrationState) -> Result<codex::CodexSnapshot,
 }
 
 fn drain_codex_hook_events(state: &CodexIntegrationState) -> Result<usize, String> {
+    let project_dir = codex_hook_project_dir(state)?;
+    if !codex_hook::codex_hooks_installed(project_dir.as_deref().map(Path::new))? {
+        let _ = codex_hook::drain_inbox_events();
+        *state.hook_error.lock().map_err(|error| error.to_string())? =
+            Some("Codex Hook 未安装".to_string());
+        let mut store = state.hook_store.lock().map_err(|error| error.to_string())?;
+        store.clear();
+        store.set_integration_error(Some("Codex Hook 未安装".to_string()));
+        return Ok(0);
+    }
+
     let events = codex_hook::drain_inbox_events()?;
     let count = events.len();
     if count == 0 {
@@ -1484,6 +1796,50 @@ fn lan_status(
     lan_server::status(&state)
 }
 
+/// Opens the repository's releases page in the default browser so the user can
+/// download the latest installer.
+#[tauri::command]
+fn open_release_page() -> Result<(), String> {
+    open_in_default_browser("https://github.com/Turing158/CodeCraft/releases/latest")
+}
+
+#[cfg(windows)]
+fn open_in_default_browser(url: &str) -> Result<(), String> {
+    use windows::core::PCWSTR;
+    use windows::Win32::UI::{
+        Shell::ShellExecuteW, WindowsAndMessaging::SW_SHOWNORMAL,
+    };
+
+    let wide: Vec<u16> = url.encode_utf16().chain(std::iter::once(0)).collect();
+    let result = unsafe {
+        ShellExecuteW(
+            None,
+            PCWSTR("open".encode_utf16().chain(std::iter::once(0)).collect::<Vec<u16>>().as_ptr()),
+            PCWSTR(wide.as_ptr()),
+            None,
+            None,
+            SW_SHOWNORMAL,
+        )
+    };
+    // ShellExecuteW returns a value > 32 on success.
+    if result.0 as isize > 32 {
+        Ok(())
+    } else {
+        Err("无法打开默认浏览器".to_string())
+    }
+}
+
+#[cfg(not(windows))]
+fn open_in_default_browser(url: &str) -> Result<(), String> {
+    if std::process::Command::new("xdg-open").arg(url).spawn().is_ok() {
+        return Ok(());
+    }
+    if std::process::Command::new("open").arg(url).spawn().is_ok() {
+        return Ok(());
+    }
+    Err("无法打开默认浏览器".to_string())
+}
+
 /// Renders the console URL as an inline SVG QR code so a phone can scan it
 /// without the panel loading anything from the network.
 #[tauri::command]
@@ -1503,16 +1859,23 @@ fn lan_address_qr_code(url: String) -> Result<String, String> {
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
+        .plugin(tauri_plugin_single_instance::init(|app, _args, _cwd| {
+            REOPEN_REQUESTED.store(true, Ordering::Release);
+            let _ = app.emit(REOPEN_REQUESTED_EVENT, ());
+        }))
         .manage(ClaudeIntegrationState::default())
         .manage(CodexIntegrationState::default())
+        .manage(OpenCodeIntegrationState::default())
         .manage(ApprovalIntegrationState::default())
         .manage(PanelWindowState::default())
+        .manage(PanelShapeState::default())
         .manage(lan_server::LanServerState::default())
         .setup(|app| {
+            let approval_settings = approval_policy::load_settings();
             *app.state::<ApprovalIntegrationState>()
                 .settings
                 .lock()
-                .map_err(|error| error.to_string())? = approval_policy::load_settings();
+                .map_err(|error| error.to_string())? = approval_settings.clone();
             let _ = claude_hook::touch_app_heartbeat();
             thread::spawn(|| loop {
                 thread::sleep(Duration::from_secs(5));
@@ -1524,7 +1887,10 @@ pub fn run() {
                 .hook_error
                 .lock()
                 .map_err(|error| error.to_string())? = match claude_hook::claude_hooks_installed() {
-                Ok(true) => None,
+                Ok(true) => std::env::current_exe()
+                    .map_err(|error| error.to_string())
+                    .and_then(|executable| claude_hook::install_claude_hooks(&executable))
+                    .err(),
                 Ok(false) => Some("Claude Code Hook 未安装".to_string()),
                 Err(error) => Some(error),
             };
@@ -1548,6 +1914,20 @@ pub fn run() {
                 .hook_error
                 .lock()
                 .map_err(|error| error.to_string())? = codex_hook_error;
+
+            let opencode_error = match opencode_hook::status_and_sync() {
+                Ok(status) if status.installed() => status.error,
+                Ok(status) => status
+                    .error
+                    .or_else(|| Some("OpenCode Hook 未安装".to_string())),
+                Err(error) => Some(error),
+            };
+            let opencode_sync_error =
+                opencode_hook::sync_approval_mode(approval_settings.mode).err();
+            *app.state::<OpenCodeIntegrationState>()
+                .hook_error
+                .lock()
+                .map_err(|error| error.to_string())? = opencode_error.or(opencode_sync_error);
 
             let lan_server_config = lan_config::load_config();
             let lan_enabled = lan_server_config.enabled;
@@ -1600,6 +1980,43 @@ pub fn run() {
 
             Ok(())
         })
+        .on_window_event(|window, event| {
+            if window.label() != "main" {
+                return;
+            }
+
+            let tauri::WindowEvent::Resized(size) = event else {
+                return;
+            };
+            let app_handle = window.app_handle();
+            let state = app_handle.state::<PanelShapeState>();
+            let request = state.request.lock().ok().and_then(|request| *request);
+            let Some(request) = request else {
+                return;
+            };
+            let Some(webview_window) = app_handle.get_webview_window("main") else {
+                return;
+            };
+            let scale_factor = webview_window.scale_factor().unwrap_or(1.0);
+            let height = size.to_logical::<f64>(scale_factor).height;
+            // `set_size` can synchronously dispatch this event while the
+            // animation thread still owns the resize lock. Waiting here would
+            // deadlock the UI thread and leave the panel frozen on hover. The
+            // active resize path applies the same region itself, so skip this
+            // duplicate event when the lock is busy.
+            let Ok(_resize_guard) = PANEL_RESIZE_LOCK.try_lock() else {
+                return;
+            };
+            let _ = apply_native_panel_region(
+                &webview_window,
+                request.panel_width,
+                request.interface_scale,
+                height,
+                request.content_height,
+                request.collapsed_height,
+                request.collapsed_corner_progress,
+            );
+        })
         .on_menu_event(|app, event| {
             if event.id().as_ref() == "quit" {
                 // Release the LAN port before the process goes away.
@@ -1612,6 +2029,7 @@ pub fn run() {
             set_panel_horizontal_position,
             move_panel_horizontally,
             show_panel_for_attention,
+            take_reopen_request,
             focus_codex_window,
             get_approval_settings,
             set_approval_settings,
@@ -1620,6 +2038,13 @@ pub fn run() {
             list_hook_integrations,
             install_agent_hook,
             uninstall_agent_hook,
+            list_opencode_sessions,
+            submit_opencode_question,
+            reject_opencode_question,
+            submit_opencode_permission,
+            submit_opencode_tool_gate,
+            switch_opencode_agent,
+            send_opencode_session_message,
             submit_claude_question_answer,
             submit_claude_permission_decision,
             submit_claude_plan_decision,
@@ -1634,7 +2059,8 @@ pub fn run() {
             lan_set_config,
             lan_rotate_token,
             lan_status,
-            lan_address_qr_code
+            lan_address_qr_code,
+            open_release_page
         ])
         .run(tauri::generate_context!())
         .expect("error while running CodeCraft");
@@ -1746,5 +2172,69 @@ mod tests {
             COLLAPSED_HEIGHT,
         );
         assert_eq!(normalized_collapsed_height(None, 1.5), 7.5);
+    }
+
+    #[test]
+    fn reduced_interface_scale_preserves_visible_bottom_rounding() {
+        let shape = panel_shape_geometry(375.0, 0.75, 108.0, 108.0, 3.75, 0.0);
+
+        assert_eq!(shape.corner_radius, MIN_VISIBLE_BOTTOM_CORNER_RADIUS);
+        assert_eq!(shape.lower_corner_y, 96.0);
+    }
+
+    #[test]
+    fn short_panel_rounding_stays_below_the_upper_shoulder() {
+        let shape = panel_shape_geometry(500.0, 1.0, 10.0, 10.0, 5.0, 0.0);
+
+        assert_eq!(shape.corner_radius, 1.0);
+        assert_eq!(shape.lower_corner_y, shape.shoulder_y);
+    }
+
+    #[test]
+    fn two_session_sized_panel_keeps_scaled_bottom_rounding() {
+        let shape = panel_shape_geometry(375.0, 0.75, 115.5, 115.5, 3.75, 0.0);
+
+        assert_eq!(shape.corner_radius, MIN_VISIBLE_BOTTOM_CORNER_RADIUS);
+        assert_eq!(shape.lower_corner_y, 103.5);
+    }
+
+    #[test]
+    fn one_session_sized_panel_keeps_scaled_bottom_rounding_after_resize() {
+        let shape = panel_shape_geometry(375.0, 0.75, 119.25, 119.25, 3.75, 0.0);
+
+        assert_eq!(shape.corner_radius, MIN_VISIBLE_BOTTOM_CORNER_RADIUS);
+        assert_eq!(shape.lower_corner_y, 107.25);
+    }
+
+    #[test]
+    fn narrow_panel_corners_do_not_cross() {
+        let shape = panel_shape_geometry(36.0, 1.0, 144.0, 144.0, 5.0, 0.0);
+
+        assert_eq!(shape.corner_radius, 6.0);
+        assert_eq!(shape.lower_inner_edge, shape.lower_outer_edge);
+    }
+
+    #[test]
+    fn short_expand_animation_never_places_the_lower_curve_above_the_shoulder() {
+        for height in [5.0, 5.5, 6.0, 7.0, 8.0, 9.0, 10.0, 12.0] {
+            let shape = panel_shape_geometry(500.0, 1.0, height, 12.0, 5.0, 0.0);
+
+            assert!(shape.lower_corner_y >= shape.shoulder_y);
+        }
+    }
+
+    #[test]
+    fn slim_collapsed_strip_uses_flat_bottom_with_rounded_top() {
+        let shape = panel_shape_geometry(500.0, 1.0, 5.0, 144.0, 5.0, 0.0);
+
+        assert_eq!(shape.corner_radius, 0.0);
+        assert_eq!(shape.bottom, 5.0);
+        assert_eq!(shape.lower_inner_edge, 12.0);
+        assert_eq!(shape.lower_outer_edge, 488.0);
+        assert_eq!(shape.outer_edge, 10.25);
+        assert_eq!(shape.outer_control, 11.125);
+        assert_eq!(shape.shoulder_y, 1.75);
+        assert_eq!(shape.right_outer_control, 488.875);
+        assert_eq!(shape.right_outer_edge, 489.75);
     }
 }

@@ -143,7 +143,8 @@ fn adapter_addresses() -> Vec<Ipv4Addr> {
                 while !unicast.is_null() {
                     let unicast_entry = unsafe { &*unicast };
                     let socket_address = unicast_entry.Address.lpSockaddr;
-                    if !socket_address.is_null() && unsafe { (*socket_address).sa_family } == AF_INET
+                    if !socket_address.is_null()
+                        && unsafe { (*socket_address).sa_family } == AF_INET
                     {
                         let socket_address = socket_address.cast::<SOCKADDR_IN>();
                         let octets =

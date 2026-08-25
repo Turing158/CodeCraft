@@ -3,8 +3,9 @@
  *
  * Rendering mirrors the desktop panel and reuses its pure logic modules, so the
  * console adds presentation only: session list, detail, and the three review
- * flows. Codex questions and plans are display-only because the Hook-only
- * integration cannot accept answers from here.
+ * flows. Codex questions and plans remain display-only because the Hook-only
+ * integration cannot accept answers from here; OpenCode actions use the same
+ * authenticated write endpoints as the desktop panel.
  */
 
 import { formatSessionTime, questionAnswerOptions } from "../../src/claude-sessions";
@@ -60,10 +61,10 @@ import {
 import {
   canAct,
   findEntry,
-  firstPendingEntry,
   mergeSnapshot,
-  pendingCount,
   pendingLabel,
+  integrationStatusLabel,
+  integrationVisible,
   type ConsoleEntry,
   type ConsoleSnapshot,
 } from "./snapshot";
@@ -85,6 +86,8 @@ const rememberToken = required<HTMLInputElement>("#remember-token");
 const tokenError = required<HTMLElement>("#token-error");
 const workspace = required<HTMLElement>("#workspace");
 const integrations = required<HTMLElement>("#integrations");
+const integrationsDrawer = required<HTMLElement>("#integrations-drawer");
+const integrationsToggle = required<HTMLButtonElement>("#integrations-toggle");
 const pendingBadge = required<HTMLElement>("#pending-badge");
 const sessionSkeleton = required<HTMLElement>("#session-skeleton");
 const sessionList = required<HTMLUListElement>("#session-list");
@@ -121,6 +124,7 @@ const themeSegmented = required<HTMLElement>("#theme-segmented");
 const motionSegmented = required<HTMLElement>("#motion-segmented");
 const motionSpeed = required<HTMLInputElement>("#motion-speed");
 const motionSpeedRow = required<HTMLElement>("#motion-speed-row");
+const signOutRow = required<HTMLElement>("#sign-out-row");
 const signOutButton = required<HTMLButtonElement>("#sign-out");
 const connectionChip = required<HTMLElement>("#connection");
 const connectionLabelElement = required<HTMLElement>("#connection-label");
@@ -140,6 +144,9 @@ let settingsPlacement: SettingsPlacement = loadSettingsPlacement(
   window.localStorage,
 );
 let selectedKey: string | undefined;
+let selectedSources = new Set<string>();
+let visibleIntegrationCount = 0;
+let integrationsExpanded = false;
 let view: ConsoleView = "list";
 let stream: EventSource | undefined;
 let reconnectTimer: number | undefined;
@@ -156,6 +163,10 @@ let themeTransitionTimer: number | undefined;
 const applyMotion = () => {
   root.dataset.motion = motion.enabled ? "on" : "off";
   root.style.setProperty("--motion-scale", String(motion.speed));
+  root.style.setProperty(
+    "--integrations-duration",
+    scaledDuration(motion, "sheet") + "ms",
+  );
   motionSpeedRow.hidden = !motion.enabled;
   motionSpeed.value = String(motion.speed);
   syncSegmented(motionSegmented, motion.enabled ? "on" : "off", "motionValue");
@@ -236,10 +247,10 @@ const syncLayout = () => {
     shouldAutoSelectFirst(
       window.innerWidth,
       hasSelection,
-      snapshot.entries.length,
+      filteredEntries().length,
     )
   ) {
-    selectedKey = snapshot.entries[0]?.key;
+    selectedKey = filteredEntries()[0]?.key;
     questionRequestId = undefined;
     renderedReviewSignature = undefined;
     renderSessionList();
@@ -308,6 +319,7 @@ const dispatchConnection = (event: ConnectionEvent) => {
   swapText(connectionLabelElement, connectionLabel(connection), motion);
   gate.hidden = isAuthenticated(connection);
   workspace.hidden = !isAuthenticated(connection);
+  signOutRow.hidden = !isAuthenticated(connection);
   if (connection.error) {
     tokenError.textContent = connection.error;
     tokenError.hidden = false;
@@ -374,27 +386,83 @@ const openStream = () => {
 
 /* ---------- rendering ---------- */
 
+/** Sessions shown when at least one agent card is selected; otherwise all. */
+const filteredEntries = (): ConsoleEntry[] => {
+  if (selectedSources.size === 0) return snapshot.entries;
+  return snapshot.entries.filter((entry) => selectedSources.has(entry.source));
+};
+
 const renderIntegrations = () => {
+  const visible = snapshot.integrations.filter(integrationVisible);
+  visibleIntegrationCount = visible.length;
+  for (const source of [...selectedSources]) {
+    if (!visible.some((integration) => integration.source === source)) {
+      selectedSources.delete(source);
+    }
+  }
+
   integrations.replaceChildren(
-    ...snapshot.integrations.map((integration) => {
-      const card = document.createElement("div");
-      card.className = "integration";
-      card.dataset.connected = String(integration.connected);
+    ...visible.map((integration) => {
+      const card = document.createElement("button");
+      card.type = "button";
+      card.className = "integration-card";
+      card.dataset.source = integration.source;
+      card.dataset.selected = String(selectedSources.has(integration.source));
+      card.dataset.hookInstalled = String(integration.hookInstalled);
+      card.setAttribute(
+        "aria-pressed",
+        String(selectedSources.has(integration.source)),
+      );
 
       const name = document.createElement("span");
-      name.className = "integration__name";
+      name.className = "integration-card__name";
       name.textContent = integration.name;
 
       const state = document.createElement("span");
-      state.className = "integration__state";
-      state.textContent = integration.connected
-        ? integration.sessionCount + " 个会话"
-        : integration.error ?? "未连接";
+      state.className = "integration-card__status";
+      state.textContent = integrationStatusLabel(integration);
 
       card.append(name, state);
+      card.addEventListener("click", () =>
+        toggleIntegrationSource(integration.source),
+      );
       return card;
     }),
   );
+  syncIntegrationsDrawer();
+};
+
+const syncIntegrationsDrawer = () => {
+  const collapsible = visibleIntegrationCount > 2;
+  integrationsDrawer.dataset.collapsible = String(collapsible);
+  integrationsToggle.hidden = !collapsible;
+  if (!collapsible) integrationsExpanded = false;
+  integrations.dataset.expanded = String(integrationsExpanded);
+  swapText(integrationsToggle, integrationsExpanded ? "收起" : "展开", motion);
+};
+
+const toggleIntegrationsDrawer = () => {
+  integrationsExpanded = !integrationsExpanded;
+  syncIntegrationsDrawer();
+};
+
+const toggleIntegrationSource = (source: string) => {
+  if (selectedSources.has(source)) selectedSources.delete(source);
+  else selectedSources.add(source);
+
+  const entry = findEntry(snapshot, selectedKey);
+  if (
+    selectedKey &&
+    (!entry || (selectedSources.size > 0 && !selectedSources.has(entry.source)))
+  ) {
+    selectedKey = undefined;
+    view = "list";
+  }
+
+  renderIntegrations();
+  renderSessionList();
+  renderDetail();
+  syncLayout();
 };
 
 interface SessionCardView {
@@ -446,7 +514,15 @@ const createSessionCardView = (key: string): SessionCardView => {
 const updateSessionCardView = (view: SessionCardView, entry: ConsoleEntry) => {
   view.card.dataset.pending = String(entry.pending !== null);
   view.card.setAttribute("aria-current", String(entry.key === selectedKey));
-  swapText(view.source, entry.source === "claude" ? "Claude" : "Codex", motion);
+  swapText(
+    view.source,
+    entry.source === "claude"
+      ? "Claude"
+      : entry.source === "codex"
+        ? "Codex"
+        : "OpenCode",
+    motion,
+  );
   swapText(view.title, entry.title, motion);
   swapText(view.time, formatSessionTime(entry.updatedAt), motion);
   view.status.dataset.status = entry.status;
@@ -456,14 +532,15 @@ const updateSessionCardView = (view: SessionCardView, entry: ConsoleEntry) => {
 };
 
 const renderSessionList = () => {
-  const count = pendingCount(snapshot);
+  const entries = filteredEntries();
+  const count = entries.filter((entry) => entry.pending !== null).length;
   swapText(pendingBadge, String(count), motion);
   pendingBadge.dataset.empty = String(count === 0);
   sessionSkeleton.hidden = snapshot.generatedAt > 0;
-  sessionEmpty.hidden = snapshot.entries.length > 0 || snapshot.generatedAt === 0;
+  sessionEmpty.hidden = entries.length > 0 || snapshot.generatedAt === 0;
 
   const activeKeys = new Set<string>();
-  snapshot.entries.forEach((entry, index) => {
+  entries.forEach((entry, index) => {
     activeKeys.add(entry.key);
     let view = sessionCardViews.get(entry.key);
     if (!view) {
@@ -676,13 +753,23 @@ const renderReview = (entry: ConsoleEntry | undefined) => {
     questionRequestId = undefined;
     if (actionable) {
       const isCodex = entry.source === "codex";
+      const isOpenCode = entry.source === "opencode";
+      const openCodeTarget = pending.openCode;
+      const openCodePermission = (action: "once" | "always" | "reject") =>
+        openCodeTarget
+          ? api.submitOpenCodePermission(openCodeTarget, action)
+          : Promise.reject(new Error("OpenCode 请求目标已失效"));
       reviewActions.append(
         actionButton("允许一次", "primary", () => {
           void guardedSubmit(
             () =>
               isCodex
                 ? api.submitCodexApproval(pending.requestId, "accept")
-                : api.submitPermission(pending.requestId, "allow"),
+                : isOpenCode
+                  ? openCodeTarget?.reviewType === "strictToolGate"
+                    ? api.submitOpenCodeGate(openCodeTarget, "allowOnce")
+                    : openCodePermission("once")
+                  : api.submitPermission(pending.requestId, "allow"),
             "已允许一次",
           );
         }),
@@ -692,9 +779,13 @@ const renderReview = (entry: ConsoleEntry | undefined) => {
           actionButton("始终允许", "default", () => {
             void guardedSubmit(
               () =>
-                isCodex
-                  ? api.submitCodexApproval(pending.requestId, "acceptForSession")
-                  : api.submitPermission(pending.requestId, "allowAlways"),
+                  isCodex
+                    ? api.submitCodexApproval(pending.requestId, "acceptForSession")
+                    : isOpenCode
+                      ? openCodeTarget?.reviewType === "strictToolGate"
+                        ? api.submitOpenCodeGate(openCodeTarget, "allowSession")
+                        : openCodePermission("always")
+                      : api.submitPermission(pending.requestId, "allowAlways"),
               "已在本会话中始终允许",
             );
           }),
@@ -706,7 +797,11 @@ const renderReview = (entry: ConsoleEntry | undefined) => {
             () =>
               isCodex
                 ? api.submitCodexApproval(pending.requestId, "decline")
-                : api.submitPermission(pending.requestId, "deny"),
+                : isOpenCode
+                  ? openCodeTarget?.reviewType === "strictToolGate"
+                    ? api.submitOpenCodeGate(openCodeTarget, "reject")
+                    : openCodePermission("reject")
+                  : api.submitPermission(pending.requestId, "deny"),
             "已拒绝",
           );
         }),
@@ -737,13 +832,30 @@ const renderReview = (entry: ConsoleEntry | undefined) => {
         const request = pending.question;
         if (!request) return;
         const submission = createLocalQuestionSubmission(request, questionDrafts);
-        void guardedSubmit(
-          () => api.submitQuestion(submission.requestId, submission.answers),
-          "已提交回答",
-        );
+        const action =
+          entry.source === "opencode" && pending.openCode
+            ? api.submitOpenCodeQuestion(
+                pending.openCode,
+                submission.answers.map((answer) => [
+                  ...answer.selectedOptionLabels.filter((label) => label !== "其他"),
+                  ...(answer.extraText?.trim() ? [answer.extraText.trim()] : []),
+                ]),
+              )
+            : api.submitQuestion(submission.requestId, submission.answers);
+        void guardedSubmit(() => action, "已提交回答");
       });
       submit.disabled = submit.disabled || !answered;
       reviewActions.append(submit);
+      if (entry.source === "opencode" && pending.openCode) {
+        reviewActions.append(
+          actionButton("拒绝回答", "danger", () => {
+            void guardedSubmit(
+              () => api.rejectOpenCodeQuestion(pending.openCode!),
+              "已拒绝回答",
+            );
+          }),
+        );
+      }
     }
   }
 
@@ -782,7 +894,11 @@ const renderDetail = () => {
   detailStatus.dataset.status = entry.status;
   swapText(detailStatus, entry.statusLabel, motion);
   detailMeta.textContent = [
-    entry.source === "claude" ? "Claude Code" : "Codex",
+    entry.source === "claude"
+      ? "Claude Code"
+      : entry.source === "codex"
+        ? "Codex"
+        : "OpenCode",
     entry.cwd ? "目录：" + entry.cwd : undefined,
     "更新于 " + formatSessionTime(entry.updatedAt),
   ]
@@ -817,13 +933,14 @@ const selectEntry = (key: string, nextView: ConsoleView) => {
 
 const applySnapshot = (raw: unknown) => {
   snapshot = mergeSnapshot((raw ?? {}) as Record<string, never>);
-  if (selectedKey && !findEntry(snapshot, selectedKey)) {
+  const visible = filteredEntries();
+  if (selectedKey && !visible.some((entry) => entry.key === selectedKey)) {
     selectedKey = undefined;
     view = "list";
   }
 
   // Surface a new request without stealing the screen from an active review.
-  const pendingEntry = firstPendingEntry(snapshot);
+  const pendingEntry = visible.find((entry) => entry.pending !== null);
   if (
     pendingEntry?.pending &&
     pendingEntry.pending.requestId !== autoRevealedRequestId &&
@@ -1019,6 +1136,7 @@ document.addEventListener("keydown", (event) => {
 });
 
 window.addEventListener("resize", syncLayout);
+integrationsToggle.addEventListener("click", toggleIntegrationsDrawer);
 window.setInterval(updateFreshness, 1000);
 
 // Reconnect promptly when a phone screen wakes up or the tab regains focus.

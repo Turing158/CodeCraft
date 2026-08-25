@@ -36,8 +36,7 @@ pub(crate) struct LanAuthStore {
 
 impl LanAuthStore {
     fn prune(&mut self, now: Instant) {
-        self.sessions
-            .retain(|_, expires_at| *expires_at > now);
+        self.sessions.retain(|_, expires_at| *expires_at > now);
         self.failures.retain(|_, record| {
             record
                 .locked_until
@@ -167,9 +166,15 @@ mod tests {
         let mut store = LanAuthStore::default();
 
         for _ in 0..4 {
-            assert_eq!(store.record_failure_at(address(), now), AuthOutcome::Rejected);
+            assert_eq!(
+                store.record_failure_at(address(), now),
+                AuthOutcome::Rejected
+            );
         }
-        assert_eq!(store.record_failure_at(address(), now), AuthOutcome::LockedOut);
+        assert_eq!(
+            store.record_failure_at(address(), now),
+            AuthOutcome::LockedOut
+        );
         assert!(store.is_locked_out_at(address(), now + Duration::from_secs(29)));
         assert!(!store.is_locked_out_at(address(), now + LOCKOUT_DURATION + Duration::from_secs(1)));
     }
@@ -194,7 +199,10 @@ mod tests {
         store.grant_session_at(address(), now);
 
         for _ in 0..4 {
-            assert_eq!(store.record_failure_at(address(), now), AuthOutcome::Rejected);
+            assert_eq!(
+                store.record_failure_at(address(), now),
+                AuthOutcome::Rejected
+            );
         }
     }
 
@@ -226,9 +234,15 @@ mod tests {
     fn cookies_are_parsed_by_name_and_not_by_prefix() {
         let header = "theme=dark; codecraft_lan=abc123; other=1";
 
-        assert_eq!(cookie_value(header, SESSION_COOKIE), Some("abc123".to_string()));
+        assert_eq!(
+            cookie_value(header, SESSION_COOKIE),
+            Some("abc123".to_string())
+        );
         assert_eq!(cookie_value(header, "missing"), None);
-        assert_eq!(cookie_value("codecraft_lan_extra=nope", SESSION_COOKIE), None);
+        assert_eq!(
+            cookie_value("codecraft_lan_extra=nope", SESSION_COOKIE),
+            None
+        );
     }
 
     #[test]

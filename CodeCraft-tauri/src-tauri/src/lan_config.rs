@@ -78,7 +78,11 @@ pub(crate) fn validate_port(port: u16) -> Result<u16, String> {
 
 fn normalize_token(token: &str) -> Option<String> {
     let trimmed = token.trim();
-    if trimmed.len() < 16 || !trimmed.chars().all(|character| character.is_ascii_alphanumeric()) {
+    if trimmed.len() < 16
+        || !trimmed
+            .chars()
+            .all(|character| character.is_ascii_alphanumeric())
+    {
         return None;
     }
     Some(trimmed.to_string())

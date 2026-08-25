@@ -10,10 +10,12 @@
 
 <p>
   <img src="https://img.shields.io/badge/平台-Windows-0078D4?style=flat-square" alt="平台 Windows" />
-  <img src="https://img.shields.io/badge/版本-0.1.0-4C8BF5?style=flat-square" alt="版本 0.1.0" />
+  <img src="https://img.shields.io/badge/版本-0.1.1-4C8BF5?style=flat-square" alt="版本 0.1.1" />
   <img src="https://img.shields.io/badge/技术-Rust%20%2B%20Tauri%202-DEA584?style=flat-square" alt="Rust + Tauri 2" />
   <img src="https://img.shields.io/badge/语言-简中%20%2F%20繁中%20%2F%20EN-2EA043?style=flat-square" alt="多语言" />
 </p>
+
+**简体中文** · [English](README.en.md) · [繁體中文](README.zh-TW.md)
 
 </div>
 
@@ -21,7 +23,7 @@
 
 ## 这是什么？
 
-如果你在用 **Claude Code** 或 **Codex** 这类"AI 编程助手"，你大概遇到过这些情况：
+如果你在用 **Claude Code**、**Codex** 或 **OpenCode** 这类"AI 编程助手"，你大概遇到过这些情况：
 
 - 让它干活之后，只能一直盯着黑色的命令行窗口，不知道它到底做完了没有；
 - 它中途要问你一句"这个命令能执行吗"，你没看见，它就一直卡在那里等；
@@ -35,7 +37,7 @@ CodeCraft 就是为了解决这件事。它平时只是屏幕最上方一条几�
 
 | | 能力 | 说明 |
 | :---: | --- | --- |
-| 📋 | **会话集中管理** | Claude Code 和 Codex 的所有任务并排显示，状态一目了然：工作中、等待输入、需要处理、已完成、失败。 |
+| 📋 | **会话集中管理** | Claude Code、Codex 和 OpenCode 的所有任务并排显示，状态一目了然：工作中、等待输入、需要处理、已完成、失败。 |
 | ✅ | **一键批准** | 助手想执行某个命令、修改某个文件时，弹到面板上，你点"允许一次""始终允许"或"拒绝"，不用切回终端。 |
 | ❓ | **代它回答** | 助手提问时直接在面板里选选项或写补充说明，答案会回传给它。 |
 | 📝 | **确认计划** | 助手列出行动计划后，由你决定：点"实行计划"让它开始动手，或写下要改的地方让它先调整。 |
@@ -52,8 +54,9 @@ CodeCraft 自己不写代码，它负责盯着下面这些 AI 编程助手。装
 | --- | --- |
 | <img src="docs/assets/agent-claude-code.svg" width="20" height="20" align="absmiddle" alt="" />&nbsp; **Claude Code**<br /><sub>Anthropic</sub> | 支持最完整。会话状态、工具调用、实时转录都能看，批准、回答提问、确认计划都可以直接在面板里完成，不用切回终端。 |
 | <img src="docs/assets/agent-codex.svg" width="20" height="20" align="absmiddle" alt="" />&nbsp; **Codex**<br /><sub>OpenAI</sub> | 会话状态与工具调用审批可以在面板里处理。它的提问和计划确认是只读的，只能回到原来的 Codex 窗口完成，面板会提供一个跳转按钮帮你切过去。 |
+| <img src="docs/assets/agent-opencode.svg" width="20" height="20" align="absmiddle" alt="" />&nbsp; **OpenCode**<br /><sub>opencode.ai</sub> | 会话状态、工具调用、原生权限审批和提问都能在面板里处理，权限决定支持"允许一次""始终允许""拒绝"，另有一个可选的全工具门禁模式，让每个工具调用都先经过你确认。计划确认暂未接入，需要回到 OpenCode 窗口完成。 |
 
-两者可以同时开着，面板顶部的筛选按钮能只看其中一家，或者"全部"一起看。
+三个 Agent 可以同时开着，面板顶部的筛选按钮能只看其中一家，或者"全部"一起看。
 
 ## 快速上手
 
@@ -63,13 +66,13 @@ CodeCraft 自己不写代码，它负责盯着下面这些 AI 编程助手。装
 
 **2. 连接你的 AI 助手（关键一步）**
 
-展开面板 → 点右上角 ⚙️ → **通用 → Hook 管理** → 点一下 Claude Code 或 Codex 完成安装。
+展开面板 → 点右上角 ⚙️ → **通用 → Hook 管理** → 点一下 Claude Code、Codex 或 OpenCode 完成安装。
 
 这一步在做什么？CodeCraft 会往对应助手的配置里加一个"通知钩子"，让助手在开始工作、要调用工具、任务结束时主动告诉 CodeCraft 一声。不装它，面板会一直是空的。想撤销随时可以在同一处卸载，配置会被还原。
 
 **3. 正常使用你的助手**
 
-照常在终端里让 Claude Code 或 Codex 干活。接下来会话卡片就会自己出现在面板上；有请求要处理时，面板会自动展开提醒你。
+照常在终端里让 Claude Code、Codex 或 OpenCode 干活。接下来会话卡片就会自己出现在面板上；有请求要处理时，面板会自动展开提醒你。
 
 ## 手机 / 平板远程查看
 
@@ -89,14 +92,14 @@ CodeCraft 自己不写代码，它负责盯着下面这些 AI 编程助手。装
 
 - **自动收起**：鼠标移开约 0.25 秒后面板缩回细线；有任务在跑时会留一小条实时状态。
 - **自动清理**：空闲或已停止的会话超过设定时间（默认 30 分钟）自动从列表移走，正在工作和等你处理的不会被动。
-- **自动审批**：可以选择手动逐个确认，或者让低风险命令自动通过，只把真正需要判断的留给你。
+- **自动审批**：三个 Agent 共用同一策略，可以手动逐个确认、只自动通过低风险命令，或自动通过全部审批。
 - **位置随心**：顶部可以左右拖动，也能一键置左、居中、置右。
 
 ## 运行环境
 
 - Windows 10 / 11（面板停靠在主显示器顶部）
 - 系统自带的 WebView2 运行时（Win11 已内置）
-- 需要至少安装 Claude Code 或 Codex 其中之一，CodeCraft 本身不包含 AI 模型，也不会替你调用任何 API
+- 需要至少安装 Claude Code、Codex 或 OpenCode 其中之一，CodeCraft 本身不包含 AI 模型，也不会替你调用任何 API
 
 会话数据、设置和审批记录都保存在你自己电脑的本地目录里。
 

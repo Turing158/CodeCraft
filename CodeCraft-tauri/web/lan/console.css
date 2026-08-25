@@ -405,44 +405,97 @@ textarea {
   display: none;
 }
 
+.integrations-drawer {
+  display: grid;
+  gap: var(--space-2);
+}
+
 .integrations {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: var(--space-3);
+  gap: var(--space-2);
 }
 
-.integration {
-  display: grid;
-  gap: 2px;
-  padding: var(--space-3);
+/* The drawer shows about two agent cards and clips the rest until expanded. */
+.integrations-drawer[data-collapsible="true"] .integrations {
+  max-height: var(--integrations-collapsed, 66px);
+  overflow: hidden;
+  transition: max-height var(--integrations-duration, 0ms);
+}
+
+.integrations-drawer[data-collapsible="true"][data-expanded="true"] .integrations {
+  max-height: var(--integrations-expanded, 360px);
+}
+
+.integration-card {
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  gap: 5px;
+  min-width: 0;
+  padding: var(--space-2) var(--space-3);
   border: 1px solid var(--surface-border);
   border-radius: var(--radius-md);
   background: var(--surface-raised);
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  box-shadow: var(--shadow-card);
 }
 
-.integration__name {
+.integration-card:hover {
+  border-color: var(--accent-border);
+  background: var(--surface-raised-hover);
+}
+
+.integration-card:active {
+  transform: scale(0.97);
+}
+
+.integration-card[data-selected="true"] {
+  border-color: var(--accent);
+  background: var(--accent-soft);
+  box-shadow: 0 0 0 1px var(--accent) inset;
+}
+
+.integration-card__name {
   font-size: 13px;
   font-weight: 600;
+  color: var(--text-primary);
 }
 
-.integration__state {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
+.integration-card__status {
+  align-self: flex-end;
   font-size: 12px;
   color: var(--text-secondary);
 }
 
-.integration__state::before {
-  content: "";
-  width: 6px;
-  height: 6px;
-  border-radius: 50%;
-  background: var(--status-failed);
+.integration-card[data-hook-installed="false"] .integration-card__status {
+  color: var(--status-failed);
 }
 
-.integration[data-connected="true"] .integration__state::before {
-  background: var(--accent);
+.integrations-toggle {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: var(--space-1) var(--space-3);
+  border: 1px dashed var(--surface-border);
+  border-radius: var(--radius-pill);
+  background: transparent;
+  color: var(--text-secondary);
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.integrations-toggle:hover {
+  color: var(--accent);
+  border-color: var(--accent-border);
+}
+
+.integrations-toggle[hidden] {
+  display: none;
 }
 
 .section-heading {
@@ -953,6 +1006,16 @@ textarea {
 }
 
 .question__extra textarea {
+  min-height: 78px;
+  padding: var(--space-2) var(--space-3);
+  border: 1px solid var(--surface-border);
+  border-radius: var(--radius-sm);
+  background: var(--surface-sunken);
+  resize: vertical;
+}
+
+.question__extra-input {
+  width: 100%;
   min-height: 78px;
   padding: var(--space-2) var(--space-3);
   border: 1px solid var(--surface-border);

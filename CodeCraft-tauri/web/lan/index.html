@@ -121,7 +121,22 @@
 
       <main id="workspace" class="workspace" hidden>
         <section class="pane pane--list" aria-labelledby="sessions-title">
-          <div id="integrations" class="integrations"></div>
+          <div
+            id="integrations-drawer"
+            class="integrations-drawer"
+            data-collapsible="false"
+            data-expanded="false"
+          >
+            <div id="integrations" class="integrations"></div>
+            <button
+              id="integrations-toggle"
+              class="integrations-toggle"
+              type="button"
+              hidden
+            >
+              展开
+            </button>
+          </div>
 
           <h2 id="sessions-title" class="section-heading">
             会话
@@ -302,7 +317,7 @@
           value="1"
         />
       </div>
-      <div class="settings-row">
+      <div id="sign-out-row" class="settings-row">
         <span id="connection-info">连接信息</span>
         <button id="sign-out" class="button button--danger" type="button">
           退出登录
