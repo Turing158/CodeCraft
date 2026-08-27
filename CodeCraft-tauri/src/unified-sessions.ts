@@ -86,6 +86,11 @@ export const unifiedSessionVisualStatus = (
       ? OPENCODE_VISUAL_STATUS[session.status]
       : session.status;
 
+export const unifiedSessionIsRunning = (session: UnifiedSession): boolean => {
+  const status = unifiedSessionVisualStatus(session);
+  return status !== "idle" && status !== "stopped";
+};
+
 export const unifiedSessionLiveContent = (
   session: UnifiedSession,
 ): ClaudeLiveContent => {

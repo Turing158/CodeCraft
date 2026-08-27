@@ -5,6 +5,7 @@ export type ContextMenuIcon =
   | "settings"
   | "minus"
   | "x"
+  | "trash"
   | "info";
 
 export type ContextMenuCloseReason =
@@ -67,6 +68,7 @@ const iconPath: Record<ContextMenuIcon, string> = {
   settings: "M12 3v2 M12 19v2 M5.6 5.6 7 7 M17 17l1.4 1.4 M3 12h2 M19 12h2 M5.6 18.4 7 17 M17 7l1.4-1.4 M16.5 12a4.5 4.5 0 1 1-9 0 4.5 4.5 0 0 1 9 0Z",
   minus: "M5 12h14",
   x: "m6 6 12 12 M18 6 6 18",
+  trash: "M3 6h18 M8 6V4h8v2 M19 6l-1 14H6L5 6 M10 11v5 M14 11v5",
   info: "M12 11v5 M12 8h.01 M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z",
 };
 

@@ -69,6 +69,7 @@ import {
   isOpenCodeSession,
   primaryUnifiedLiveSession,
   unifiedSessionKey,
+  unifiedSessionIsRunning,
   unifiedSessionLiveContent,
   unifiedSessionLiveStatusText,
   unifiedSessionSource,
@@ -91,6 +92,7 @@ import {
   type SessionCleanupPreset,
   type SessionCleanupSettings,
 } from "./session-cleanup-settings";
+import { filterDismissedSessions } from "./session-list-visibility";
 import { CollapsedWorkingIndicator } from "./collapsed-working-indicator";
 import {
   captureReviewOrigin,
@@ -1279,6 +1281,7 @@ let questionOriginView: ContentView | undefined;
 let manuallyHiddenQuestionRequestId: string | undefined;
 let lastAutoRevealedQuestionRequestId: string | undefined;
 let latestSessions: ClaudeSession[] = [];
+const dismissedSessionKeys = new Set<string>();
 let latestClaudeSnapshot: ClaudeSessionSnapshot = {
   connected: false,
   integrationError: null,
@@ -1876,14 +1879,11 @@ const controller = new PanelController({
 });
 controller.setCollapseDelay(autoCollapseDelayMs(collapseExpandSettings));
 
-const revealPanelForAttention = async (focusTarget?: HTMLElement) => {
+const revealPanelForAttention = async () => {
   await controller.pointerEntered();
   if (isTauriRuntime) {
     await invoke("show_panel_for_attention");
   }
-  window.requestAnimationFrame(() =>
-    focusTarget?.focus({ preventScroll: true }),
-  );
 };
 
 let collapsedWorkingFlowFinishing = false;
@@ -4341,13 +4341,13 @@ const showOpenCodeReview = (
   shouldAutoReveal: boolean,
 ) => {
   activeOpenCodeReview = review;
-  const reveal = (view: ReviewContentView, focusTarget?: HTMLElement) => {
+  const reveal = (view: ReviewContentView) => {
     if (requestedContentView !== view) {
       rememberReviewOrigin(view);
       switchContentView(view);
     }
     if (!shouldAutoReveal || !collapseExpandSettings.approvalAutoExpand) return;
-    void revealPanelForAttention(focusTarget).catch((error: unknown) => {
+    void revealPanelForAttention().catch((error: unknown) => {
       console.error("Unable to reveal the OpenCode review", error);
     });
   };
@@ -4357,14 +4357,14 @@ const showOpenCodeReview = (
     syncOpenCodeQuestionStatus(review);
     questionSubmitButton.disabled = review.submitting;
     questionRejectButton.disabled = review.submitting;
-    reveal("question", questionSubmitButton);
+    reveal("question");
     return;
   }
   activePermissionSource = "opencode";
   renderPermissionRequest(openCodePermissionRequest(review, session));
   syncOpenCodePermissionStatus(review);
   setPermissionButtonsDisabled(review.submitting);
-  reveal("permission", permissionAllowButton);
+  reveal("permission");
 };
 
 const setSelectedOpenCodeSession = (sessionKey: string) => {
@@ -4444,7 +4444,12 @@ const renderCodexSnapshot = (snapshot: CodexSnapshot) => {
     };
   }
   const visibleSessions = filterAutoCleanedSessions(
-    snapshot.sessions,
+    filterDismissedSessions(
+      snapshot.sessions,
+      dismissedSessionKeys,
+      (session) => `codex:${session.id}`,
+      unifiedSessionIsRunning,
+    ),
     sessionCleanupSettings,
   );
   if (visibleSessions.length !== snapshot.sessions.length) {
@@ -4535,13 +4540,7 @@ const renderCodexInteraction = (
       switchContentView(view);
     }
     if (!shouldAutoReveal || !collapseExpandSettings.approvalAutoExpand) return;
-    const focusTarget =
-      view === "permission"
-        ? permissionAllowButton
-        : view === "plan"
-          ? planOpenCodexButton
-          : undefined;
-    void revealPanelForAttention(focusTarget).catch((error: unknown) => {
+    void revealPanelForAttention().catch((error: unknown) => {
       console.error("Unable to reveal the Codex interaction", error);
     });
   };
@@ -4580,7 +4579,12 @@ const renderOpenCodeSnapshot = (snapshot: OpenCodeSnapshot) => {
   snapshot = {
     ...snapshot,
     sessions: filterAutoCleanedSessions(
-      snapshot.sessions,
+      filterDismissedSessions(
+        snapshot.sessions,
+        dismissedSessionKeys,
+        (session) => `opencode:${openCodeSessionKey(session)}`,
+        unifiedSessionIsRunning,
+      ),
       sessionCleanupSettings,
     ),
   };
@@ -7004,10 +7008,17 @@ const renderUnifiedSessionList = (
   items: Map<string, HTMLLIElement>,
 ) => {
   if (sessions.length === 0) {
-    const empty = document.createElement("li");
-    empty.className = "session-list__empty";
-    empty.textContent = "暂无会话";
-    list.replaceChildren(empty);
+    const currentEmpty = list.firstElementChild;
+    if (
+      list.childElementCount !== 1 ||
+      !(currentEmpty instanceof HTMLLIElement) ||
+      !currentEmpty.classList.contains("session-list__empty")
+    ) {
+      const empty = document.createElement("li");
+      empty.className = "session-list__empty";
+      empty.textContent = "暂无会话";
+      list.replaceChildren(empty);
+    }
     items.clear();
     return;
   }
@@ -7019,9 +7030,24 @@ const renderUnifiedSessionList = (
     nextItems.set(key, item);
   }
   for (const stale of items.values()) stale.remove();
-  list.replaceChildren(
-    ...sessions.map((session) => nextItems.get(unifiedSessionKey(session))!),
+  // The empty state is included in the initial HTML so the card has a useful
+  // fallback before the first snapshot arrives. Once sessions are rendered,
+  // remove every empty-state node so it cannot remain alongside a session
+  // item (including after repeated refreshes).
+  list
+    .querySelectorAll<HTMLElement>(".session-list__empty")
+    .forEach((empty) => empty.remove());
+  const orderedItems = sessions.map(
+    (session) => nextItems.get(unifiedSessionKey(session))!,
   );
+  // Keep the existing list children in place whenever possible. Replacing the
+  // whole child list on every stream update briefly removes the hovered button
+  // from the DOM, which makes :hover flicker between its hover and base state.
+  orderedItems.forEach((item, index) => {
+    if (list.children[index] !== item) {
+      list.insertBefore(item, list.children[index] ?? null);
+    }
+  });
   items.clear();
   nextItems.forEach((item, id) => items.set(id, item));
 };
@@ -7150,7 +7176,12 @@ const renderSessionSnapshot = (snapshot: ClaudeSessionSnapshot) => {
   snapshot = {
     ...snapshot,
     sessions: filterAutoCleanedSessions(
-      snapshot.sessions,
+      filterDismissedSessions(
+        snapshot.sessions,
+        dismissedSessionKeys,
+        (session) => `claude:${session.id}`,
+        unifiedSessionIsRunning,
+      ),
       sessionCleanupSettings,
     ),
   };
@@ -7294,7 +7325,6 @@ const renderSessionSnapshot = (snapshot: ClaudeSessionSnapshot) => {
     refreshPlanPreviewClippedState();
 
     if (shouldAutoReveal && collapseExpandSettings.approvalAutoExpand) {
-      planAutoButton.focus({ preventScroll: true });
       void controller.pointerEntered().catch((error: unknown) => {
         console.error("Unable to reveal the Claude Code plan request", error);
       });
@@ -7333,7 +7363,6 @@ const renderSessionSnapshot = (snapshot: ClaudeSessionSnapshot) => {
     switchContentView("permission");
 
     if (shouldAutoReveal && collapseExpandSettings.approvalAutoExpand) {
-      permissionAllowButton.focus({ preventScroll: true });
       void controller.pointerEntered().catch((error: unknown) => {
         console.error(
           "Unable to reveal the Claude Code permission request",
@@ -7442,7 +7471,8 @@ interface CodeCraftContextData {
   kind: "panel" | "session" | "working-square";
   sessionButton?: HTMLButtonElement;
   sessionId?: string;
-  sessionSource?: "claude" | "codex";
+  sessionKey?: string;
+  sessionSource?: "claude" | "codex" | "opencode";
   workingSquareTheme?: WorkingSquareImageTheme;
 }
 
@@ -7456,6 +7486,53 @@ const copyContextValue = async (value: string) => {
     await navigator.clipboard.writeText(value);
   } catch (error: unknown) {
     console.error("Unable to copy context menu value", error);
+  }
+};
+
+const dismissSessionFromList = (data: CodeCraftContextData | undefined) => {
+  if (data?.kind !== "session" || !data.sessionId || !data.sessionSource) {
+    return;
+  }
+  const sessionKey = data.sessionKey ?? data.sessionId;
+  dismissedSessionKeys.add(`${data.sessionSource}:${sessionKey}`);
+
+  if (
+    (data.sessionSource === "claude" && selectedSessionId === data.sessionId) ||
+    (data.sessionSource === "codex" && selectedCodexSessionId === data.sessionId) ||
+    (data.sessionSource === "opencode" &&
+      selectedOpenCodeSessionKey === sessionKey)
+  ) {
+    selectedSessionId = undefined;
+    selectedCodexSessionId = undefined;
+    selectedOpenCodeSessionKey = undefined;
+    renderedDetailSignature = undefined;
+    if (requestedContentView === "detail") switchContentView("sessions");
+  }
+
+  if (data.sessionSource === "claude") {
+    renderSessionSnapshot({
+      ...latestClaudeSnapshot,
+      sessions: latestClaudeSnapshot.sessions.filter(
+        (session) => session.id !== data.sessionId,
+      ),
+    });
+  } else if (data.sessionSource === "codex") {
+    renderCodexSnapshot({
+      ...latestCodexSnapshot,
+      sessions: latestCodexSnapshot.sessions.filter(
+        (session) => session.id !== data.sessionId,
+      ),
+      interactions: latestCodexSnapshot.interactions.filter(
+        (interaction) => interaction.threadId !== data.sessionId,
+      ),
+    });
+  } else {
+    renderOpenCodeSnapshot({
+      ...latestOpenCodeSnapshot,
+      sessions: latestOpenCodeSnapshot.sessions.filter(
+        (session) => openCodeSessionKey(session) !== sessionKey,
+      ),
+    });
   }
 };
 
@@ -7506,12 +7583,15 @@ const contextMenu = new ContextMenuController<CodeCraftContextData>(
       const sessionSource = sessionButton?.dataset.sessionSource;
       if (
         sessionButton?.dataset.sessionId &&
-        (sessionSource === "claude" || sessionSource === "codex")
+        (sessionSource === "claude" ||
+          sessionSource === "codex" ||
+          sessionSource === "opencode")
       ) {
         return {
           kind: "session",
           sessionButton,
           sessionId: sessionButton.dataset.sessionId,
+          sessionKey: sessionButton.dataset.sessionKey,
           sessionSource,
         };
       }
@@ -7580,6 +7660,15 @@ const contextMenu = new ContextMenuController<CodeCraftContextData>(
             void refreshCodexPanel();
             void refreshOpenCodeSessions();
           },
+        },
+        {
+          id: "delete-session",
+          label: "删除会话",
+          icon: "trash",
+          danger: true,
+          visible: isSession,
+          disabled: !context.data?.sessionId,
+          onSelect: (menuContext) => dismissSessionFromList(menuContext.data),
         },
         { type: "separator", id: "panel-actions-end" },
         {

@@ -53,6 +53,7 @@ const ENGLISH: Record<string, string> = {
   返回会话列表: "Back to sessions",
   返回: "Back",
   "Claude Code 会话": "Claude Code session",
+  删除会话: "Delete session",
   工具调用: "Tool calls",
   对话: "Conversation",
   实时转录: "Live transcript",

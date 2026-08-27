@@ -27,7 +27,6 @@ export const CARD_SIZE_SELECTOR = [
   ".settings-toggle",
   ".hook-agent-button",
   ".about-capability",
-  ".detail-section",
   ".question-block",
   ".question-option",
   ".lan-clients",

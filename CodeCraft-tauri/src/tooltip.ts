@@ -127,8 +127,13 @@ export class TooltipController {
     document.body.append(this.element);
 
     document.addEventListener("pointermove", this.handlePointerMove);
+    // Pointer movement stops being delivered once the cursor leaves the
+    // document, so explicitly close the bubble at the document/window edge.
+    document.addEventListener("pointerout", this.handlePointerOut, true);
+    document.addEventListener("mouseleave", this.handleDocumentLeave);
     document.addEventListener("pointerdown", this.handlePointerDown, true);
     document.addEventListener("keydown", this.handleKeyDown);
+    window.addEventListener("blur", this.handleWindowBlur);
     window.addEventListener("resize", this.handleViewportChange);
   }
 
@@ -140,8 +145,11 @@ export class TooltipController {
     this.showTimer = undefined;
     this.hideTimer = undefined;
     document.removeEventListener("pointermove", this.handlePointerMove);
+    document.removeEventListener("pointerout", this.handlePointerOut, true);
+    document.removeEventListener("mouseleave", this.handleDocumentLeave);
     document.removeEventListener("pointerdown", this.handlePointerDown, true);
     document.removeEventListener("keydown", this.handleKeyDown);
+    window.removeEventListener("blur", this.handleWindowBlur);
     window.removeEventListener("resize", this.handleViewportChange);
     this.activeSource = undefined;
     this.activeText = undefined;
@@ -179,6 +187,20 @@ export class TooltipController {
     this.position(event.clientX, event.clientY);
   };
 
+  private readonly handlePointerOut = (event: PointerEvent): void => {
+    if (this.destroyed) return;
+    const relatedTarget = event.relatedTarget;
+    if (relatedTarget instanceof Node && document.contains(relatedTarget)) {
+      return;
+    }
+    this.scheduleHide();
+  };
+
+  private readonly handleDocumentLeave = (): void => {
+    if (this.destroyed) return;
+    this.scheduleHide();
+  };
+
   private readonly handlePointerDown = (_event: PointerEvent): void => {
     // Clicking anywhere dismisses the tooltip immediately.
     if (this.destroyed) return;
@@ -188,6 +210,11 @@ export class TooltipController {
   private readonly handleKeyDown = (event: KeyboardEvent): void => {
     if (this.destroyed) return;
     if (event.key === "Escape") this.hideNow();
+  };
+
+  private readonly handleWindowBlur = (): void => {
+    if (this.destroyed) return;
+    this.scheduleHide();
   };
 
   private readonly handleViewportChange = (): void => {

@@ -499,18 +499,16 @@ button {
   opacity: var(--panel-content-opacity);
   transition: opacity var(--panel-content-fade-duration)
     var(--panel-content-fade-easing);
-  will-change: opacity;
 }
 
 .panel-view {
   width: 100%;
   min-width: 0;
   opacity: 1;
-  transform: translate3d(0, 0, 0);
+  transform: none;
   transition:
     opacity 220ms cubic-bezier(0.22, 1, 0.36, 1),
     transform 220ms cubic-bezier(0.22, 1, 0.36, 1);
-  will-change: opacity, transform;
 }
 
 .panel-view[hidden] {
@@ -521,6 +519,7 @@ button {
 .panel-view--leaving {
   opacity: 0;
   pointer-events: none;
+  will-change: opacity, transform;
 }
 
 .panel-view--leaving {
@@ -2715,7 +2714,9 @@ button {
     background-color 180ms ease;
 }
 
-.about-update__button[hidden] {
+/* Keep the update actions mutually exclusive: the card's button styling has
+   higher specificity than the browser's default `[hidden]` rule. */
+.settings-card.about-update .about-update__button[hidden] {
   display: none;
 }
 
@@ -3576,6 +3577,7 @@ button {
   border: 1px solid var(--surface-border);
   border-radius: 7px;
   background: var(--surface-background);
+  -webkit-font-smoothing: auto;
 }
 
 .detail-section__header {
@@ -3588,16 +3590,16 @@ button {
 
 .detail-section__header h2 {
   margin: 0;
-  color: #e9eef5;
-  font-size: calc(11px * var(--font-scale));
-  font-weight: 650;
+  color: #f1f5f9;
+  font-size: calc(12px * var(--font-scale));
+  font-weight: 700;
   line-height: 1.4;
 }
 
 .detail-section__meta {
   flex: none;
-  color: #74808e;
-  font-size: calc(9px * var(--font-scale));
+  color: #8f9aa8;
+  font-size: calc(10px * var(--font-scale));
   font-variant-numeric: tabular-nums;
   line-height: 1.4;
 }
@@ -3661,22 +3663,22 @@ button {
 }
 
 .activity-item__tool {
-  color: #dce4ed;
+  color: #e7edf4;
   font-family: "Cascadia Code", Consolas, monospace;
-  font-size: calc(10px * var(--font-scale));
-  font-weight: 600;
+  font-size: calc(11px * var(--font-scale));
+  font-weight: 650;
   line-height: 1.45;
 }
 
 .activity-item__summary {
-  color: #8e99a7;
-  font-size: calc(10px * var(--font-scale));
-  line-height: 1.45;
+  color: #aab4c0;
+  font-size: calc(11px * var(--font-scale));
+  line-height: 1.5;
 }
 
 .activity-item__time {
-  color: #687586;
-  font-size: calc(9px * var(--font-scale));
+  color: #8793a2;
+  font-size: calc(10px * var(--font-scale));
   font-variant-numeric: tabular-nums;
 }
 
@@ -3690,10 +3692,11 @@ button {
   padding: 2px 3px 2px 0;
   overflow-x: hidden;
   overflow-y: auto;
-  color: #d9e1ea;
+  color: #e5ebf2;
   font-family: "Cascadia Code", Consolas, monospace;
-  font-size: calc(11px * var(--font-scale));
-  line-height: 1.65;
+  font-size: calc(12px * var(--font-scale));
+  font-weight: 450;
+  line-height: 1.6;
   scrollbar-color: rgba(226, 232, 240, 0.2) transparent;
   scrollbar-width: thin;
   user-select: text;
@@ -4509,6 +4512,7 @@ button {
 #plan-custom-input {
   box-sizing: border-box;
   min-width: 0;
+  height: 40px;
   min-height: 40px;
   max-height: 144px;
   width: 100%;

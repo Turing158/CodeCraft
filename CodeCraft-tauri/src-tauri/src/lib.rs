@@ -766,6 +766,45 @@ fn configure_native_window(_window: &WebviewWindow) -> Result<(), String> {
     Ok(())
 }
 
+/// Show the panel while preserving whichever application currently owns the
+/// foreground focus. The panel remains focusable, so a user click can still
+/// activate it and interact with its controls normally.
+#[cfg(windows)]
+fn show_native_window_without_activation(window: &WebviewWindow) -> Result<(), String> {
+    use windows::Win32::UI::WindowsAndMessaging::{
+        SetWindowPos, ShowWindow, SWP_NOACTIVATE, SWP_NOMOVE, SWP_NOOWNERZORDER, SWP_NOSIZE,
+        SWP_NOZORDER, SWP_SHOWWINDOW, SW_SHOWNOACTIVATE,
+    };
+
+    let hwnd = window.hwnd().map_err(|error| error.to_string())?;
+
+    unsafe {
+        let _ = ShowWindow(hwnd, SW_SHOWNOACTIVATE);
+        SetWindowPos(
+            hwnd,
+            None,
+            0,
+            0,
+            0,
+            0,
+            SWP_SHOWWINDOW
+                | SWP_NOMOVE
+                | SWP_NOSIZE
+                | SWP_NOZORDER
+                | SWP_NOOWNERZORDER
+                | SWP_NOACTIVATE,
+        )
+        .map_err(|error| error.to_string())?;
+    }
+
+    Ok(())
+}
+
+#[cfg(not(windows))]
+fn show_native_window_without_activation(window: &WebviewWindow) -> Result<(), String> {
+    window.show().map_err(|error| error.to_string())
+}
+
 fn ease_in_quad(progress: f64) -> f64 {
     progress * progress
 }
@@ -965,9 +1004,7 @@ async fn set_panel_expanded(
 
 #[tauri::command]
 fn show_panel_for_attention(window: WebviewWindow) -> Result<(), String> {
-    window.show().map_err(|error| error.to_string())?;
-    window.unminimize().map_err(|error| error.to_string())?;
-    window.set_focus().map_err(|error| error.to_string())
+    show_native_window_without_activation(&window)
 }
 
 #[tauri::command]
@@ -1975,7 +2012,7 @@ pub fn run() {
                 0.0,
             )?;
             center_on_primary_monitor(&window)?;
-            window.show()?;
+            show_native_window_without_activation(&window)?;
             watch_primary_monitor(window);
 
             Ok(())
