@@ -127,6 +127,7 @@ export const createSoundPlayer = (getSettings: () => SoundSettings) => {
       const url = await customUrlFor(event);
       if (url) playUrl(url, getSettings().volume);
     },
+    customFile: (event: SoundEvent) => readCustomFile(event),
     saveCustomFile: async (event: SoundEvent, file: File) => {
       const previousUrl = customSoundUrls.get(event);
       if (previousUrl) URL.revokeObjectURL(previousUrl);

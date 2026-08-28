@@ -1032,6 +1032,118 @@
 
                 <div id="general-settings" class="settings-section">
                   <section
+                    class="settings-card"
+                    aria-labelledby="approval-mode-title"
+                  >
+                    <div class="settings-card__header">
+                      <div>
+                        <h2 id="approval-mode-title">自动审批</h2>
+                        <p>
+                          Claude Code、Codex 与 OpenCode
+                          共用此策略；风险审批只自动通过低风险命令。
+                        </p>
+                      </div>
+                    </div>
+
+                    <fieldset class="settings-segmented" aria-label="自动审批">
+                      <label>
+                        <input
+                          type="radio"
+                          name="approval-mode"
+                          value="manual"
+                          checked
+                        />
+                        <span>手动审批</span>
+                      </label>
+                      <label>
+                        <input type="radio" name="approval-mode" value="risk" />
+                        <span>风险审批</span>
+                      </label>
+                      <label>
+                        <input
+                          type="radio"
+                          name="approval-mode"
+                          value="automatic"
+                        />
+                        <span>自动审批</span>
+                      </label>
+                    </fieldset>
+
+                    <div id="minimal-mode-settings" class="approval-minimal-settings" hidden>
+                      <label class="settings-toggle" for="approval-minimal-mode">
+                        <span class="settings-toggle__copy">
+                          <strong>极简模式</strong>
+                          <small>仅保留音效、当前审批策略和局域网功能，隐藏桌面面板以节省资源。</small>
+                        </span>
+                        <input id="approval-minimal-mode" type="checkbox" />
+                        <span class="settings-toggle__control" aria-hidden="true">
+                          <span></span>
+                        </span>
+                      </label>
+                    </div>
+                  </section>
+
+                  <dialog
+                    id="approval-mode-confirm-dialog"
+                    class="approval-mode-confirm-dialog"
+                    aria-labelledby="approval-mode-confirm-title"
+                    aria-describedby="approval-mode-confirm-description"
+                  >
+                    <form>
+                      <h2 id="approval-mode-confirm-title">自动审批风险提示</h2>
+                      <p id="approval-mode-confirm-description">
+                        开启后，工具调用将自动通过，包括可能修改或删除文件的操作。请确认你了解并接受此风险。
+                      </p>
+                      <div class="approval-mode-confirm-dialog__actions">
+                        <button
+                          id="approval-mode-confirm-cancel"
+                          class="question-action question-action--secondary"
+                          type="button"
+                        >
+                          取消
+                        </button>
+                        <button
+                          id="approval-mode-confirm-accept"
+                          class="question-action question-action--primary"
+                          type="button"
+                        >
+                          确认启用
+                        </button>
+                      </div>
+                    </form>
+                  </dialog>
+
+                  <dialog
+                    id="approval-minimal-confirm-dialog"
+                    class="approval-mode-confirm-dialog"
+                    aria-labelledby="approval-minimal-confirm-title"
+                    aria-describedby="approval-minimal-confirm-description"
+                  >
+                    <form>
+                      <h2 id="approval-minimal-confirm-title">极简模式提示</h2>
+                      <p id="approval-minimal-confirm-description">
+                        开启后将隐藏并暂停桌面面板，只保留音效、当前审批策略和局域网功能；需要从托盘菜单退出极简模式才能恢复面板。请确认继续。
+                      </p>
+                      <div class="approval-mode-confirm-dialog__actions">
+                        <button
+                          id="approval-minimal-confirm-cancel"
+                          class="question-action question-action--secondary"
+                          type="button"
+                        >
+                          取消
+                        </button>
+                        <button
+                          id="approval-minimal-confirm-accept"
+                          class="question-action question-action--primary"
+                          type="button"
+                        >
+                          确认启用
+                        </button>
+                      </div>
+                    </form>
+                  </dialog>
+
+                  <section
                     class="settings-card language-settings"
                     aria-labelledby="language-title"
                   >
@@ -1410,45 +1522,6 @@
                         </div>
                       </div>
                     </div>
-                  </section>
-
-                  <section
-                    class="settings-card"
-                    aria-labelledby="approval-mode-title"
-                  >
-                    <div class="settings-card__header">
-                      <div>
-                        <h2 id="approval-mode-title">自动审批</h2>
-                        <p>
-                          Claude Code、Codex 与 OpenCode
-                          共用此策略；风险审批只自动通过低风险命令。
-                        </p>
-                      </div>
-                    </div>
-
-                    <fieldset class="settings-segmented" aria-label="自动审批">
-                      <label>
-                        <input
-                          type="radio"
-                          name="approval-mode"
-                          value="manual"
-                          checked
-                        />
-                        <span>手动审批</span>
-                      </label>
-                      <label>
-                        <input type="radio" name="approval-mode" value="risk" />
-                        <span>风险审批</span>
-                      </label>
-                      <label>
-                        <input
-                          type="radio"
-                          name="approval-mode"
-                          value="automatic"
-                        />
-                        <span>自动审批</span>
-                      </label>
-                    </fieldset>
                   </section>
 
                   <section

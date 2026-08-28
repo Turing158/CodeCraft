@@ -167,6 +167,20 @@ const ENGLISH: Record<string, string> = {
     "Claude Code, Codex, and OpenCode share this policy; risk-based approval only allows low-risk commands automatically.",
   手动审批: "Manual",
   风险审批: "Risk-based",
+  自动审批风险提示: "Automatic approval risk warning",
+  "开启后，工具调用将自动通过，包括可能修改或删除文件的操作。请确认你了解并接受此风险。":
+    "Tool calls will be approved automatically, including operations that may modify or delete files. Confirm that you understand and accept this risk.",
+  取消: "Cancel",
+  确认启用: "Enable automatic approvals",
+  极简模式: "Minimal mode",
+  "仅保留音效、当前审批策略和局域网功能，隐藏桌面面板以节省资源。":
+    "Keep only sounds, the selected approval policy, and LAN features while hiding the desktop panel to save resources.",
+  极简模式提示: "Minimal mode warning",
+  "开启后将隐藏并暂停桌面面板，只保留音效、当前审批策略和局域网功能；需要从托盘菜单退出极简模式才能恢复面板。请确认继续。":
+    "The desktop panel will be hidden and paused, leaving only sounds, the selected approval policy, and LAN features. Use the tray menu to exit minimal mode and restore the panel. Continue?",
+  "开启后将隐藏桌面面板，只保留音效、当前审批策略和局域网功能；请确认继续。":
+    "The desktop panel will be hidden, leaving only sounds, the selected approval policy, and LAN features. Continue?",
+  "退出极简模式": "Exit minimal mode",
   "收起/展开": "Collapse / expand",
   "设置面板自动收起和审批请求展开方式。":
     "Control automatic panel collapse and approval expansion.",

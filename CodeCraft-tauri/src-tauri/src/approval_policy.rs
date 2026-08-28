@@ -16,6 +16,9 @@ pub(crate) enum ApprovalMode {
 #[serde(default, rename_all = "camelCase")]
 pub(crate) struct ApprovalSettings {
     pub mode: ApprovalMode,
+    /// Keeps the native panel hidden while approval hooks and the LAN service
+    /// continue running with the selected policy.
+    pub minimal_mode: bool,
 }
 
 pub(crate) fn base_data_dir() -> PathBuf {
@@ -57,6 +60,7 @@ pub(crate) fn load_settings() -> ApprovalSettings {
                 "auto" => ApprovalMode::Automatic,
                 _ => ApprovalMode::Manual,
             },
+            minimal_mode: false,
         })
         .unwrap_or_default();
     let _ = save_settings(&migrated);

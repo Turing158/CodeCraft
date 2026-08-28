@@ -9,7 +9,8 @@
     "test": "vitest run",
     "preview": "vite preview",
     "tauri": "tauri",
-    "package:single-exe": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/package-single-exe.ps1"
+    "package:single-exe": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/package-single-exe.ps1",
+    "package:single-exe-plus": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/package-single-exe-plus.ps1"
   },
   "dependencies": {
     "@tauri-apps/api": "^2",

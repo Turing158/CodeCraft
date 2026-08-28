@@ -1633,6 +1633,64 @@ button {
   line-height: 1.45;
 }
 
+.approval-mode-confirm-dialog {
+  width: min(420px, calc(100vw - 32px));
+  padding: 18px;
+  border: 1px solid var(--surface-border-hover);
+  border-radius: 8px;
+  color: var(--text-primary);
+  background: var(--panel-background);
+  box-shadow: 0 18px 48px rgba(0, 0, 0, 0.42);
+  opacity: 0;
+  transform: translateY(8px) scale(0.98);
+  transition:
+    opacity 180ms ease,
+    transform 180ms ease;
+}
+
+.approval-mode-confirm-dialog.is-visible {
+  opacity: 1;
+  transform: translateY(0) scale(1);
+}
+
+.approval-mode-confirm-dialog.is-closing {
+  opacity: 0;
+  transform: translateY(8px) scale(0.98);
+}
+
+.approval-mode-confirm-dialog::backdrop {
+  background: rgba(0, 0, 0, 0);
+  transition: background 180ms ease;
+}
+
+.approval-mode-confirm-dialog.is-visible::backdrop {
+  background: rgba(0, 0, 0, 0.58);
+}
+
+.approval-mode-confirm-dialog.is-closing::backdrop {
+  background: rgba(0, 0, 0, 0);
+}
+
+.approval-mode-confirm-dialog h2 {
+  margin: 0;
+  font-size: calc(14px * var(--font-scale));
+  line-height: 1.4;
+}
+
+.approval-mode-confirm-dialog p {
+  margin: 8px 0 0;
+  color: var(--text-secondary);
+  font-size: calc(11px * var(--font-scale));
+  line-height: 1.55;
+}
+
+.approval-mode-confirm-dialog__actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 16px;
+}
+
 .language-settings {
   position: relative;
   z-index: 2;
@@ -3112,6 +3170,10 @@ button {
 
 .settings-segmented--two {
   grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.approval-minimal-settings {
+  margin-top: 8px;
 }
 
 .settings-toggle {

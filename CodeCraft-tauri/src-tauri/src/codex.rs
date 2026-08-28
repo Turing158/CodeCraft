@@ -37,6 +37,12 @@ pub(crate) enum CodexSessionStatus {
     Stopped,
 }
 
+impl CodexSessionStatus {
+    fn is_active(self) -> bool {
+        !matches!(self, Self::Idle | Self::Stopped)
+    }
+}
+
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub(crate) enum CodexInteractionKind {
@@ -119,6 +125,12 @@ pub(crate) struct CodexSession {
     pub activities: Vec<CodexActivity>,
     pub outputs: Vec<CodexOutputEntry>,
     pub pending_interaction_id: Option<String>,
+}
+
+impl CodexSession {
+    pub(crate) fn is_active(&self) -> bool {
+        self.status.is_active()
+    }
 }
 
 #[derive(Clone, Debug, Serialize)]

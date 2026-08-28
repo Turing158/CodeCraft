@@ -14,7 +14,6 @@ artifacts
 *.local
 *.test
 *.test.*
-scripts/
 
 # Rust and Tauri generated output
 src-tauri/target/

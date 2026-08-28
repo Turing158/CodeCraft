@@ -468,6 +468,10 @@ pub(crate) fn install() -> Result<OpenCodeHookStatus, String> {
     install_at(&plugin_dir()?, true)
 }
 
+pub(crate) fn status() -> Result<OpenCodeHookStatus, String> {
+    Ok(status_at(&plugin_dir()?))
+}
+
 pub(crate) fn status_and_sync() -> Result<OpenCodeHookStatus, String> {
     status_and_sync_at(&plugin_dir()?, true)
 }

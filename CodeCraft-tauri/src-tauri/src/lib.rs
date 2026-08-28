@@ -2,7 +2,7 @@ use std::{
     env,
     path::Path,
     sync::{
-        atomic::{AtomicBool, AtomicU64, Ordering},
+        atomic::{AtomicBool, AtomicU64, AtomicUsize, Ordering},
         Mutex,
     },
     thread,
@@ -11,19 +11,22 @@ use std::{
 
 use serde::{Deserialize, Serialize};
 use tauri::{
-    menu::{Menu, MenuItem},
+    menu::{CheckMenuItem, Menu, MenuItem},
     tray::TrayIconBuilder,
     Emitter, LogicalSize, Manager, PhysicalPosition, PhysicalSize, WebviewWindow,
+    WebviewWindowBuilder,
 };
 
 mod approval_policy;
 mod claude_hook;
 mod codex;
 mod codex_hook;
+mod hook_config;
 mod lan_auth;
 mod lan_config;
 mod lan_net;
 mod lan_server;
+mod native_sound;
 mod opencode;
 mod opencode_hook;
 
@@ -43,11 +46,15 @@ const ANIMATION_FRAME_INTERVAL: Duration = Duration::from_millis(16);
 const PANEL_INSET: f64 = 12.0;
 // Keep the native window region aligned with the webview's visible bottom corners.
 const MIN_VISIBLE_BOTTOM_CORNER_RADIUS: f64 = 12.0;
+const TRAY_ICON_ID: &str = "codecraft-tray";
 const REOPEN_REQUESTED_EVENT: &str = "reopen-requested";
+const OPEN_SETTINGS_REQUESTED_EVENT: &str = "open-settings-requested";
+const APPROVAL_SETTINGS_CHANGED_EVENT: &str = "approval-settings-changed";
 
 static PANEL_ANIMATION_GENERATION: AtomicU64 = AtomicU64::new(0);
 static PANEL_POSITION_ANIMATION_GENERATION: AtomicU64 = AtomicU64::new(0);
 static REOPEN_REQUESTED: AtomicBool = AtomicBool::new(false);
+static OPEN_SETTINGS_REQUESTED: AtomicBool = AtomicBool::new(false);
 static PANEL_RESIZE_LOCK: Mutex<()> = Mutex::new(());
 static PANEL_POSITION_LOCK: Mutex<()> = Mutex::new(());
 
@@ -60,6 +67,16 @@ struct ClaudeIntegrationState {
 #[derive(Default)]
 struct ApprovalIntegrationState {
     settings: Mutex<approval_policy::ApprovalSettings>,
+}
+
+#[derive(Default)]
+struct NativeSoundIntegrationState {
+    settings: Mutex<native_sound::NativeSoundSettings>,
+}
+
+#[derive(Default)]
+struct TrayMenuState {
+    active_session_count: AtomicUsize,
 }
 
 #[derive(Default)]
@@ -115,6 +132,24 @@ enum HookAgentId {
     ClaudeCode,
     Codex,
     OpenCode,
+}
+
+impl hook_config::HookInstallConfig {
+    fn is_enabled(&self, agent: HookAgentId) -> bool {
+        match agent {
+            HookAgentId::ClaudeCode => self.claude_code,
+            HookAgentId::Codex => self.codex,
+            HookAgentId::OpenCode => self.open_code,
+        }
+    }
+
+    fn set_enabled(&mut self, agent: HookAgentId, enabled: bool) {
+        match agent {
+            HookAgentId::ClaudeCode => self.claude_code = enabled,
+            HookAgentId::Codex => self.codex = enabled,
+            HookAgentId::OpenCode => self.open_code = enabled,
+        }
+    }
 }
 
 impl HookAgentId {
@@ -197,6 +232,12 @@ fn codex_hook_project_dir(state: &CodexIntegrationState) -> Result<Option<String
 
 fn install_codex_hooks(executable: &Path, project_dir: Option<&Path>) -> Result<String, String> {
     codex_hook::install_codex_hooks(executable, project_dir)
+}
+
+fn save_hook_installation_state(agent: HookAgentId, enabled: bool) -> Result<(), String> {
+    let mut config = hook_config::load();
+    config.set_enabled(agent, enabled);
+    hook_config::save(&config)
 }
 
 pub(crate) fn hook_statuses(
@@ -1007,9 +1048,216 @@ fn show_panel_for_attention(window: WebviewWindow) -> Result<(), String> {
     show_native_window_without_activation(&window)
 }
 
+fn configure_main_window(window: &WebviewWindow) -> Result<(), String> {
+    window
+        .set_decorations(false)
+        .map_err(|error| error.to_string())?;
+    window
+        .set_focusable(true)
+        .map_err(|error| error.to_string())?;
+    window
+        .set_min_size(Some(LogicalSize::new(MIN_PANEL_WIDTH, MIN_PANEL_HEIGHT)))
+        .map_err(|error| error.to_string())?;
+    window
+        .set_max_size(Some(LogicalSize::new(MAX_PANEL_WIDTH, MAX_PANEL_HEIGHT)))
+        .map_err(|error| error.to_string())?;
+    configure_native_window(window)?;
+    window
+        .set_size(LogicalSize::new(PANEL_WIDTH, COLLAPSED_HEIGHT))
+        .map_err(|error| error.to_string())?;
+    apply_native_panel_region(
+        window,
+        PANEL_WIDTH,
+        1.0,
+        COLLAPSED_HEIGHT,
+        COLLAPSED_HEIGHT,
+        COLLAPSED_HEIGHT,
+        0.0,
+    )?;
+    center_on_primary_monitor(window)
+}
+
+async fn restore_main_window(app: tauri::AppHandle) -> Result<(), String> {
+    if let Some(window) = app.get_webview_window("main") {
+        return show_native_window_without_activation(&window);
+    }
+    let config = app
+        .config()
+        .app
+        .windows
+        .iter()
+        .find(|config| config.label == "main")
+        .cloned()
+        .ok_or_else(|| "Main window configuration is unavailable".to_string())?;
+    let window = WebviewWindowBuilder::from_config(&app, &config)
+        .map_err(|error| error.to_string())?
+        .build()
+        .map_err(|error| error.to_string())?;
+    configure_main_window(&window)?;
+    show_native_window_without_activation(&window)?;
+    watch_primary_monitor(window);
+    Ok(())
+}
+
+fn minimal_mode_menu_available(mode: approval_policy::ApprovalMode) -> bool {
+    matches!(
+        mode,
+        approval_policy::ApprovalMode::Risk | approval_policy::ApprovalMode::Automatic
+    )
+}
+
+fn build_tray_menu(
+    app: &tauri::AppHandle,
+    active_session_count: usize,
+    approval_settings: &approval_policy::ApprovalSettings,
+) -> tauri::Result<Menu<tauri::Wry>> {
+    let active_sessions = MenuItem::with_id(
+        app,
+        "active-sessions",
+        format!("活跃会话 {active_session_count}"),
+        false,
+        None::<&str>,
+    )?;
+    let settings = MenuItem::with_id(app, "settings", "设置", true, None::<&str>)?;
+    let minimal_mode = CheckMenuItem::with_id(
+        app,
+        "minimal-mode",
+        "极简模式",
+        true,
+        approval_settings.minimal_mode,
+        None::<&str>,
+    )?;
+    let quit = MenuItem::with_id(app, "quit", "退出", true, None::<&str>)?;
+
+    if minimal_mode_menu_available(approval_settings.mode) {
+        Menu::with_items(app, &[&active_sessions, &settings, &minimal_mode, &quit])
+    } else {
+        Menu::with_items(app, &[&active_sessions, &settings, &quit])
+    }
+}
+
+fn refresh_tray_menu(app: &tauri::AppHandle) -> Result<(), String> {
+    let approval_settings = app
+        .state::<ApprovalIntegrationState>()
+        .settings
+        .lock()
+        .map_err(|error| error.to_string())?
+        .clone();
+    let active_session_count = app
+        .state::<TrayMenuState>()
+        .active_session_count
+        .load(Ordering::Relaxed);
+    let menu = build_tray_menu(app, active_session_count, &approval_settings)
+        .map_err(|error| error.to_string())?;
+    if let Some(tray) = app.tray_by_id(TRAY_ICON_ID) {
+        tray.set_menu(Some(menu))
+            .map_err(|error| error.to_string())?;
+    }
+    Ok(())
+}
+
+fn schedule_main_window_close_for_minimal_mode(app: tauri::AppHandle) {
+    thread::spawn(move || {
+        thread::sleep(Duration::from_millis(160));
+        let still_minimal = app
+            .state::<ApprovalIntegrationState>()
+            .settings
+            .lock()
+            .map(|settings| settings.minimal_mode)
+            .unwrap_or(false);
+        if still_minimal {
+            if let Some(window) = app.get_webview_window("main") {
+                let _ = window.close();
+            }
+        }
+    });
+}
+
+async fn show_main_window(app: tauri::AppHandle) -> Result<(), String> {
+    restore_main_window(app.clone()).await?;
+    if let Some(window) = app.get_webview_window("main") {
+        window.set_focus().map_err(|error| error.to_string())?;
+    }
+    Ok(())
+}
+
+fn persist_minimal_mode(
+    app: &tauri::AppHandle,
+    enabled: bool,
+) -> Result<approval_policy::ApprovalSettings, String> {
+    let state = app.state::<ApprovalIntegrationState>();
+    let current = state
+        .settings
+        .lock()
+        .map_err(|error| error.to_string())?
+        .clone();
+    let enabled = enabled && minimal_mode_menu_available(current.mode);
+    if current.minimal_mode == enabled {
+        return Ok(current);
+    }
+
+    let next = approval_policy::ApprovalSettings {
+        mode: current.mode,
+        minimal_mode: enabled,
+    };
+    approval_policy::save_settings(&next)?;
+    *state.settings.lock().map_err(|error| error.to_string())? = next.clone();
+    let _ = app.emit(APPROVAL_SETTINGS_CHANGED_EVENT, &next);
+    if let Err(error) = refresh_tray_menu(app) {
+        eprintln!("Unable to refresh the tray menu: {error}");
+    }
+    Ok(next)
+}
+
+fn request_settings_from_tray(app: &tauri::AppHandle) {
+    if let Err(error) = persist_minimal_mode(app, false) {
+        eprintln!("Unable to exit minimal mode before opening settings: {error}");
+    }
+    OPEN_SETTINGS_REQUESTED.store(true, Ordering::Release);
+    let _ = app.emit(OPEN_SETTINGS_REQUESTED_EVENT, ());
+    let app = app.clone();
+    tauri::async_runtime::spawn(async move {
+        if let Err(error) = show_main_window(app).await {
+            eprintln!("Unable to open the settings window: {error}");
+        }
+    });
+}
+
+fn toggle_minimal_mode_from_tray(app: &tauri::AppHandle) {
+    let enabled = app
+        .state::<ApprovalIntegrationState>()
+        .settings
+        .lock()
+        .map(|settings| !settings.minimal_mode)
+        .unwrap_or(false);
+    let settings = match persist_minimal_mode(app, enabled) {
+        Ok(settings) => settings,
+        Err(error) => {
+            eprintln!("Unable to update minimal mode from the tray: {error}");
+            let _ = refresh_tray_menu(app);
+            return;
+        }
+    };
+    if settings.minimal_mode {
+        schedule_main_window_close_for_minimal_mode(app.clone());
+    } else {
+        let app = app.clone();
+        tauri::async_runtime::spawn(async move {
+            if let Err(error) = show_main_window(app).await {
+                eprintln!("Unable to restore the main window: {error}");
+            }
+        });
+    }
+}
+
 #[tauri::command]
 fn take_reopen_request() -> bool {
     REOPEN_REQUESTED.swap(false, Ordering::AcqRel)
+}
+
+#[tauri::command]
+fn take_open_settings_request() -> bool {
+    OPEN_SETTINGS_REQUESTED.swap(false, Ordering::AcqRel)
 }
 
 fn codex_window_score(title: &str, process_name: &str, hints: &[String]) -> u16 {
@@ -1203,6 +1451,7 @@ fn claude_snapshot(state: &ClaudeIntegrationState) -> Result<ClaudeSessionSnapsh
 fn claude_hook_install(state: tauri::State<'_, ClaudeIntegrationState>) -> Result<(), String> {
     let executable = std::env::current_exe().map_err(|error| error.to_string())?;
     claude_hook::install_claude_hooks(&executable)?;
+    save_hook_installation_state(HookAgentId::ClaudeCode, true)?;
     *state.hook_error.lock().map_err(|error| error.to_string())? = None;
     Ok(())
 }
@@ -1365,6 +1614,7 @@ async fn install_agent_hook(agent: HookAgentId, app: tauri::AppHandle) -> Result
         match agent {
             HookAgentId::ClaudeCode => {
                 claude_hook::install_claude_hooks(&executable)?;
+                save_hook_installation_state(agent, true)?;
                 *claude_state
                     .hook_error
                     .lock()
@@ -1373,6 +1623,7 @@ async fn install_agent_hook(agent: HookAgentId, app: tauri::AppHandle) -> Result
             HookAgentId::Codex => {
                 let project_dir = codex_hook_project_dir(&codex_state)?;
                 install_codex_hooks(&executable, project_dir.as_deref().map(Path::new))?;
+                save_hook_installation_state(agent, true)?;
                 *codex_state
                     .hook_error
                     .lock()
@@ -1385,6 +1636,7 @@ async fn install_agent_hook(agent: HookAgentId, app: tauri::AppHandle) -> Result
             }
             HookAgentId::OpenCode => {
                 let status = opencode_hook::install()?;
+                save_hook_installation_state(agent, true)?;
                 *opencode_state
                     .hook_error
                     .lock()
@@ -1410,6 +1662,7 @@ async fn uninstall_agent_hook(agent: HookAgentId, app: tauri::AppHandle) -> Resu
         match agent {
             HookAgentId::ClaudeCode => {
                 claude_hook::uninstall_claude_hooks()?;
+                save_hook_installation_state(agent, false)?;
                 *claude_state
                     .hook_error
                     .lock()
@@ -1419,6 +1672,7 @@ async fn uninstall_agent_hook(agent: HookAgentId, app: tauri::AppHandle) -> Resu
             HookAgentId::Codex => {
                 let project_dir = codex_hook_project_dir(&codex_state)?;
                 codex_hook::uninstall_codex_hooks(project_dir.as_deref().map(Path::new))?;
+                save_hook_installation_state(agent, false)?;
                 let message = "Codex Hook 未安装".to_string();
                 *codex_state
                     .hook_error
@@ -1433,6 +1687,7 @@ async fn uninstall_agent_hook(agent: HookAgentId, app: tauri::AppHandle) -> Resu
             }
             HookAgentId::OpenCode => {
                 opencode_hook::uninstall()?;
+                save_hook_installation_state(agent, false)?;
                 *opencode_state
                     .hook_error
                     .lock()
@@ -1458,14 +1713,64 @@ fn get_approval_settings(
 
 #[tauri::command]
 fn set_approval_settings(
+    app: tauri::AppHandle,
     state: tauri::State<'_, ApprovalIntegrationState>,
     mode: approval_policy::ApprovalMode,
+    minimal_mode: Option<bool>,
 ) -> Result<approval_policy::ApprovalSettings, String> {
-    let settings = approval_policy::ApprovalSettings { mode };
+    let current = state
+        .settings
+        .lock()
+        .map_err(|error| error.to_string())?
+        .clone();
+    let minimal_mode = if mode == approval_policy::ApprovalMode::Manual {
+        false
+    } else {
+        minimal_mode.unwrap_or(current.minimal_mode)
+    };
+    let settings = approval_policy::ApprovalSettings { mode, minimal_mode };
     approval_policy::save_settings(&settings)?;
     opencode_hook::sync_approval_mode(settings.mode)?;
     *state.settings.lock().map_err(|error| error.to_string())? = settings.clone();
+    let _ = app.emit(APPROVAL_SETTINGS_CHANGED_EVENT, &settings);
+    if let Err(error) = refresh_tray_menu(&app) {
+        eprintln!("Unable to refresh the tray approval state: {error}");
+    }
+    if let Some(window) = app.get_webview_window("main") {
+        if settings.minimal_mode {
+            schedule_main_window_close_for_minimal_mode(app.clone());
+        } else {
+            show_native_window_without_activation(&window)?;
+        }
+    }
     Ok(settings)
+}
+
+#[tauri::command]
+fn set_native_sound_settings(
+    state: tauri::State<'_, NativeSoundIntegrationState>,
+    enabled: bool,
+    volume: f32,
+    pack: native_sound::SoundPack,
+) -> Result<native_sound::NativeSoundSettings, String> {
+    let mut settings = state.settings.lock().map_err(|error| error.to_string())?;
+    settings.enabled = enabled;
+    settings.volume = volume.clamp(0.0, 1.0);
+    settings.pack = pack;
+    native_sound::save_settings(&settings)?;
+    Ok(settings.clone())
+}
+
+#[tauri::command]
+fn set_native_custom_sound(
+    state: tauri::State<'_, NativeSoundIntegrationState>,
+    event: native_sound::SoundEvent,
+    file_name: String,
+    bytes: Vec<u8>,
+) -> Result<native_sound::NativeSoundSettings, String> {
+    let mut settings = state.settings.lock().map_err(|error| error.to_string())?;
+    native_sound::save_custom_sound(event, &file_name, &bytes, &mut settings)?;
+    Ok(settings.clone())
 }
 
 #[tauri::command]
@@ -1652,6 +1957,7 @@ async fn codex_hook_install(
             &executable,
             selected_project.as_deref().map(std::path::Path::new),
         )?;
+        save_hook_installation_state(HookAgentId::Codex, true)?;
         if let Ok(mut error) = state.hook_error.lock() {
             *error = None;
         }
@@ -1843,15 +2149,19 @@ fn open_release_page() -> Result<(), String> {
 #[cfg(windows)]
 fn open_in_default_browser(url: &str) -> Result<(), String> {
     use windows::core::PCWSTR;
-    use windows::Win32::UI::{
-        Shell::ShellExecuteW, WindowsAndMessaging::SW_SHOWNORMAL,
-    };
+    use windows::Win32::UI::{Shell::ShellExecuteW, WindowsAndMessaging::SW_SHOWNORMAL};
 
     let wide: Vec<u16> = url.encode_utf16().chain(std::iter::once(0)).collect();
     let result = unsafe {
         ShellExecuteW(
             None,
-            PCWSTR("open".encode_utf16().chain(std::iter::once(0)).collect::<Vec<u16>>().as_ptr()),
+            PCWSTR(
+                "open"
+                    .encode_utf16()
+                    .chain(std::iter::once(0))
+                    .collect::<Vec<u16>>()
+                    .as_ptr(),
+            ),
             PCWSTR(wide.as_ptr()),
             None,
             None,
@@ -1868,7 +2178,11 @@ fn open_in_default_browser(url: &str) -> Result<(), String> {
 
 #[cfg(not(windows))]
 fn open_in_default_browser(url: &str) -> Result<(), String> {
-    if std::process::Command::new("xdg-open").arg(url).spawn().is_ok() {
+    if std::process::Command::new("xdg-open")
+        .arg(url)
+        .spawn()
+        .is_ok()
+    {
         return Ok(());
     }
     if std::process::Command::new("open").arg(url).spawn().is_ok() {
@@ -1893,10 +2207,102 @@ fn lan_address_qr_code(url: String) -> Result<String, String> {
         .build())
 }
 
+fn watch_tray_and_minimal_mode_sounds(app: tauri::AppHandle) {
+    thread::spawn(move || {
+        let mut observer = native_sound::NativeSoundObserver::default();
+        let mut was_minimal = false;
+        loop {
+            let claude_state = app.state::<ClaudeIntegrationState>();
+            let claude_snapshot = claude_snapshot(&claude_state);
+            let codex_state = app.state::<CodexIntegrationState>();
+            let codex_snapshot = codex_snapshot(&codex_state);
+            let opencode_state = app.state::<OpenCodeIntegrationState>();
+            let opencode_snapshot = opencode_snapshot(&opencode_state);
+
+            if let (Ok(claude), Ok(codex), Ok(opencode)) =
+                (&claude_snapshot, &codex_snapshot, &opencode_snapshot)
+            {
+                let active_session_count = claude
+                    .sessions
+                    .iter()
+                    .filter(|session| session.is_active())
+                    .count()
+                    + codex
+                        .sessions
+                        .iter()
+                        .filter(|session| session.is_active())
+                        .count()
+                    + opencode
+                        .sessions
+                        .iter()
+                        .filter(|session| session.is_active())
+                        .count();
+                let previous = app
+                    .state::<TrayMenuState>()
+                    .active_session_count
+                    .swap(active_session_count, Ordering::Relaxed);
+                if previous != active_session_count {
+                    if let Err(error) = refresh_tray_menu(&app) {
+                        eprintln!("Unable to refresh the tray session count: {error}");
+                    }
+                }
+            }
+
+            let minimal = app
+                .state::<ApprovalIntegrationState>()
+                .settings
+                .lock()
+                .map(|settings| settings.minimal_mode)
+                .unwrap_or(false);
+            if !minimal {
+                if was_minimal {
+                    observer.reset();
+                }
+                was_minimal = false;
+            } else {
+                was_minimal = true;
+                let sound_enabled = app
+                    .state::<NativeSoundIntegrationState>()
+                    .settings
+                    .lock()
+                    .map(|settings| settings.enabled)
+                    .unwrap_or(false);
+                if !sound_enabled {
+                    observer.reset();
+                } else {
+                    if let Ok(snapshot) = &claude_snapshot {
+                        if let Ok(value) = serde_json::to_value(snapshot) {
+                            observer.observe("claude", &value);
+                        }
+                    }
+                    if let Ok(snapshot) = &codex_snapshot {
+                        if let Ok(value) = serde_json::to_value(snapshot) {
+                            observer.observe("codex", &value);
+                        }
+                    }
+                    if let Ok(snapshot) = &opencode_snapshot {
+                        if let Ok(value) = serde_json::to_value(snapshot) {
+                            observer.observe("opencode", &value);
+                        }
+                    }
+                }
+            }
+            thread::sleep(Duration::from_secs(1));
+        }
+    });
+}
+
+fn should_prevent_windowless_exit(exit_code: Option<i32>, minimal_mode: bool) -> bool {
+    exit_code.is_none() && minimal_mode
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_single_instance::init(|app, _args, _cwd| {
+            if approval_policy::load_settings().minimal_mode {
+                return;
+            }
             REOPEN_REQUESTED.store(true, Ordering::Release);
             let _ = app.emit(REOPEN_REQUESTED_EVENT, ());
         }))
@@ -1904,6 +2310,8 @@ pub fn run() {
         .manage(CodexIntegrationState::default())
         .manage(OpenCodeIntegrationState::default())
         .manage(ApprovalIntegrationState::default())
+        .manage(NativeSoundIntegrationState::default())
+        .manage(TrayMenuState::default())
         .manage(PanelWindowState::default())
         .manage(PanelShapeState::default())
         .manage(lan_server::LanServerState::default())
@@ -1913,21 +2321,39 @@ pub fn run() {
                 .settings
                 .lock()
                 .map_err(|error| error.to_string())? = approval_settings.clone();
+            *app.state::<NativeSoundIntegrationState>()
+                .settings
+                .lock()
+                .map_err(|error| error.to_string())? = native_sound::load_settings();
             let _ = claude_hook::touch_app_heartbeat();
             thread::spawn(|| loop {
                 thread::sleep(Duration::from_secs(5));
                 let _ = claude_hook::touch_app_heartbeat();
             });
 
+            let mut hook_install_config = hook_config::load();
+            let executable = std::env::current_exe().ok();
+            let mut hook_config_changed = false;
+
             let integration_state = app.state::<ClaudeIntegrationState>();
+            let claude_configured = hook_install_config.is_enabled(HookAgentId::ClaudeCode);
+            let claude_hook_status = claude_hook::claude_hooks_installed();
+            if claude_hook_status == Ok(true) && !claude_configured {
+                hook_install_config.set_enabled(HookAgentId::ClaudeCode, true);
+                hook_config_changed = true;
+            }
             *integration_state
                 .hook_error
                 .lock()
-                .map_err(|error| error.to_string())? = match claude_hook::claude_hooks_installed() {
-                Ok(true) => std::env::current_exe()
-                    .map_err(|error| error.to_string())
-                    .and_then(|executable| claude_hook::install_claude_hooks(&executable))
-                    .err(),
+                .map_err(|error| error.to_string())? = match claude_hook_status {
+                Ok(true) => match executable.as_deref() {
+                    Some(executable) => claude_hook::install_claude_hooks(executable).err(),
+                    None => Some("Unable to locate the CodeCraft executable".to_string()),
+                },
+                Ok(false) if claude_configured => match executable.as_deref() {
+                    Some(executable) => claude_hook::install_claude_hooks(executable).err(),
+                    None => Some("Unable to locate the CodeCraft executable".to_string()),
+                },
                 Ok(false) => Some("Claude Code Hook 未安装".to_string()),
                 Err(error) => Some(error),
             };
@@ -1939,11 +2365,21 @@ pub fn run() {
                 .lock()
                 .map_err(|error| error.to_string())? = codex_hook_config.clone();
             let codex_project_dir = codex_hook_config.project_dir.as_deref().map(Path::new);
-            let codex_hook_error = match codex_hook::codex_hooks_installed(codex_project_dir) {
-                Ok(true) => std::env::current_exe()
-                    .map_err(|error| error.to_string())
-                    .and_then(|executable| install_codex_hooks(&executable, codex_project_dir))
-                    .err(),
+            let codex_configured = hook_install_config.is_enabled(HookAgentId::Codex);
+            let codex_hook_status = codex_hook::codex_hooks_installed(codex_project_dir);
+            if codex_hook_status == Ok(true) && !codex_configured {
+                hook_install_config.set_enabled(HookAgentId::Codex, true);
+                hook_config_changed = true;
+            }
+            let codex_hook_error = match codex_hook_status {
+                Ok(true) => match executable.as_deref() {
+                    Some(executable) => install_codex_hooks(executable, codex_project_dir).err(),
+                    None => Some("Unable to locate the CodeCraft executable".to_string()),
+                },
+                Ok(false) if codex_configured => match executable.as_deref() {
+                    Some(executable) => install_codex_hooks(executable, codex_project_dir).err(),
+                    None => Some("Unable to locate the CodeCraft executable".to_string()),
+                },
                 Ok(false) => Some("Codex Hook 未安装".to_string()),
                 Err(error) => Some(error),
             };
@@ -1952,8 +2388,30 @@ pub fn run() {
                 .lock()
                 .map_err(|error| error.to_string())? = codex_hook_error;
 
-            let opencode_error = match opencode_hook::status_and_sync() {
-                Ok(status) if status.installed() => status.error,
+            let opencode_configured = hook_install_config.is_enabled(HookAgentId::OpenCode);
+            let opencode_status = if opencode_configured {
+                opencode_hook::status_and_sync()
+            } else {
+                opencode_hook::status()
+            };
+            let opencode_error = match opencode_status {
+                Ok(status) if status.installed() => {
+                    if !opencode_configured {
+                        hook_install_config.set_enabled(HookAgentId::OpenCode, true);
+                        hook_config_changed = true;
+                    }
+                    status.error
+                }
+                Ok(status)
+                    if opencode_configured
+                        && status.state
+                            == opencode_hook::OpenCodeHookInstallState::NotInstalled =>
+                {
+                    match opencode_hook::install() {
+                        Ok(installed) => installed.error,
+                        Err(error) => Some(error),
+                    }
+                }
                 Ok(status) => status
                     .error
                     .or_else(|| Some("OpenCode Hook 未安装".to_string())),
@@ -1965,6 +2423,12 @@ pub fn run() {
                 .hook_error
                 .lock()
                 .map_err(|error| error.to_string())? = opencode_error.or(opencode_sync_error);
+
+            if hook_config_changed {
+                if let Err(error) = hook_config::save(&hook_install_config) {
+                    eprintln!("Unable to persist hook installation config: {error}");
+                }
+            }
 
             let lan_server_config = lan_config::load_config();
             let lan_enabled = lan_server_config.enabled;
@@ -1980,10 +2444,9 @@ pub fn run() {
                 }
             }
 
-            let quit = MenuItem::with_id(app, "quit", "\u{9000}\u{51fa}", true, None::<&str>)?;
-            let menu = Menu::with_items(app, &[&quit])?;
+            let menu = build_tray_menu(app.handle(), 0, &approval_settings)?;
 
-            TrayIconBuilder::new()
+            TrayIconBuilder::with_id(TRAY_ICON_ID)
                 .icon(
                     app.default_window_icon()
                         .expect("the application icon must be configured")
@@ -1996,24 +2459,28 @@ pub fn run() {
             let window = app
                 .get_webview_window("main")
                 .expect("the main webview window must be configured");
-            window.set_decorations(false)?;
-            window.set_focusable(true)?;
-            window.set_min_size(Some(LogicalSize::new(MIN_PANEL_WIDTH, MIN_PANEL_HEIGHT)))?;
-            window.set_max_size(Some(LogicalSize::new(MAX_PANEL_WIDTH, MAX_PANEL_HEIGHT)))?;
-            configure_native_window(&window)?;
-            window.set_size(LogicalSize::new(PANEL_WIDTH, COLLAPSED_HEIGHT))?;
-            apply_native_panel_region(
-                &window,
-                PANEL_WIDTH,
-                1.0,
-                COLLAPSED_HEIGHT,
-                COLLAPSED_HEIGHT,
-                COLLAPSED_HEIGHT,
-                0.0,
-            )?;
-            center_on_primary_monitor(&window)?;
-            show_native_window_without_activation(&window)?;
-            watch_primary_monitor(window);
+            configure_main_window(&window)?;
+            if !approval_settings.minimal_mode {
+                show_native_window_without_activation(&window)?;
+                watch_primary_monitor(window);
+            } else {
+                let app = app.handle().clone();
+                thread::spawn(move || {
+                    thread::sleep(Duration::from_millis(80));
+                    let still_minimal = app
+                        .state::<ApprovalIntegrationState>()
+                        .settings
+                        .lock()
+                        .map(|settings| settings.minimal_mode)
+                        .unwrap_or(false);
+                    if still_minimal {
+                        if let Some(window) = app.get_webview_window("main") {
+                            let _ = window.close();
+                        }
+                    }
+                });
+            }
+            watch_tray_and_minimal_mode_sounds(app.handle().clone());
 
             Ok(())
         })
@@ -2055,10 +2522,15 @@ pub fn run() {
             );
         })
         .on_menu_event(|app, event| {
-            if event.id().as_ref() == "quit" {
-                // Release the LAN port before the process goes away.
-                let _ = lan_server::stop(app);
-                app.exit(0);
+            match event.id().as_ref() {
+                "settings" => request_settings_from_tray(app),
+                "minimal-mode" => toggle_minimal_mode_from_tray(app),
+                "quit" => {
+                    // Release the LAN port before the process goes away.
+                    let _ = lan_server::stop(app);
+                    app.exit(0);
+                }
+                _ => {}
             }
         })
         .invoke_handler(tauri::generate_handler![
@@ -2067,9 +2539,12 @@ pub fn run() {
             move_panel_horizontally,
             show_panel_for_attention,
             take_reopen_request,
+            take_open_settings_request,
             focus_codex_window,
             get_approval_settings,
             set_approval_settings,
+            set_native_sound_settings,
+            set_native_custom_sound,
             list_claude_sessions,
             claude_hook_install,
             list_hook_integrations,
@@ -2099,13 +2574,46 @@ pub fn run() {
             lan_address_qr_code,
             open_release_page
         ])
-        .run(tauri::generate_context!())
-        .expect("error while running CodeCraft");
+        .build(tauri::generate_context!())
+        .expect("error while building CodeCraft")
+        .run(|app, event| {
+            if let tauri::RunEvent::ExitRequested { code, api, .. } = event {
+                let minimal_mode = app
+                    .state::<ApprovalIntegrationState>()
+                    .settings
+                    .lock()
+                    .map(|settings| settings.minimal_mode)
+                    .unwrap_or(false);
+                if should_prevent_windowless_exit(code, minimal_mode) {
+                    api.prevent_exit();
+                }
+            }
+        });
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn minimal_mode_keeps_the_backend_alive_without_a_webview() {
+        assert!(should_prevent_windowless_exit(None, true));
+        assert!(!should_prevent_windowless_exit(None, false));
+        assert!(!should_prevent_windowless_exit(Some(0), true));
+    }
+
+    #[test]
+    fn minimal_mode_menu_requires_an_automatic_approval_mode() {
+        assert!(!minimal_mode_menu_available(
+            approval_policy::ApprovalMode::Manual
+        ));
+        assert!(minimal_mode_menu_available(
+            approval_policy::ApprovalMode::Risk
+        ));
+        assert!(minimal_mode_menu_available(
+            approval_policy::ApprovalMode::Automatic
+        ));
+    }
 
     #[test]
     fn finds_codex_hosts_by_process_or_attention_title() {

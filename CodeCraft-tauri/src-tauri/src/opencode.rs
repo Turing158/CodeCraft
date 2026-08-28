@@ -37,6 +37,12 @@ pub(crate) enum OpenCodeSessionStatus {
     Idle,
 }
 
+impl OpenCodeSessionStatus {
+    fn is_active(self) -> bool {
+        !matches!(self, Self::Idle | Self::Stopped)
+    }
+}
+
 #[derive(Clone, Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub(crate) struct OpenCodeActivity {
@@ -172,6 +178,12 @@ pub(crate) struct OpenCodeSession {
     activities: Vec<OpenCodeActivity>,
     outputs: Vec<OpenCodeOutput>,
     pending_reviews: Vec<OpenCodeReview>,
+}
+
+impl OpenCodeSession {
+    pub(crate) fn is_active(&self) -> bool {
+        self.status.is_active()
+    }
 }
 
 #[derive(Clone, Debug, Serialize)]

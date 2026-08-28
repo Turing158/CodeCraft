@@ -639,6 +639,30 @@ const approvalModeInputs = panel
       panel.querySelectorAll<HTMLInputElement>('input[name="approval-mode"]'),
     )
   : [];
+const approvalModeConfirmDialog = panel?.querySelector<HTMLDialogElement>(
+  "#approval-mode-confirm-dialog",
+);
+const approvalModeConfirmCancelButton = panel?.querySelector<HTMLButtonElement>(
+  "#approval-mode-confirm-cancel",
+);
+const approvalModeConfirmAcceptButton = panel?.querySelector<HTMLButtonElement>(
+  "#approval-mode-confirm-accept",
+);
+const minimalModeSettings = panel?.querySelector<HTMLElement>(
+  "#minimal-mode-settings",
+);
+const minimalModeInput = panel?.querySelector<HTMLInputElement>(
+  "#approval-minimal-mode",
+);
+const minimalModeConfirmDialog = panel?.querySelector<HTMLDialogElement>(
+  "#approval-minimal-confirm-dialog",
+);
+const minimalModeConfirmCancelButton = panel?.querySelector<HTMLButtonElement>(
+  "#approval-minimal-confirm-cancel",
+);
+const minimalModeConfirmAcceptButton = panel?.querySelector<HTMLButtonElement>(
+  "#approval-minimal-confirm-accept",
+);
 const autoCollapseDelayInput = panel?.querySelector<HTMLInputElement>(
   "#auto-collapse-delay",
 );
@@ -1171,6 +1195,30 @@ const loadSoundPreference = (): SoundSettings => {
 let soundPreference = loadSoundPreference();
 const soundPlayer = createSoundPlayer(() => soundPreference);
 
+const syncNativeCustomSound = async (event: SoundEvent) => {
+  if (!("__TAURI_INTERNALS__" in window)) return;
+  const file = await soundPlayer.customFile(event);
+  if (!file) return;
+  const fileName =
+    file instanceof File
+      ? file.name
+      : soundPreference.customFiles[event] ?? `${event}.audio`;
+  const bytes = Array.from(new Uint8Array(await file.arrayBuffer()));
+  await invoke("set_native_custom_sound", { event, fileName, bytes });
+};
+
+const syncNativeSoundSettings = async (includeCustomFiles = false) => {
+  if (!("__TAURI_INTERNALS__" in window)) return;
+  await invoke("set_native_sound_settings", {
+    enabled: soundPreference.enabled,
+    volume: soundPreference.volume,
+    pack: soundPreference.pack,
+  });
+  if (includeCustomFiles && soundPreference.pack === "custom") {
+    await Promise.all(SOUND_EVENTS.map(syncNativeCustomSound));
+  }
+};
+
 const persistSoundPreference = () => {
   try {
     window.localStorage.setItem(
@@ -1233,6 +1281,9 @@ const updateSoundPreference = (changes: Partial<SoundSettings>) => {
   soundPreference = { ...soundPreference, ...changes };
   persistSoundPreference();
   syncSoundControls();
+  void syncNativeSoundSettings().catch((error: unknown) => {
+    console.error("Unable to sync native sound settings", error);
+  });
 };
 
 const setCustomSoundStatus = (message = "") => {
@@ -1547,7 +1598,12 @@ const QUESTION_OPTION_ENTER_MS = 220;
 const QUESTION_EXTRA_TRANSITION_MS = 90;
 const QUESTION_ACTION_TRANSITION_MS = 90;
 const REOPEN_REQUESTED_EVENT = "reopen-requested";
+const OPEN_SETTINGS_REQUESTED_EVENT = "open-settings-requested";
+const APPROVAL_SETTINGS_CHANGED_EVENT = "approval-settings-changed";
 const isTauriRuntime = "__TAURI_INTERNALS__" in window;
+void syncNativeSoundSettings().catch((error: unknown) => {
+  console.error("Unable to initialize native sound settings", error);
+});
 
 aboutAppIcon.src = codeCraftIconUrl;
 
@@ -5221,36 +5277,116 @@ sessionCleanupCustomMinutesInput.addEventListener("change", () => {
 syncSessionCleanupControls();
 
 type ApprovalMode = "manual" | "risk" | "automatic";
-type ApprovalSettings = { mode: ApprovalMode };
+type ApprovalSettings = { mode: ApprovalMode; minimalMode: boolean };
 const APPROVAL_SETTINGS_STORAGE_KEY = "codecraft.approval-settings";
-let approvalSettings: ApprovalSettings = { mode: "manual" };
+let approvalSettings: ApprovalSettings = { mode: "manual", minimalMode: false };
 
 const loadApprovalSettings = () => {
   try {
     const stored = JSON.parse(
       window.localStorage.getItem(APPROVAL_SETTINGS_STORAGE_KEY) ?? "null",
-    ) as { mode?: unknown } | null;
+    ) as { mode?: unknown; minimalMode?: unknown } | null;
+    const minimalMode = stored?.minimalMode === true;
     if (stored?.mode === "permission") {
-      return { mode: "risk" } satisfies ApprovalSettings;
+      return { mode: "risk", minimalMode } satisfies ApprovalSettings;
     }
     if (
       stored?.mode === "manual" ||
       stored?.mode === "risk" ||
       stored?.mode === "automatic"
     ) {
-      return { mode: stored.mode } satisfies ApprovalSettings;
+      return {
+        mode: stored.mode,
+        minimalMode: stored.mode === "manual" ? false : minimalMode,
+      } satisfies ApprovalSettings;
     }
   } catch {
     // Use the safe default when browser storage is unavailable or malformed.
   }
-  return { mode: "manual" as const };
+  return { mode: "manual" as const, minimalMode: false };
 };
 
 const syncApprovalControls = () => {
   for (const input of approvalModeInputs) {
     input.checked = input.value === approvalSettings.mode;
   }
+  if (minimalModeSettings) {
+    minimalModeSettings.hidden = approvalSettings.mode === "manual";
+  }
+  if (minimalModeInput) {
+    minimalModeInput.checked = approvalSettings.minimalMode;
+  }
 };
+
+const showConfirmation = (
+  dialog: HTMLDialogElement | null | undefined,
+  cancelButton: HTMLButtonElement | null | undefined,
+  acceptButton: HTMLButtonElement | null | undefined,
+  fallbackMessage: string,
+): Promise<boolean> => {
+  if (
+    !dialog ||
+    typeof dialog.showModal !== "function" ||
+    !cancelButton ||
+    !acceptButton
+  ) {
+    return Promise.resolve(window.confirm(fallbackMessage));
+  }
+
+  dialog.returnValue = "cancel";
+  dialog.classList.remove("is-visible", "is-closing");
+  dialog.showModal();
+  window.requestAnimationFrame(() => {
+    if (dialog.open) dialog.classList.add("is-visible");
+  });
+  return new Promise((resolve) => {
+    let closing = false;
+    const finish = (confirmed: boolean) => {
+      if (closing) return;
+      closing = true;
+      dialog.returnValue = confirmed ? "confirm" : "cancel";
+      dialog.classList.remove("is-visible");
+      dialog.classList.add("is-closing");
+      window.setTimeout(() => {
+        if (dialog.open) dialog.close();
+        else dialog.classList.remove("is-closing");
+      }, 180);
+    };
+    const handleCancel = (event: Event) => {
+      event.preventDefault();
+      finish(false);
+    };
+    const handleCancelButton = () => finish(false);
+    const handleAcceptButton = () => finish(true);
+    const handleClose = () => {
+      dialog.classList.remove("is-visible", "is-closing");
+      dialog.removeEventListener("cancel", handleCancel);
+      cancelButton.removeEventListener("click", handleCancelButton);
+      acceptButton.removeEventListener("click", handleAcceptButton);
+      resolve(dialog.returnValue === "confirm");
+    };
+    dialog.addEventListener("cancel", handleCancel);
+    cancelButton.addEventListener("click", handleCancelButton);
+    acceptButton.addEventListener("click", handleAcceptButton);
+    dialog.addEventListener("close", handleClose, { once: true });
+  });
+};
+
+const showApprovalModeConfirmation = () =>
+  showConfirmation(
+    approvalModeConfirmDialog,
+    approvalModeConfirmCancelButton,
+    approvalModeConfirmAcceptButton,
+    "开启后，工具调用将自动通过，包括可能修改或删除文件的操作。请确认你了解并接受此风险。",
+  );
+
+const showMinimalModeConfirmation = () =>
+  showConfirmation(
+    minimalModeConfirmDialog,
+    minimalModeConfirmCancelButton,
+    minimalModeConfirmAcceptButton,
+    "开启后将隐藏桌面面板，只保留音效、当前审批策略和局域网功能；请确认继续。",
+  );
 
 const refreshApprovalSettings = async () => {
   approvalSettings = loadApprovalSettings();
@@ -5266,8 +5402,14 @@ const refreshApprovalSettings = async () => {
   syncApprovalControls();
 };
 
-const updateApprovalSettings = async (mode: ApprovalMode) => {
-  approvalSettings = { mode };
+const updateApprovalSettings = async (
+  mode: ApprovalMode,
+  minimalMode = approvalSettings.minimalMode,
+) => {
+  approvalSettings = {
+    mode,
+    minimalMode: mode === "manual" ? false : minimalMode,
+  };
   try {
     window.localStorage.setItem(
       APPROVAL_SETTINGS_STORAGE_KEY,
@@ -5282,6 +5424,7 @@ const updateApprovalSettings = async (mode: ApprovalMode) => {
         "set_approval_settings",
         {
           mode,
+          minimalMode: approvalSettings.minimalMode,
         },
       );
     } catch (error) {
@@ -5292,8 +5435,20 @@ const updateApprovalSettings = async (mode: ApprovalMode) => {
 };
 
 for (const input of approvalModeInputs) {
-  input.addEventListener("change", () => {
-    if (input.checked) void updateApprovalSettings(input.value as ApprovalMode);
+  input.addEventListener("change", async () => {
+    if (!input.checked) return;
+    const mode = input.value as ApprovalMode;
+    if (mode !== "automatic") {
+      void updateApprovalSettings(mode);
+      return;
+    }
+
+    const confirmed = await showApprovalModeConfirmation();
+    if (confirmed) {
+      void updateApprovalSettings(mode);
+    } else {
+      syncApprovalControls();
+    }
   });
 }
 
@@ -6717,6 +6872,9 @@ for (const input of customSoundInputs) {
             [event]: fileName,
           },
         });
+        void syncNativeCustomSound(event).catch((error: unknown) => {
+          console.error("Unable to sync the custom native sound", error);
+        });
         setCustomSoundStatus(`已保存“${fileName}”`);
         void soundPlayer.previewCustom(event);
       })
@@ -6986,14 +7144,16 @@ displayedSettingsSection =
 requestedSettingsSection = displayedSettingsSection;
 syncSettingsPanel(initialSettingsNavItem);
 
-settingsOpenButton.addEventListener("click", () => {
+const openSettingsView = () => {
   switchContentView("settings");
   settingsBackButton.focus({ preventScroll: true });
   window.requestAnimationFrame(() => {
     syncSettingsNavIndicator();
     syncSettingsNavOverflow();
   });
-});
+};
+
+settingsOpenButton.addEventListener("click", openSettingsView);
 
 settingsBackButton.addEventListener("click", () => {
   switchContentView("sessions");
@@ -7383,6 +7543,20 @@ const renderSessionSnapshot = (snapshot: ClaudeSessionSnapshot) => {
   }
 };
 
+const updateMinimalMode = async (enabled: boolean) => {
+  if (!enabled) {
+    await updateApprovalSettings(approvalSettings.mode, false);
+    return;
+  }
+  const confirmed = await showMinimalModeConfirmation();
+  if (confirmed) {
+    await syncNativeSoundSettings(true);
+    await updateApprovalSettings(approvalSettings.mode, true);
+  } else {
+    syncApprovalControls();
+  }
+};
+
 const refreshClaudeSessions = async () => {
   if (refreshingSessions || !isTauriRuntime) return;
   refreshingSessions = true;
@@ -7466,6 +7640,11 @@ if (document.fonts) {
     refreshPlanPreviewClippedState();
   });
 }
+
+minimalModeInput?.addEventListener("change", () => {
+  if (!minimalModeInput) return;
+  void updateMinimalMode(minimalModeInput.checked);
+});
 
 interface CodeCraftContextData {
   kind: "panel" | "session" | "working-square";
@@ -7716,6 +7895,8 @@ const tooltip = new TooltipController();
 
 const startupSequencePromise = runStartupSequence();
 let stopReopenRequestedListener: UnlistenFn | undefined;
+let stopOpenSettingsRequestedListener: UnlistenFn | undefined;
+let stopApprovalSettingsChangedListener: UnlistenFn | undefined;
 
 const handleReopenRequest = async () => {
   if (!(await invoke<boolean>("take_reopen_request"))) return;
@@ -7726,7 +7907,45 @@ const handleReopenRequest = async () => {
   await invoke("show_panel_for_attention");
 };
 
+const handleOpenSettingsRequest = async () => {
+  if (!(await invoke<boolean>("take_open_settings_request"))) return;
+
+  await startupSequencePromise;
+  openSettingsView();
+  await controller.revealIfCollapsed();
+};
+
 if (isTauriRuntime) {
+  void listen<ApprovalSettings>(APPROVAL_SETTINGS_CHANGED_EVENT, (event) => {
+    approvalSettings = event.payload;
+    try {
+      window.localStorage.setItem(
+        APPROVAL_SETTINGS_STORAGE_KEY,
+        JSON.stringify(approvalSettings),
+      );
+    } catch {
+      // The native settings remain authoritative.
+    }
+    syncApprovalControls();
+  })
+    .then((unlisten) => {
+      stopApprovalSettingsChangedListener = unlisten;
+    })
+    .catch((error: unknown) => {
+      console.error("Unable to register approval settings updates", error);
+    });
+  void listen(OPEN_SETTINGS_REQUESTED_EVENT, () => {
+    void handleOpenSettingsRequest().catch((error: unknown) => {
+      console.error("Unable to open settings from the tray", error);
+    });
+  })
+    .then((unlisten) => {
+      stopOpenSettingsRequestedListener = unlisten;
+      return handleOpenSettingsRequest();
+    })
+    .catch((error: unknown) => {
+      console.error("Unable to register the tray settings handler", error);
+    });
   void listen(REOPEN_REQUESTED_EVENT, () => {
     void handleReopenRequest().catch((error: unknown) => {
       console.error("Unable to reopen the CodeCraft panel", error);
@@ -8159,6 +8378,8 @@ panel.addEventListener("focusout", (event) => {
 
 window.addEventListener("beforeunload", () => {
   stopReopenRequestedListener?.();
+  stopOpenSettingsRequestedListener?.();
+  stopApprovalSettingsChangedListener?.();
   contextMenu.destroy();
   tooltip.destroy();
   activeNativeAnimations = 0;

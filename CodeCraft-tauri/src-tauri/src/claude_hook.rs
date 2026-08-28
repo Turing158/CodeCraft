@@ -46,6 +46,12 @@ pub(crate) enum ClaudeSessionStatus {
     Idle,
 }
 
+impl ClaudeSessionStatus {
+    fn is_active(self) -> bool {
+        !matches!(self, Self::Idle | Self::Stopped)
+    }
+}
+
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub(crate) enum ClaudeActivityStatus {
@@ -181,6 +187,12 @@ pub(crate) struct ClaudeSession {
     outputs: Vec<ClaudeOutputEntry>,
     #[serde(skip)]
     transcript_path: Option<PathBuf>,
+}
+
+impl ClaudeSession {
+    pub(crate) fn is_active(&self) -> bool {
+        self.status.is_active()
+    }
 }
 
 #[derive(Debug, Deserialize, Serialize)]
