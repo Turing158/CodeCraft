@@ -522,7 +522,9 @@ const updateSessionCardView = (view: SessionCardView, entry: ConsoleEntry) => {
         ? "Codex"
         : entry.source === "opencode"
           ? "OpenCode"
-          : "PI",
+          : entry.source === "pi"
+            ? "PI"
+            : "DeepSeek Harness",
     motion,
   );
   swapText(view.title, entry.title, motion);
@@ -757,8 +759,10 @@ const renderReview = (entry: ConsoleEntry | undefined) => {
       const isCodex = entry.source === "codex";
       const isOpenCode = entry.source === "opencode";
       const isPi = entry.source === "pi";
+      const isDsh = entry.source === "dsh";
       const openCodeTarget = pending.openCode;
       const piTarget = pending.pi;
+      const dshTarget = pending.dsh;
       const openCodePermission = (action: "once" | "always" | "reject") =>
         openCodeTarget
           ? api.submitOpenCodePermission(openCodeTarget, action)
@@ -775,7 +779,13 @@ const renderReview = (entry: ConsoleEntry | undefined) => {
                     : openCodePermission("once")
                   : isPi && piTarget
                     ? api.submitPiPermission(piTarget, pending.requestId, "allowOnce")
-                    : api.submitPermission(pending.requestId, "allow"),
+                    : isDsh && dshTarget
+                      ? api.submitDshPermission(
+                          dshTarget,
+                          pending.requestId,
+                          "allowOnce",
+                        )
+                      : api.submitPermission(pending.requestId, "allow"),
             "已允许一次",
           );
         }),
@@ -811,7 +821,13 @@ const renderReview = (entry: ConsoleEntry | undefined) => {
                     : openCodePermission("reject")
                   : isPi && piTarget
                     ? api.submitPiPermission(piTarget, pending.requestId, "deny")
-                    : api.submitPermission(pending.requestId, "deny"),
+                    : isDsh && dshTarget
+                      ? api.submitDshPermission(
+                          dshTarget,
+                          pending.requestId,
+                          "deny",
+                        )
+                      : api.submitPermission(pending.requestId, "deny"),
             "已拒绝",
           );
         }),
@@ -823,14 +839,51 @@ const renderReview = (entry: ConsoleEntry | undefined) => {
     questionRequestId = undefined;
     reviewQuestions.replaceChildren();
     if (actionable) {
+      const isDsh = entry.source === "dsh" && pending.dsh;
       reviewActions.append(
-        actionButton("按计划执行", "primary", () => {
+        actionButton(isDsh ? "批准计划" : "按计划执行", "primary", () => {
           void guardedSubmit(
-            () => api.submitPlan(pending.requestId, null),
-            "已开始按计划执行",
+            () =>
+              isDsh
+                ? api.submitDshPlan(
+                    pending.dsh!,
+                    pending.requestId,
+                    true,
+                    null,
+                  )
+                : api.submitPlan(pending.requestId, null),
+            isDsh ? "已批准计划" : "已开始按计划执行",
           );
         }),
       );
+      if (isDsh) {
+        const feedbackBlock = document.createElement("div");
+        feedbackBlock.className = "question__extra";
+        const feedback = document.createElement("textarea");
+        feedback.placeholder = "输入反馈，让 DeepSeek Harness 继续规划";
+        feedback.disabled = submitting;
+        feedbackBlock.append(feedback);
+        reviewQuestions.append(feedbackBlock);
+        reviewActions.append(
+          actionButton("继续规划", "default", () => {
+            const note = feedback.value.trim();
+            if (!note) {
+              feedback.focus();
+              return;
+            }
+            void guardedSubmit(
+              () =>
+                api.submitDshPlan(
+                  pending.dsh!,
+                  pending.requestId,
+                  false,
+                  note,
+                ),
+              "已提交计划反馈",
+            );
+          }),
+        );
+      }
     }
   } else if (pending.kind === "question" && pending.question) {
     reviewTool.textContent = pending.question.questions[0]?.header ?? "需要回答";
@@ -856,7 +909,13 @@ const renderReview = (entry: ConsoleEntry | undefined) => {
                   ...(answer.extraText?.trim() ? [answer.extraText.trim()] : []),
                 ]),
               )
-            : api.submitQuestion(submission.requestId, submission.answers);
+            : entry.source === "dsh" && pending.dsh
+              ? api.submitDshQuestion(
+                  pending.dsh,
+                  submission.requestId,
+                  submission.answers,
+                )
+              : api.submitQuestion(submission.requestId, submission.answers);
         void guardedSubmit(() => action, "已提交回答");
       });
       submit.disabled = submit.disabled || !answered;
@@ -915,7 +974,9 @@ const renderDetail = () => {
         ? "Codex"
         : entry.source === "opencode"
           ? "OpenCode"
-          : "PI",
+          : entry.source === "pi"
+            ? "PI"
+            : "DeepSeek Harness",
     entry.cwd ? "目录：" + entry.cwd : undefined,
     "更新于 " + formatSessionTime(entry.updatedAt),
   ]

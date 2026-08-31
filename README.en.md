@@ -23,7 +23,7 @@ A lightweight desktop workbench focused on AI coding sessions · Built for Windo
 
 ## What is this?
 
-If you use AI coding assistants like **Claude Code**, **Codex**, or **OpenCode**, you have probably run into this:
+If you use AI coding assistants like **Claude Code**, **Codex**, **OpenCode**, **PI**, or **DeepSeek Harness**, you have probably run into this:
 
 - You hand it a task, then sit there staring at a black terminal window with no idea whether it has finished;
 - Halfway through it asks "can I run this command?", you don't notice, and it just waits forever;
@@ -37,7 +37,7 @@ CodeCraft exists to fix that. Most of the time it's just an almost invisible sli
 
 | | Capability | Details |
 | :---: | --- | --- |
-| 📋 | **All sessions in one place** | Every task from Claude Code, Codex, and OpenCode side by side, with status at a glance: working, waiting for input, needs attention, done, failed. |
+| 📋 | **All sessions in one place** | Tasks from Claude Code, Codex, OpenCode, PI, and DeepSeek Harness side by side, with status at a glance: working, waiting for input, needs attention, done, failed. |
 | ✅ | **One-click approval** | When an assistant wants to run a command or edit a file, the request pops up on the panel. Click "Allow once", "Always allow", or "Deny" — no need to switch back to the terminal. |
 | ❓ | **Answer on its behalf** | When an assistant asks a question, pick an option or type a note right in the panel, and the answer is sent back to it. |
 | 📝 | **Confirm plans** | Once an assistant lays out its plan, you decide: click "Run plan" to let it start, or write down what to change so it revises first. |
@@ -55,8 +55,12 @@ CodeCraft doesn't write code itself — it watches the AI coding assistants belo
 | <img src="docs/assets/agent-claude-code.svg" width="20" height="20" align="absmiddle" alt="" />&nbsp; **Claude Code**<br /><sub>Anthropic</sub> | The most complete support. Session status, tool calls, and live transcripts are all visible, and approvals, answering questions, and confirming plans can all be done right in the panel without returning to the terminal. |
 | <img src="docs/assets/agent-codex.svg" width="20" height="20" align="absmiddle" alt="" />&nbsp; **Codex**<br /><sub>OpenAI</sub> | Session status and tool-call approvals can be handled in the panel. Its questions and plan confirmations are read-only and must be completed back in the original Codex window; the panel offers a jump button to get you there. |
 | <img src="docs/assets/agent-opencode.svg" width="20" height="20" align="absmiddle" alt="" />&nbsp; **OpenCode**<br /><sub>opencode.ai</sub> | Session status, tool calls, native permission approvals, and questions can all be handled in the panel. Permission decisions support "Allow once", "Always allow", and "Deny", plus an optional all-tool gate mode that routes every tool call through you first. Plan confirmation isn't wired up yet and must be completed back in the OpenCode window. |
+| **PI** | Sessions, tool activity, permissions, and questions are available in the panel and LAN console. It supports allow once, allow for the session, and deny; plan review is not connected yet. |
+| <img src="docs/assets/agent-deepseek.svg" width="20" height="20" align="absmiddle" alt="" />&nbsp; **DeepSeek Harness**<br /><sub>DeepSeek</sub> | A user-level native plugin synchronizes sessions, responses, tool activity, questions, and plan review. Permissions follow DSH's one-shot semantics, so only "Allow once" and "Deny" are offered. Plans can be approved or returned with feedback for further planning. |
 
-All three agents can run at the same time. The filter buttons at the top of the panel let you look at just one of them, or "All" together.
+All five agents can run at the same time. The filter buttons at the top of the panel let you look at just one of them, or "All" together.
+
+> DeepSeek Harness is currently a Developer Preview. CodeCraft primarily targets `@deepseek-ai/dsh@0.1.1-rc.2` and also supports `0.1.2-alpha.2`; the local bridge rejects interactions when the runtime version is unknown or outside this compatibility list.
 
 ## Getting started
 
@@ -66,13 +70,15 @@ Run the installer, then start CodeCraft. It won't appear in the taskbar — move
 
 **2. Connect your AI assistant (the key step)**
 
-Expand the panel → click ⚙️ in the top right → **General → Hook management** → click Claude Code, Codex, or OpenCode to install.
+Expand the panel → click ⚙️ in the top right → **General → Hook management** → click the agent you want to connect.
 
 What does this do? CodeCraft adds a "notification hook" to that assistant's configuration so it proactively tells CodeCraft when it starts working, wants to call a tool, or finishes a task. Without it, the panel stays empty. You can uninstall from the same place at any time, and your configuration is restored.
 
+DeepSeek Harness uses `cordis.patch.yml` and a local ESM plugin under `$DSH_HOME` (default `~/.dsh`). CodeCraft only manages its marked configuration block, writes `.bak` files before changes, and preserves other plugins and overlay entries during uninstall.
+
 **3. Use your assistant as usual**
 
-Let Claude Code, Codex, or OpenCode work in the terminal as you normally would. Session cards then appear on the panel by themselves, and when there's a request to handle, the panel expands automatically to get your attention.
+Use any connected agent as you normally would. Session cards then appear on the panel by themselves, and when there's a request to handle, the panel expands automatically to get your attention.
 
 ## Remote viewing from phone / tablet
 
@@ -92,14 +98,14 @@ A few security notes:
 
 - **Auto-collapse**: the panel shrinks back to a thin line about 0.25s after your mouse leaves; while tasks are running, a small live status strip stays visible.
 - **Auto-cleanup**: idle or stopped sessions are moved out of the list after a configurable time (30 minutes by default). Sessions that are working or waiting on you are left alone.
-- **Auto-approval**: all three agents share one policy — confirm each one manually, auto-approve only low-risk commands, or auto-approve everything.
+- **Auto-approval**: all connected agents share one policy — confirm each one manually, auto-approve only low-risk commands, or auto-approve everything. DSH does not expose a persistent "Always allow" action.
 - **Position as you like**: drag it left and right along the top edge, or snap it left, center, or right in one click.
 
 ## Requirements
 
 - Windows 10 / 11 (the panel docks to the top of your primary display)
 - The system's built-in WebView2 runtime (already included in Win11)
-- At least one of Claude Code, Codex, or OpenCode installed. CodeCraft contains no AI model itself and never calls any API on your behalf.
+- At least one supported agent installed. CodeCraft contains no AI model itself and never calls any API on your behalf.
 
 Session data, settings, and approval records are all stored in a local directory on your own machine.
 

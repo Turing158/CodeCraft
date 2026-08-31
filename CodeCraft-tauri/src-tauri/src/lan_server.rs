@@ -33,6 +33,7 @@ use crate::{
     approval_policy,
     claude_hook::{self, ClaudeQuestionAnswer, PermissionDecision, PlanExecutionMode},
     codex::CodexApprovalDecision,
+    dsh::{DshApprovalDecision, DshQuestionAnswer},
     lan_auth::{
         cleared_session_cookie, cookie_value, session_cookie, AuthOutcome, LanAuthStore,
         SESSION_COOKIE,
@@ -40,7 +41,7 @@ use crate::{
     lan_config::{self, LanBindMode, LanServerConfig},
     lan_net,
     pi::{PiApprovalDecision, PiQuestionAnswer},
-    ApprovalIntegrationState, ClaudeIntegrationState, CodexIntegrationState,
+    ApprovalIntegrationState, ClaudeIntegrationState, CodexIntegrationState, DshIntegrationState,
     OpenCodeIntegrationState, PiIntegrationState,
 };
 
@@ -232,12 +233,17 @@ fn snapshot_value(app: &tauri::AppHandle) -> Value {
         .ok()
         .and_then(|snapshot| serde_json::to_value(snapshot).ok())
         .unwrap_or(Value::Null);
+    let dsh = crate::dsh_snapshot(&app.state::<DshIntegrationState>())
+        .ok()
+        .and_then(|snapshot| serde_json::to_value(snapshot).ok())
+        .unwrap_or(Value::Null);
     // Per-agent install state drives which agent cards the console shows. The
     // desktop panel already relies on this list for its hook settings, so the
     // LAN console reads the same source of truth.
     let integrations = crate::hook_statuses(
         &app.state::<CodexIntegrationState>(),
         &app.state::<OpenCodeIntegrationState>(),
+        &app.state::<DshIntegrationState>(),
     )
     .ok()
     .and_then(|list| serde_json::to_value(list).ok())
@@ -263,6 +269,7 @@ fn snapshot_value(app: &tauri::AppHandle) -> Value {
         "codex": codex,
         "opencode": opencode,
         "pi": pi,
+        "dsh": dsh,
         "integrations": integrations,
     })
 }
@@ -537,6 +544,37 @@ struct PiQuestionBody {
     answers: Vec<PiQuestionAnswer>,
 }
 
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct DshPermissionBody {
+    bridge_instance_id: String,
+    plugin_instance_id: String,
+    session_id: String,
+    request_id: String,
+    decision: DshApprovalDecision,
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct DshQuestionBody {
+    bridge_instance_id: String,
+    plugin_instance_id: String,
+    session_id: String,
+    request_id: String,
+    answers: Vec<DshQuestionAnswer>,
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct DshPlanBody {
+    bridge_instance_id: String,
+    plugin_instance_id: String,
+    session_id: String,
+    request_id: String,
+    approved: bool,
+    feedback: Option<String>,
+}
+
 /// Runs a write handler after the shared access checks, then records the audit
 /// line when the config asks for it.
 fn with_write_access<F>(
@@ -732,6 +770,96 @@ async fn post_pi_question(
     )
 }
 
+async fn post_dsh_permission(
+    State(http_state): State<LanHttpState>,
+    ConnectInfo(client): ConnectInfo<SocketAddr>,
+    headers: HeaderMap,
+    Json(body): Json<DshPermissionBody>,
+) -> Response {
+    let app = http_state.app.clone();
+    let decision_label = match body.decision {
+        DshApprovalDecision::AllowOnce => "allowOnce",
+        DshApprovalDecision::Deny => "deny",
+    };
+    with_write_access(
+        &http_state,
+        &headers,
+        client,
+        "dsh-permission",
+        &body.request_id,
+        decision_label,
+        || {
+            crate::apply_dsh_approval(
+                &app.state::<DshIntegrationState>(),
+                &body.bridge_instance_id,
+                &body.plugin_instance_id,
+                &body.session_id,
+                &body.request_id,
+                body.decision,
+            )
+        },
+    )
+}
+
+async fn post_dsh_question(
+    State(http_state): State<LanHttpState>,
+    ConnectInfo(client): ConnectInfo<SocketAddr>,
+    headers: HeaderMap,
+    Json(body): Json<DshQuestionBody>,
+) -> Response {
+    let app = http_state.app.clone();
+    with_write_access(
+        &http_state,
+        &headers,
+        client,
+        "dsh-question",
+        &body.request_id,
+        "answer",
+        || {
+            crate::apply_dsh_question(
+                &app.state::<DshIntegrationState>(),
+                &body.bridge_instance_id,
+                &body.plugin_instance_id,
+                &body.session_id,
+                &body.request_id,
+                body.answers,
+            )
+        },
+    )
+}
+
+async fn post_dsh_plan(
+    State(http_state): State<LanHttpState>,
+    ConnectInfo(client): ConnectInfo<SocketAddr>,
+    headers: HeaderMap,
+    Json(body): Json<DshPlanBody>,
+) -> Response {
+    let app = http_state.app.clone();
+    with_write_access(
+        &http_state,
+        &headers,
+        client,
+        "dsh-plan",
+        &body.request_id,
+        if body.approved {
+            "approve"
+        } else {
+            "keepPlanning"
+        },
+        || {
+            crate::apply_dsh_plan(
+                &app.state::<DshIntegrationState>(),
+                &body.bridge_instance_id,
+                &body.plugin_instance_id,
+                &body.session_id,
+                &body.request_id,
+                body.approved,
+                body.feedback,
+            )
+        },
+    )
+}
+
 async fn post_opencode_question(
     State(http_state): State<LanHttpState>,
     ConnectInfo(client): ConnectInfo<SocketAddr>,
@@ -880,6 +1008,9 @@ fn router(app: tauri::AppHandle) -> Router {
         .route("/api/codex/approval", post(post_codex_approval))
         .route("/api/pi/permission", post(post_pi_permission))
         .route("/api/pi/question", post(post_pi_question))
+        .route("/api/dsh/permission", post(post_dsh_permission))
+        .route("/api/dsh/question", post(post_dsh_question))
+        .route("/api/dsh/plan", post(post_dsh_plan))
         .route("/api/opencode/question", post(post_opencode_question))
         .route(
             "/api/opencode/question/reject",

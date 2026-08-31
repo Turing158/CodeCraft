@@ -240,7 +240,7 @@ fn frame_for(source: &str, session: &Value, interactions: &[Value]) -> SoundFram
         .and_then(|reviews| reviews.first());
 
     let permission_id = match source {
-        "claude" => session
+        "claude" | "pi" | "dsh" => session
             .get("permission")
             .and_then(|value| value.get("id"))
             .and_then(Value::as_str)
@@ -265,7 +265,7 @@ fn frame_for(source: &str, session: &Value, interactions: &[Value]) -> SoundFram
         _ => None,
     };
     let plan_id = match source {
-        "claude" => session
+        "claude" | "dsh" => session
             .get("plan")
             .and_then(|value| value.get("id"))
             .and_then(Value::as_str)
@@ -351,15 +351,16 @@ impl NativeSoundObserver {
             let Some(session_id) = session.get("id").and_then(Value::as_str) else {
                 continue;
             };
-            let key = if source == "opencode" {
-                let instance = session
-                    .get("pluginInstanceId")
-                    .and_then(Value::as_str)
-                    .unwrap_or_default();
-                format!("{source}:{instance}:{session_id}")
-            } else {
-                format!("{source}:{session_id}")
-            };
+            let instance = match source {
+                "opencode" | "dsh" => session.get("pluginInstanceId"),
+                "pi" => session.get("extensionInstanceId"),
+                _ => None,
+            }
+            .and_then(Value::as_str);
+            let key = instance.map_or_else(
+                || format!("{source}:{session_id}"),
+                |instance| format!("{source}:{instance}:{session_id}"),
+            );
             next_keys.insert(key.clone());
             let next = frame_for(source, session, interactions);
             if primed {
@@ -439,5 +440,30 @@ mod tests {
             frame_for("opencode", &opencode_session, &[]).permission_id,
             Some("review-1".to_string())
         );
+    }
+
+    #[test]
+    fn pi_and_dsh_native_reviews_map_to_sound_frames() {
+        let pi = json!({
+            "id": "session-1",
+            "status": "waitingForApproval",
+            "activities": [],
+            "permission": { "id": "pi-permission" }
+        });
+        assert_eq!(
+            frame_for("pi", &pi, &[]).permission_id,
+            Some("pi-permission".to_string())
+        );
+
+        let dsh = json!({
+            "id": "session-2",
+            "status": "waitingForApproval",
+            "activities": [],
+            "permission": { "id": "dsh-permission" },
+            "plan": { "id": "dsh-plan" }
+        });
+        let frame = frame_for("dsh", &dsh, &[]);
+        assert_eq!(frame.permission_id, Some("dsh-permission".to_string()));
+        assert_eq!(frame.plan_id, Some("dsh-plan".to_string()));
     }
 }

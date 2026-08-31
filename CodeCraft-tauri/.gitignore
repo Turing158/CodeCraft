@@ -14,6 +14,10 @@ artifacts
 *.local
 *.test
 *.test.*
+!src/dsh-sessions.test.ts
+!src/dsh-plugin.test.ts
+!web/lan/api.test.ts
+!web/lan/dsh-snapshot.test.ts
 
 # Rust and Tauri generated output
 src-tauri/target/
@@ -44,3 +48,4 @@ src-tauri/icons/icon/*
 !src-tauri/icons/icon/note_block.svg
 !src-tauri/icons/icon/grass-block.svg
 !src-tauri/icons/icon/sea-lantern.svg
+!src-tauri/icons/icon/deepseek.svg

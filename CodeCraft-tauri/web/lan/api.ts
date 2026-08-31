@@ -174,3 +174,42 @@ export const submitPiQuestion = (
     method: "POST",
     body: JSON.stringify({ ...target, requestId, answers }),
   });
+
+export interface DshTarget {
+  bridgeInstanceId: string;
+  pluginInstanceId: string;
+  sessionId: string;
+}
+
+export type DshPermissionDecision = "allowOnce" | "deny";
+
+export const submitDshPermission = (
+  target: DshTarget,
+  requestId: string,
+  decision: DshPermissionDecision,
+) =>
+  request<{ ok: boolean }>("/api/dsh/permission", {
+    method: "POST",
+    body: JSON.stringify({ ...target, requestId, decision }),
+  });
+
+export const submitDshQuestion = (
+  target: DshTarget,
+  requestId: string,
+  answers: LocalQuestionAnswer[],
+) =>
+  request<{ ok: boolean }>("/api/dsh/question", {
+    method: "POST",
+    body: JSON.stringify({ ...target, requestId, answers }),
+  });
+
+export const submitDshPlan = (
+  target: DshTarget,
+  requestId: string,
+  approved: boolean,
+  feedback: string | null,
+) =>
+  request<{ ok: boolean }>("/api/dsh/plan", {
+    method: "POST",
+    body: JSON.stringify({ ...target, requestId, approved, feedback }),
+  });

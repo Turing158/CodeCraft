@@ -1,4 +1,5 @@
 use std::{
+    collections::HashMap,
     env,
     path::Path,
     sync::{
@@ -21,6 +22,8 @@ mod approval_policy;
 mod claude_hook;
 mod codex;
 mod codex_hook;
+mod dsh;
+mod dsh_hook;
 mod hook_config;
 mod lan_auth;
 mod lan_config;
@@ -100,6 +103,14 @@ struct PiIntegrationState {
     hook_error: Mutex<Option<String>>,
 }
 
+#[derive(Default)]
+struct DshIntegrationState {
+    store: Mutex<dsh::DshStore>,
+    pending: Mutex<HashMap<String, tokio::sync::oneshot::Sender<serde_json::Value>>>,
+    hook_error: Mutex<Option<String>>,
+    bridge: Mutex<Option<dsh_hook::DshBridgeInfo>>,
+}
+
 struct PanelWindowState {
     horizontal_position: Mutex<f64>,
 }
@@ -141,6 +152,7 @@ enum HookAgentId {
     Codex,
     OpenCode,
     Pi,
+    DeepSeekHarness,
 }
 
 impl hook_config::HookInstallConfig {
@@ -150,6 +162,7 @@ impl hook_config::HookInstallConfig {
             HookAgentId::Codex => self.codex,
             HookAgentId::OpenCode => self.open_code,
             HookAgentId::Pi => self.pi,
+            HookAgentId::DeepSeekHarness => self.deep_seek_harness,
         }
     }
 
@@ -159,6 +172,7 @@ impl hook_config::HookInstallConfig {
             HookAgentId::Codex => self.codex = enabled,
             HookAgentId::OpenCode => self.open_code = enabled,
             HookAgentId::Pi => self.pi = enabled,
+            HookAgentId::DeepSeekHarness => self.deep_seek_harness = enabled,
         }
     }
 }
@@ -170,6 +184,7 @@ impl HookAgentId {
             Self::Codex => "codex",
             Self::OpenCode => "opencode",
             Self::Pi => "pi",
+            Self::DeepSeekHarness => "dsh",
         }
     }
 
@@ -179,6 +194,7 @@ impl HookAgentId {
             Self::Codex => "Codex",
             Self::OpenCode => "OpenCode",
             Self::Pi => "PI",
+            Self::DeepSeekHarness => "DeepSeek Harness",
         }
     }
 }
@@ -233,6 +249,12 @@ fn agent_is_installed(agent: HookAgentId, state: &CodexIntegrationState) -> Resu
     if matches!(agent, HookAgentId::Pi) {
         return Ok(command_is_installed(agent.command()) || command_is_installed("pi.ps1"));
     }
+    if matches!(agent, HookAgentId::DeepSeekHarness) {
+        return Ok(command_is_installed("dsh")
+            || command_is_installed("dsh.cmd")
+            || command_is_installed("npx")
+            || command_is_installed("npx.cmd"));
+    }
     let _ = state;
     Ok(command_is_installed(agent.command()))
 }
@@ -262,6 +284,17 @@ fn pi_install_state_label(state: pi_hook::PiHookInstallState) -> String {
     .to_string()
 }
 
+fn dsh_install_state_label(state: dsh_hook::DshHookInstallState) -> String {
+    match state {
+        dsh_hook::DshHookInstallState::NotInstalled => "notInstalled",
+        dsh_hook::DshHookInstallState::Installed => "installed",
+        dsh_hook::DshHookInstallState::Modified => "modified",
+        dsh_hook::DshHookInstallState::Conflict => "conflict",
+        dsh_hook::DshHookInstallState::Incompatible => "incompatible",
+    }
+    .to_string()
+}
+
 fn codex_hook_project_dir(state: &CodexIntegrationState) -> Result<Option<String>, String> {
     Ok(state
         .hook_config
@@ -284,6 +317,7 @@ fn save_hook_installation_state(agent: HookAgentId, enabled: bool) -> Result<(),
 pub(crate) fn hook_statuses(
     state: &CodexIntegrationState,
     opencode_state: &OpenCodeIntegrationState,
+    dsh_state: &DshIntegrationState,
 ) -> Result<Vec<HookIntegrationStatus>, String> {
     let project_dir = codex_hook_project_dir(state)?;
     let opencode = opencode_hook::status_and_sync()?;
@@ -343,6 +377,35 @@ pub(crate) fn hook_statuses(
                 installed_version: status.installed_version,
                 running_versions: Vec::new(),
                 error: status.error,
+            }
+        },
+        {
+            let status = dsh_hook::status()?;
+            let running_versions = dsh_state
+                .store
+                .lock()
+                .map_err(|error| error.to_string())?
+                .snapshot()
+                .instances
+                .into_iter()
+                .map(|instance| instance.dsh_version)
+                .collect();
+            let runtime_error = dsh_state
+                .hook_error
+                .lock()
+                .map_err(|error| error.to_string())?
+                .clone();
+            HookIntegrationStatus {
+                id: HookAgentId::DeepSeekHarness,
+                name: HookAgentId::DeepSeekHarness.display_name(),
+                agent_installed: agent_is_installed(HookAgentId::DeepSeekHarness, state)?,
+                hook_installed: status.installed(),
+                install_state: Some(dsh_install_state_label(status.state)),
+                install_path: Some(status.install_path),
+                bundled_version: Some(status.bundled_version.to_string()),
+                installed_version: status.installed_version,
+                running_versions,
+                error: status.error.or(runtime_error),
             }
         },
     ])
@@ -1516,8 +1579,9 @@ fn claude_hook_install(state: tauri::State<'_, ClaudeIntegrationState>) -> Resul
 fn list_hook_integrations(
     state: tauri::State<'_, CodexIntegrationState>,
     opencode_state: tauri::State<'_, OpenCodeIntegrationState>,
+    dsh_state: tauri::State<'_, DshIntegrationState>,
 ) -> Result<Vec<HookIntegrationStatus>, String> {
-    hook_statuses(&state, &opencode_state)
+    hook_statuses(&state, &opencode_state, &dsh_state)
 }
 
 #[tauri::command]
@@ -1602,6 +1666,185 @@ fn pi_respond_question(
         &request_id,
         answers,
     )
+}
+
+#[tauri::command]
+fn list_dsh_sessions(
+    state: tauri::State<'_, DshIntegrationState>,
+) -> Result<dsh::DshSnapshot, String> {
+    dsh_snapshot(&state)
+}
+
+pub(crate) fn dsh_snapshot(state: &DshIntegrationState) -> Result<dsh::DshSnapshot, String> {
+    let status = dsh_hook::status()?;
+    let mut store = state.store.lock().map_err(|error| error.to_string())?;
+    if !status.installed() {
+        store.clear();
+        store.set_integration_error(
+            status
+                .error
+                .or_else(|| Some("DeepSeek Harness Hook 未安装".to_string())),
+        );
+    } else {
+        let hook_error = state
+            .hook_error
+            .lock()
+            .map_err(|error| error.to_string())?
+            .clone();
+        store.set_integration_error(hook_error);
+    }
+    Ok(store.snapshot())
+}
+
+fn deliver_dsh_response(
+    state: &DshIntegrationState,
+    request_id: &str,
+    response: serde_json::Value,
+) -> Result<(), String> {
+    let sender = state
+        .pending
+        .lock()
+        .map_err(|error| error.to_string())?
+        .remove(request_id)
+        .ok_or_else(|| "The DSH bridge request is no longer connected".to_string())?;
+    let delivered = sender.send(response).is_ok();
+    state
+        .store
+        .lock()
+        .map_err(|error| error.to_string())?
+        .resolve(request_id);
+    if delivered {
+        Ok(())
+    } else {
+        Err("The DSH bridge disconnected before applying the decision".to_string())
+    }
+}
+
+#[tauri::command]
+fn dsh_respond_approval(
+    state: tauri::State<'_, DshIntegrationState>,
+    bridge_instance_id: String,
+    plugin_instance_id: String,
+    session_id: String,
+    request_id: String,
+    decision: dsh::DshApprovalDecision,
+) -> Result<(), String> {
+    apply_dsh_approval(
+        &state,
+        &bridge_instance_id,
+        &plugin_instance_id,
+        &session_id,
+        &request_id,
+        decision,
+    )
+}
+
+pub(crate) fn apply_dsh_approval(
+    state: &DshIntegrationState,
+    bridge_instance_id: &str,
+    plugin_instance_id: &str,
+    session_id: &str,
+    request_id: &str,
+    decision: dsh::DshApprovalDecision,
+) -> Result<(), String> {
+    let response = state
+        .store
+        .lock()
+        .map_err(|error| error.to_string())?
+        .approval_response(
+            bridge_instance_id,
+            plugin_instance_id,
+            session_id,
+            request_id,
+            decision,
+        )?;
+    deliver_dsh_response(state, request_id, response)
+}
+
+#[tauri::command]
+fn dsh_respond_question(
+    state: tauri::State<'_, DshIntegrationState>,
+    bridge_instance_id: String,
+    plugin_instance_id: String,
+    session_id: String,
+    request_id: String,
+    answers: Vec<dsh::DshQuestionAnswer>,
+) -> Result<(), String> {
+    apply_dsh_question(
+        &state,
+        &bridge_instance_id,
+        &plugin_instance_id,
+        &session_id,
+        &request_id,
+        answers,
+    )
+}
+
+pub(crate) fn apply_dsh_question(
+    state: &DshIntegrationState,
+    bridge_instance_id: &str,
+    plugin_instance_id: &str,
+    session_id: &str,
+    request_id: &str,
+    answers: Vec<dsh::DshQuestionAnswer>,
+) -> Result<(), String> {
+    let response = state
+        .store
+        .lock()
+        .map_err(|error| error.to_string())?
+        .question_response(
+            bridge_instance_id,
+            plugin_instance_id,
+            session_id,
+            request_id,
+            answers,
+        )?;
+    deliver_dsh_response(state, request_id, response)
+}
+
+#[tauri::command]
+fn dsh_respond_plan(
+    state: tauri::State<'_, DshIntegrationState>,
+    bridge_instance_id: String,
+    plugin_instance_id: String,
+    session_id: String,
+    request_id: String,
+    approved: bool,
+    feedback: Option<String>,
+) -> Result<(), String> {
+    apply_dsh_plan(
+        &state,
+        &bridge_instance_id,
+        &plugin_instance_id,
+        &session_id,
+        &request_id,
+        approved,
+        feedback,
+    )
+}
+
+pub(crate) fn apply_dsh_plan(
+    state: &DshIntegrationState,
+    bridge_instance_id: &str,
+    plugin_instance_id: &str,
+    session_id: &str,
+    request_id: &str,
+    approved: bool,
+    feedback: Option<String>,
+) -> Result<(), String> {
+    let response = state
+        .store
+        .lock()
+        .map_err(|error| error.to_string())?
+        .plan_response(
+            bridge_instance_id,
+            plugin_instance_id,
+            session_id,
+            request_id,
+            approved,
+            feedback,
+        )?;
+    deliver_dsh_response(state, request_id, response)
 }
 
 pub(crate) fn apply_pi_question(
@@ -1759,6 +2002,7 @@ async fn install_agent_hook(agent: HookAgentId, app: tauri::AppHandle) -> Result
         let codex_state = app.state::<CodexIntegrationState>();
         let opencode_state = app.state::<OpenCodeIntegrationState>();
         let pi_state = app.state::<PiIntegrationState>();
+        let dsh_state = app.state::<DshIntegrationState>();
         if !agent_is_installed(agent, &codex_state)? {
             return Err(format!("{} 未安装", agent.display_name()));
         }
@@ -1803,6 +2047,14 @@ async fn install_agent_hook(agent: HookAgentId, app: tauri::AppHandle) -> Result
                     .lock()
                     .map_err(|error| error.to_string())? = status.error;
             }
+            HookAgentId::DeepSeekHarness => {
+                let status = dsh_hook::install()?;
+                save_hook_installation_state(agent, true)?;
+                *dsh_state
+                    .hook_error
+                    .lock()
+                    .map_err(|error| error.to_string())? = status.error;
+            }
         }
         Ok(())
     })
@@ -1817,6 +2069,7 @@ async fn uninstall_agent_hook(agent: HookAgentId, app: tauri::AppHandle) -> Resu
         let codex_state = app.state::<CodexIntegrationState>();
         let opencode_state = app.state::<OpenCodeIntegrationState>();
         let pi_state = app.state::<PiIntegrationState>();
+        let dsh_state = app.state::<DshIntegrationState>();
         if !agent_is_installed(agent, &codex_state)? {
             return Err(format!("{} 未安装", agent.display_name()));
         }
@@ -1863,6 +2116,20 @@ async fn uninstall_agent_hook(agent: HookAgentId, app: tauri::AppHandle) -> Resu
                     .lock()
                     .map_err(|error| error.to_string())? = Some("PI Hook 未安装".to_string());
                 pi_state
+                    .store
+                    .lock()
+                    .map_err(|error| error.to_string())?
+                    .clear();
+            }
+            HookAgentId::DeepSeekHarness => {
+                dsh_hook::uninstall()?;
+                save_hook_installation_state(agent, false)?;
+                *dsh_state
+                    .hook_error
+                    .lock()
+                    .map_err(|error| error.to_string())? =
+                    Some("DeepSeek Harness Hook 未安装".to_string());
+                dsh_state
                     .store
                     .lock()
                     .map_err(|error| error.to_string())?
@@ -2393,10 +2660,18 @@ fn watch_tray_and_minimal_mode_sounds(app: tauri::AppHandle) {
             let codex_snapshot = codex_snapshot(&codex_state);
             let opencode_state = app.state::<OpenCodeIntegrationState>();
             let opencode_snapshot = opencode_snapshot(&opencode_state);
+            let pi_state = app.state::<PiIntegrationState>();
+            let pi_snapshot = pi_snapshot(&pi_state);
+            let dsh_state = app.state::<DshIntegrationState>();
+            let dsh_snapshot = dsh_snapshot(&dsh_state);
 
-            if let (Ok(claude), Ok(codex), Ok(opencode)) =
-                (&claude_snapshot, &codex_snapshot, &opencode_snapshot)
-            {
+            if let (Ok(claude), Ok(codex), Ok(opencode), Ok(pi), Ok(dsh)) = (
+                &claude_snapshot,
+                &codex_snapshot,
+                &opencode_snapshot,
+                &pi_snapshot,
+                &dsh_snapshot,
+            ) {
                 let active_session_count = claude
                     .sessions
                     .iter()
@@ -2408,6 +2683,20 @@ fn watch_tray_and_minimal_mode_sounds(app: tauri::AppHandle) {
                         .filter(|session| session.is_active())
                         .count()
                     + opencode
+                        .sessions
+                        .iter()
+                        .filter(|session| session.is_active())
+                        .count()
+                    + pi.sessions
+                        .iter()
+                        .filter(|session| {
+                            !matches!(
+                                session.status,
+                                pi::PiSessionStatus::Idle | pi::PiSessionStatus::Stopped
+                            )
+                        })
+                        .count()
+                    + dsh
                         .sessions
                         .iter()
                         .filter(|session| session.is_active())
@@ -2460,6 +2749,16 @@ fn watch_tray_and_minimal_mode_sounds(app: tauri::AppHandle) {
                             observer.observe("opencode", &value);
                         }
                     }
+                    if let Ok(snapshot) = &pi_snapshot {
+                        if let Ok(value) = serde_json::to_value(snapshot) {
+                            observer.observe("pi", &value);
+                        }
+                    }
+                    if let Ok(snapshot) = &dsh_snapshot {
+                        if let Ok(value) = serde_json::to_value(snapshot) {
+                            observer.observe("dsh", &value);
+                        }
+                    }
                 }
             }
             thread::sleep(Duration::from_secs(1));
@@ -2485,6 +2784,7 @@ pub fn run() {
         .manage(CodexIntegrationState::default())
         .manage(OpenCodeIntegrationState::default())
         .manage(PiIntegrationState::default())
+        .manage(DshIntegrationState::default())
         .manage(ApprovalIntegrationState::default())
         .manage(NativeSoundIntegrationState::default())
         .manage(TrayMenuState::default())
@@ -2510,6 +2810,48 @@ pub fn run() {
             let mut hook_install_config = hook_config::load();
             let executable = std::env::current_exe().ok();
             let mut hook_config_changed = false;
+
+            let dsh_state = app.state::<DshIntegrationState>();
+            let bridge_error = match dsh_hook::start_bridge(app.handle().clone()) {
+                Ok(bridge) => {
+                    *dsh_state.bridge.lock().map_err(|error| error.to_string())? = Some(bridge);
+                    None
+                }
+                Err(error) => Some(error),
+            };
+
+            let dsh_configured = hook_install_config.is_enabled(HookAgentId::DeepSeekHarness);
+            let dsh_status = dsh_hook::status();
+            let dsh_error = match dsh_status {
+                Ok(status) if status.installed() => {
+                    if !dsh_configured {
+                        hook_install_config.set_enabled(HookAgentId::DeepSeekHarness, true);
+                        hook_config_changed = true;
+                    }
+                    status.error
+                }
+                Ok(status)
+                    if dsh_configured
+                        && matches!(
+                            status.state,
+                            dsh_hook::DshHookInstallState::NotInstalled
+                                | dsh_hook::DshHookInstallState::Incompatible
+                        ) =>
+                {
+                    match dsh_hook::install() {
+                        Ok(installed) => installed.error,
+                        Err(error) => Some(error),
+                    }
+                }
+                Ok(status) => status
+                    .error
+                    .or_else(|| Some("DeepSeek Harness Hook 未安装".to_string())),
+                Err(error) => Some(error),
+            };
+            *dsh_state
+                .hook_error
+                .lock()
+                .map_err(|error| error.to_string())? = bridge_error.or(dsh_error);
 
             let pi_state = app.state::<PiIntegrationState>();
             let pi_configured = hook_install_config.is_enabled(HookAgentId::Pi);
@@ -2762,6 +3104,10 @@ pub fn run() {
             list_pi_sessions,
             pi_respond_approval,
             pi_respond_question,
+            list_dsh_sessions,
+            dsh_respond_approval,
+            dsh_respond_question,
+            dsh_respond_plan,
             install_agent_hook,
             uninstall_agent_hook,
             list_opencode_sessions,

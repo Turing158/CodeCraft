@@ -116,6 +116,18 @@ export function createLocalQuestionSubmission(
   };
 }
 
+/** Remove the UI-only "other" choice before sending answers to DSH. */
+export function normalizeDshQuestionAnswers(
+  answers: LocalQuestionAnswer[],
+): LocalQuestionAnswer[] {
+  return answers.map((answer) => ({
+    ...answer,
+    selectedOptionLabels: answer.selectedOptionLabels.filter(
+      (label) => label !== "其他",
+    ),
+  }));
+}
+
 export function questionRequestContentSignature(
   request: ClaudeQuestionRequest,
 ): string {

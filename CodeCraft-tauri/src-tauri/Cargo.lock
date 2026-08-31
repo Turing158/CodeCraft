@@ -558,6 +558,7 @@ dependencies = [
  "tauri-plugin-single-instance",
  "tokio",
  "tokio-stream",
+ "url",
  "uuid",
  "windows",
 ]

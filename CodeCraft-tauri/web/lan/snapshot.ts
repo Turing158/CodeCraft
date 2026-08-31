@@ -33,8 +33,15 @@ import {
   type PiSession,
   type PiSnapshot,
 } from "../../src/pi-sessions";
+import {
+  dshQuestionForUi,
+  dshSessionKey,
+  dshStatusLabel,
+  type DshSession,
+  type DshSnapshot,
+} from "../../src/dsh-sessions";
 
-export type ConsoleSource = "claude" | "codex" | "opencode" | "pi";
+export type ConsoleSource = "claude" | "codex" | "opencode" | "pi" | "dsh";
 
 export type PendingKind = "permission" | "question" | "plan";
 
@@ -68,6 +75,11 @@ export interface ConsolePending {
   };
   pi?: {
     extensionInstanceId: string;
+    sessionId: string;
+  };
+  dsh?: {
+    bridgeInstanceId: string;
+    pluginInstanceId: string;
     sessionId: string;
   };
 }
@@ -112,6 +124,7 @@ export interface RawSnapshot {
   codex?: CodexSnapshot | null;
   opencode?: OpenCodeSnapshot | null;
   pi?: PiSnapshot | null;
+  dsh?: DshSnapshot | null;
   integrations?: RawHookIntegration[] | null;
 }
 
@@ -150,6 +163,14 @@ const emptyOpenCode: OpenCodeSnapshot = {
 const emptyPi: PiSnapshot = {
   connected: false,
   integrationError: null,
+  sessions: [],
+  instances: [],
+};
+
+const emptyDsh: DshSnapshot = {
+  connected: false,
+  integrationError: null,
+  bridgeInstanceId: null,
   sessions: [],
   instances: [],
 };
@@ -319,11 +340,48 @@ const piPending = (session: PiSession): ConsolePending | null => {
   }
 };
 
+const dshPending = (session: DshSession): ConsolePending | null => {
+  const target = {
+    bridgeInstanceId: session.bridgeInstanceId,
+    pluginInstanceId: session.pluginInstanceId,
+    sessionId: session.id,
+  };
+  if (session.plan) {
+    return {
+      kind: "plan",
+      requestId: session.plan.id,
+      readOnly: false,
+      plan: session.plan,
+      dsh: target,
+    };
+  }
+  if (session.permission) {
+    return {
+      kind: "permission",
+      requestId: session.permission.id,
+      readOnly: false,
+      permission: session.permission,
+      dsh: target,
+    };
+  }
+  if (session.question) {
+    return {
+      kind: "question",
+      requestId: session.question.id,
+      readOnly: false,
+      question: dshQuestionForUi(session.question),
+      dsh: target,
+    };
+  }
+  return null;
+};
+
 const sourceFromHookId = (id: string | undefined): ConsoleSource | undefined => {
   if (id === "claudeCode") return "claude";
   if (id === "codex") return "codex";
   if (id === "openCode") return "opencode";
   if (id === "pi") return "pi";
+  if (id === "deepSeekHarness") return "dsh";
   return undefined;
 };
 
@@ -334,7 +392,9 @@ const integrationName = (source: ConsoleSource): string =>
       ? "Codex"
       : source === "opencode"
         ? "OpenCode"
-        : "PI";
+        : source === "pi"
+          ? "PI"
+          : "DeepSeek Harness";
 
 const sessionCountFor = (
   source: ConsoleSource,
@@ -342,6 +402,7 @@ const sessionCountFor = (
   codexLength: number,
   opencodeLength: number,
   piLength: number,
+  dshLength: number,
 ): number =>
   source === "claude"
     ? claudeLength
@@ -349,7 +410,9 @@ const sessionCountFor = (
       ? codexLength
       : source === "opencode"
         ? opencodeLength
-        : piLength;
+        : source === "pi"
+          ? piLength
+          : dshLength;
 
 const openCodeEntry = (session: OpenCodeSession): ConsoleEntry => ({
   key: `opencode:${session.pluginInstanceId}:${session.id}`,
@@ -389,6 +452,26 @@ const piEntry = (session: PiSession): ConsoleEntry => ({
   })),
   outputs: session.outputs.map((output) => ({ id: output.id, text: output.text })),
   pending: piPending(session),
+});
+
+const dshEntry = (session: DshSession): ConsoleEntry => ({
+  key: dshSessionKey(session),
+  source: "dsh",
+  sessionId: session.id,
+  title: session.title,
+  status: session.status,
+  statusLabel: dshStatusLabel(session.status),
+  cwd: session.cwd,
+  updatedAt: session.updatedAt,
+  activities: session.activities.map((activity) => ({
+    id: activity.id,
+    tool: activity.tool,
+    summary: activity.summary,
+    status: activity.status,
+    updatedAt: activity.updatedAt,
+  })),
+  outputs: session.outputs.map((output) => ({ id: output.id, text: output.text })),
+  pending: dshPending(session),
 });
 
 const codexEntry = (
@@ -442,12 +525,16 @@ export const mergeSnapshot = (raw: RawSnapshot): ConsoleSnapshot => {
   const pi = isRecord(raw.pi)
     ? { ...emptyPi, ...(raw.pi as PiSnapshot) }
     : emptyPi;
+  const dsh = isRecord(raw.dsh)
+    ? { ...emptyDsh, ...(raw.dsh as DshSnapshot) }
+    : emptyDsh;
 
   const entries = [
     ...claude.sessions.map(claudeEntry),
     ...codex.sessions.map((session) => codexEntry(session, codex.interactions)),
     ...opencode.sessions.map(openCodeEntry),
     ...pi.sessions.map(piEntry),
+    ...dsh.sessions.map(dshEntry),
   ].sort(compareEntries);
 
   return {
@@ -460,6 +547,7 @@ export const mergeSnapshot = (raw: RawSnapshot): ConsoleSnapshot => {
       codex.sessions.length,
       opencode.sessions.length,
       pi.sessions.length,
+      dsh.sessions.length,
     ),
   };
 };
@@ -470,6 +558,7 @@ const buildIntegrations = (
   codexLength: number,
   opencodeLength: number,
   piLength: number,
+  dshLength: number,
 ): ConsoleIntegration[] => {
   const hookStatuses = Array.isArray(raw.integrations) ? raw.integrations : [];
   if (hookStatuses.length === 0) {
@@ -513,6 +602,15 @@ const buildIntegrations = (
         agentInstalled: true,
         hookInstalled: true,
       },
+      {
+        source: "dsh",
+        name: integrationName("dsh"),
+        connected: dshConnected(raw),
+        error: integrationError(raw, "dsh"),
+        sessionCount: dshLength,
+        agentInstalled: true,
+        hookInstalled: true,
+      },
     ];
   }
 
@@ -526,7 +624,9 @@ const buildIntegrations = (
           ? codexConnected(raw)
           : source === "opencode"
             ? opencodeConnected(raw)
-            : piConnected(raw);
+            : source === "pi"
+              ? piConnected(raw)
+              : dshConnected(raw);
     return [
       {
         source,
@@ -539,6 +639,7 @@ const buildIntegrations = (
           codexLength,
           opencodeLength,
           piLength,
+          dshLength,
         ),
         agentInstalled: status.agentInstalled === true,
         hookInstalled: status.hookInstalled === true,
@@ -555,6 +656,8 @@ const opencodeConnected = (raw: RawSnapshot): boolean =>
   isRecord(raw.opencode) ? raw.opencode.connected === true : false;
 const piConnected = (raw: RawSnapshot): boolean =>
   isRecord(raw.pi) ? raw.pi.connected === true : false;
+const dshConnected = (raw: RawSnapshot): boolean =>
+  isRecord(raw.dsh) ? raw.dsh.connected === true : false;
 
 const integrationError = (raw: RawSnapshot, source: ConsoleSource): string | null => {
   const value =
@@ -570,9 +673,13 @@ const integrationError = (raw: RawSnapshot, source: ConsoleSource): string | nul
           ? isRecord(raw.opencode)
             ? raw.opencode.integrationError
             : null
-          : isRecord(raw.pi)
-            ? raw.pi.integrationError
-            : null;
+          : source === "pi"
+            ? isRecord(raw.pi)
+              ? raw.pi.integrationError
+              : null
+            : isRecord(raw.dsh)
+              ? raw.dsh.integrationError
+              : null;
   return (value ?? null) as string | null;
 };
 
