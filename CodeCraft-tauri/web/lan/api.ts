@@ -147,3 +147,30 @@ export const submitOpenCodeGate = (
     method: "POST",
     body: JSON.stringify({ ...target, action }),
   });
+
+export interface PiTarget {
+  extensionInstanceId: string;
+  sessionId: string;
+}
+
+export type PiPermissionDecision = "allowOnce" | "allowSession" | "deny";
+
+export const submitPiPermission = (
+  target: PiTarget,
+  requestId: string,
+  decision: PiPermissionDecision,
+) =>
+  request<{ ok: boolean }>("/api/pi/permission", {
+    method: "POST",
+    body: JSON.stringify({ ...target, requestId, decision }),
+  });
+
+export const submitPiQuestion = (
+  target: PiTarget,
+  requestId: string,
+  answers: LocalQuestionAnswer[],
+) =>
+  request<{ ok: boolean }>("/api/pi/question", {
+    method: "POST",
+    body: JSON.stringify({ ...target, requestId, answers }),
+  });

@@ -31,7 +31,8 @@ const MAX_TRANSCRIPT_BYTES: u64 = 512 * 1_024;
 const MAX_OUTPUT_ENTRIES: usize = 24;
 const MAX_OUTPUT_ENTRY_CHARS: usize = 8_000;
 const HOOK_TIMEOUT_SECONDS: u64 = 330;
-const QUESTION_WAIT_TIMEOUT: Duration = Duration::from_secs(300);
+// Claude's synchronous hook timeout is the hard upper bound for reviews.
+const REVIEW_WAIT_TIMEOUT: Duration = Duration::from_secs(HOOK_TIMEOUT_SECONDS);
 const QUESTION_POLL_INTERVAL: Duration = Duration::from_millis(200);
 const HEARTBEAT_STALE_SECONDS: u64 = 20;
 
@@ -934,7 +935,7 @@ fn wait_for_question_answer(
                 .map_err(|error| error.to_string());
         }
         if native_review_resolved(native_resolution.as_ref())
-            || started_at.elapsed() >= QUESTION_WAIT_TIMEOUT
+            || started_at.elapsed() >= REVIEW_WAIT_TIMEOUT
         {
             return Ok(None);
         }
@@ -985,7 +986,7 @@ fn wait_for_decision_file(
                 .map_err(|error| error.to_string());
         }
         if native_review_resolved(native_resolution.as_ref())
-            || started_at.elapsed() >= QUESTION_WAIT_TIMEOUT
+            || started_at.elapsed() >= REVIEW_WAIT_TIMEOUT
         {
             return Ok(None);
         }
@@ -1975,6 +1976,7 @@ mod tests {
             "ask"
         );
         assert_eq!(HOOK_TIMEOUT_SECONDS, 330);
+        assert_eq!(REVIEW_WAIT_TIMEOUT.as_secs(), HOOK_TIMEOUT_SECONDS);
     }
 
     #[test]

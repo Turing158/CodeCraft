@@ -29,6 +29,8 @@ mod lan_server;
 mod native_sound;
 mod opencode;
 mod opencode_hook;
+mod pi;
+mod pi_hook;
 
 pub use claude_hook::capture_claude_hook;
 pub use codex_hook::capture_codex_hook;
@@ -92,6 +94,12 @@ struct OpenCodeIntegrationState {
     hook_error: Mutex<Option<String>>,
 }
 
+#[derive(Default)]
+struct PiIntegrationState {
+    store: Mutex<pi::PiStore>,
+    hook_error: Mutex<Option<String>>,
+}
+
 struct PanelWindowState {
     horizontal_position: Mutex<f64>,
 }
@@ -132,6 +140,7 @@ enum HookAgentId {
     ClaudeCode,
     Codex,
     OpenCode,
+    Pi,
 }
 
 impl hook_config::HookInstallConfig {
@@ -140,6 +149,7 @@ impl hook_config::HookInstallConfig {
             HookAgentId::ClaudeCode => self.claude_code,
             HookAgentId::Codex => self.codex,
             HookAgentId::OpenCode => self.open_code,
+            HookAgentId::Pi => self.pi,
         }
     }
 
@@ -148,6 +158,7 @@ impl hook_config::HookInstallConfig {
             HookAgentId::ClaudeCode => self.claude_code = enabled,
             HookAgentId::Codex => self.codex = enabled,
             HookAgentId::OpenCode => self.open_code = enabled,
+            HookAgentId::Pi => self.pi = enabled,
         }
     }
 }
@@ -158,6 +169,7 @@ impl HookAgentId {
             Self::ClaudeCode => "claude",
             Self::Codex => "codex",
             Self::OpenCode => "opencode",
+            Self::Pi => "pi",
         }
     }
 
@@ -166,6 +178,7 @@ impl HookAgentId {
             Self::ClaudeCode => "Claude Code",
             Self::Codex => "Codex",
             Self::OpenCode => "OpenCode",
+            Self::Pi => "PI",
         }
     }
 }
@@ -177,7 +190,7 @@ struct HookIntegrationStatus {
     name: &'static str,
     agent_installed: bool,
     hook_installed: bool,
-    install_state: Option<opencode_hook::OpenCodeHookInstallState>,
+    install_state: Option<String>,
     install_path: Option<String>,
     bundled_version: Option<String>,
     installed_version: Option<String>,
@@ -217,8 +230,36 @@ fn command_is_installed(command: &str) -> bool {
 }
 
 fn agent_is_installed(agent: HookAgentId, state: &CodexIntegrationState) -> Result<bool, String> {
+    if matches!(agent, HookAgentId::Pi) {
+        return Ok(command_is_installed(agent.command()) || command_is_installed("pi.ps1"));
+    }
     let _ = state;
     Ok(command_is_installed(agent.command()))
+}
+
+fn opencode_install_state_label(state: opencode_hook::OpenCodeHookInstallState) -> String {
+    match state {
+        opencode_hook::OpenCodeHookInstallState::NotInstalled => "notInstalled",
+        opencode_hook::OpenCodeHookInstallState::Installed => "installed",
+        opencode_hook::OpenCodeHookInstallState::SyncedRestartRequired => "syncedRestartRequired",
+        opencode_hook::OpenCodeHookInstallState::Modified => "modified",
+        opencode_hook::OpenCodeHookInstallState::Conflict => "conflict",
+        opencode_hook::OpenCodeHookInstallState::Incompatible => "incompatible",
+        opencode_hook::OpenCodeHookInstallState::Error => "error",
+    }
+    .to_string()
+}
+
+fn pi_install_state_label(state: pi_hook::PiHookInstallState) -> String {
+    match state {
+        pi_hook::PiHookInstallState::NotInstalled => "notInstalled",
+        pi_hook::PiHookInstallState::Installed => "installed",
+        pi_hook::PiHookInstallState::Modified => "modified",
+        pi_hook::PiHookInstallState::Conflict => "conflict",
+        pi_hook::PiHookInstallState::Incompatible => "incompatible",
+        pi_hook::PiHookInstallState::Error => "error",
+    }
+    .to_string()
 }
 
 fn codex_hook_project_dir(state: &CodexIntegrationState) -> Result<Option<String>, String> {
@@ -282,12 +323,27 @@ pub(crate) fn hook_statuses(
             name: HookAgentId::OpenCode.display_name(),
             agent_installed: agent_is_installed(HookAgentId::OpenCode, state)?,
             hook_installed: opencode.installed(),
-            install_state: Some(opencode.state),
+            install_state: Some(opencode_install_state_label(opencode.state)),
             install_path: Some(opencode.install_path),
             bundled_version: Some(opencode.bundled_version.to_string()),
             installed_version: opencode.installed_version,
             running_versions: opencode.running_versions,
             error: opencode.error,
+        },
+        {
+            let status = pi_hook::status()?;
+            HookIntegrationStatus {
+                id: HookAgentId::Pi,
+                name: HookAgentId::Pi.display_name(),
+                agent_installed: agent_is_installed(HookAgentId::Pi, state)?,
+                hook_installed: status.installed(),
+                install_state: Some(pi_install_state_label(status.state)),
+                install_path: Some(status.install_path),
+                bundled_version: Some(status.bundled_version.to_string()),
+                installed_version: status.installed_version,
+                running_versions: Vec::new(),
+                error: status.error,
+            }
         },
     ])
 }
@@ -1465,6 +1521,102 @@ fn list_hook_integrations(
 }
 
 #[tauri::command]
+fn pi_hook_status() -> Result<pi_hook::PiHookStatus, String> {
+    pi_hook::status()
+}
+
+#[tauri::command]
+fn pi_hook_install() -> Result<pi_hook::PiHookStatus, String> {
+    pi_hook::install()
+}
+
+#[tauri::command]
+fn pi_hook_uninstall() -> Result<(), String> {
+    pi_hook::uninstall()
+}
+
+#[tauri::command]
+fn list_pi_sessions(state: tauri::State<'_, PiIntegrationState>) -> Result<pi::PiSnapshot, String> {
+    pi_snapshot(&state)
+}
+
+pub(crate) fn pi_snapshot(state: &PiIntegrationState) -> Result<pi::PiSnapshot, String> {
+    let status = pi_hook::status()?;
+    let mut store = state.store.lock().map_err(|error| error.to_string())?;
+    if !status.installed() {
+        store.clear();
+        let error = status.error.or_else(|| Some("PI Hook 未安装".to_string()));
+        store.set_integration_error(error);
+        return store.snapshot();
+    }
+    let hook_error = state
+        .hook_error
+        .lock()
+        .map_err(|error| error.to_string())?
+        .clone();
+    store.set_integration_error(hook_error);
+    store.snapshot()
+}
+
+#[tauri::command]
+fn pi_respond_approval(
+    state: tauri::State<'_, PiIntegrationState>,
+    extension_instance_id: String,
+    session_id: String,
+    request_id: String,
+    decision: pi::PiApprovalDecision,
+) -> Result<(), String> {
+    apply_pi_approval(
+        &state,
+        &extension_instance_id,
+        &session_id,
+        &request_id,
+        decision,
+    )
+}
+
+pub(crate) fn apply_pi_approval(
+    state: &PiIntegrationState,
+    extension_instance_id: &str,
+    session_id: &str,
+    request_id: &str,
+    decision: pi::PiApprovalDecision,
+) -> Result<(), String> {
+    let mut store = state.store.lock().map_err(|error| error.to_string())?;
+    store.drain_inbox()?;
+    store.submit_approval(extension_instance_id, session_id, request_id, decision)
+}
+
+#[tauri::command]
+fn pi_respond_question(
+    state: tauri::State<'_, PiIntegrationState>,
+    extension_instance_id: String,
+    session_id: String,
+    request_id: String,
+    answers: Vec<pi::PiQuestionAnswer>,
+) -> Result<(), String> {
+    apply_pi_question(
+        &state,
+        &extension_instance_id,
+        &session_id,
+        &request_id,
+        answers,
+    )
+}
+
+pub(crate) fn apply_pi_question(
+    state: &PiIntegrationState,
+    extension_instance_id: &str,
+    session_id: &str,
+    request_id: &str,
+    answers: Vec<pi::PiQuestionAnswer>,
+) -> Result<(), String> {
+    let mut store = state.store.lock().map_err(|error| error.to_string())?;
+    store.drain_inbox()?;
+    store.submit_question(extension_instance_id, session_id, request_id, answers)
+}
+
+#[tauri::command]
 fn list_opencode_sessions(
     state: tauri::State<'_, OpenCodeIntegrationState>,
 ) -> Result<opencode::OpenCodeSnapshot, String> {
@@ -1606,6 +1758,7 @@ async fn install_agent_hook(agent: HookAgentId, app: tauri::AppHandle) -> Result
         let claude_state = app.state::<ClaudeIntegrationState>();
         let codex_state = app.state::<CodexIntegrationState>();
         let opencode_state = app.state::<OpenCodeIntegrationState>();
+        let pi_state = app.state::<PiIntegrationState>();
         if !agent_is_installed(agent, &codex_state)? {
             return Err(format!("{} 未安装", agent.display_name()));
         }
@@ -1642,6 +1795,14 @@ async fn install_agent_hook(agent: HookAgentId, app: tauri::AppHandle) -> Result
                     .lock()
                     .map_err(|error| error.to_string())? = status.error;
             }
+            HookAgentId::Pi => {
+                let status = pi_hook::install()?;
+                save_hook_installation_state(agent, true)?;
+                *pi_state
+                    .hook_error
+                    .lock()
+                    .map_err(|error| error.to_string())? = status.error;
+            }
         }
         Ok(())
     })
@@ -1655,6 +1816,7 @@ async fn uninstall_agent_hook(agent: HookAgentId, app: tauri::AppHandle) -> Resu
         let claude_state = app.state::<ClaudeIntegrationState>();
         let codex_state = app.state::<CodexIntegrationState>();
         let opencode_state = app.state::<OpenCodeIntegrationState>();
+        let pi_state = app.state::<PiIntegrationState>();
         if !agent_is_installed(agent, &codex_state)? {
             return Err(format!("{} 未安装", agent.display_name()));
         }
@@ -1692,6 +1854,19 @@ async fn uninstall_agent_hook(agent: HookAgentId, app: tauri::AppHandle) -> Resu
                     .hook_error
                     .lock()
                     .map_err(|error| error.to_string())? = Some("OpenCode Hook 未安装".to_string());
+            }
+            HookAgentId::Pi => {
+                pi_hook::uninstall()?;
+                save_hook_installation_state(agent, false)?;
+                *pi_state
+                    .hook_error
+                    .lock()
+                    .map_err(|error| error.to_string())? = Some("PI Hook 未安装".to_string());
+                pi_state
+                    .store
+                    .lock()
+                    .map_err(|error| error.to_string())?
+                    .clear();
             }
         }
         Ok(())
@@ -2309,6 +2484,7 @@ pub fn run() {
         .manage(ClaudeIntegrationState::default())
         .manage(CodexIntegrationState::default())
         .manage(OpenCodeIntegrationState::default())
+        .manage(PiIntegrationState::default())
         .manage(ApprovalIntegrationState::default())
         .manage(NativeSoundIntegrationState::default())
         .manage(TrayMenuState::default())
@@ -2334,6 +2510,38 @@ pub fn run() {
             let mut hook_install_config = hook_config::load();
             let executable = std::env::current_exe().ok();
             let mut hook_config_changed = false;
+
+            let pi_state = app.state::<PiIntegrationState>();
+            let pi_configured = hook_install_config.is_enabled(HookAgentId::Pi);
+            let pi_status = pi_hook::status();
+            let pi_error = match pi_status {
+                Ok(status) if status.installed() => {
+                    if !pi_configured {
+                        hook_install_config.set_enabled(HookAgentId::Pi, true);
+                        hook_config_changed = true;
+                    }
+                    status.error
+                }
+                Ok(status)
+                    if pi_configured
+                        && matches!(
+                            status.state,
+                            pi_hook::PiHookInstallState::NotInstalled
+                                | pi_hook::PiHookInstallState::Incompatible
+                        ) =>
+                {
+                    match pi_hook::install() {
+                        Ok(installed) => installed.error,
+                        Err(error) => Some(error),
+                    }
+                }
+                Ok(status) => status.error.or_else(|| Some("PI Hook 未安装".to_string())),
+                Err(error) => Some(error),
+            };
+            *pi_state
+                .hook_error
+                .lock()
+                .map_err(|error| error.to_string())? = pi_error;
 
             let integration_state = app.state::<ClaudeIntegrationState>();
             let claude_configured = hook_install_config.is_enabled(HookAgentId::ClaudeCode);
@@ -2548,6 +2756,12 @@ pub fn run() {
             list_claude_sessions,
             claude_hook_install,
             list_hook_integrations,
+            pi_hook_status,
+            pi_hook_install,
+            pi_hook_uninstall,
+            list_pi_sessions,
+            pi_respond_approval,
+            pi_respond_question,
             install_agent_hook,
             uninstall_agent_hook,
             list_opencode_sessions,

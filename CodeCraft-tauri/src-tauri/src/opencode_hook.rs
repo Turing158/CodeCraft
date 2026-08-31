@@ -14,7 +14,7 @@ use uuid::Uuid;
 use super::approval_policy::{self, ApprovalMode};
 
 pub(crate) const PROTOCOL_VERSION: &str = "0.4";
-pub(crate) const PLUGIN_VERSION: &str = "0.4.8";
+pub(crate) const PLUGIN_VERSION: &str = "0.4.9";
 const OWNER: &str = "CodeCraft";
 const PLUGIN_FILE_NAME: &str = "codecraft-opencode-plugin.js";
 const MANIFEST_FILE_NAME: &str = ".codecraft-opencode-plugin.json";

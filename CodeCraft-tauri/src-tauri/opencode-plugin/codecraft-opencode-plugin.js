@@ -12,15 +12,31 @@ import os from "node:os";
 import path from "node:path";
 
 const PROTOCOL_VERSION = "0.4";
-const PLUGIN_VERSION = "0.4.8";
+const PLUGIN_VERSION = "0.4.9";
 const HEARTBEAT_INTERVAL_MS = 5000;
 const APP_HEARTBEAT_STALE_MS = 20000;
 const DECISION_POLL_MS = 200;
-const GATE_TIMEOUT_MS = 300000;
 const SESSION_ACTION_RETRY_DELAYS_MS = [100, 250, 500, 1000, 1500];
 const MAX_TEXT = 64 * 1024;
 const MAX_ENVELOPE_BYTES = 256 * 1024;
 const CONTROL_TOOLS = new Set(["question"]);
+const REVIEW_RESOLUTION_EVENTS = new Set([
+  "question.replied",
+  "question.rejected",
+  "question.cancelled",
+  "question.canceled",
+  "question.timeout",
+  "permission.replied",
+  "permission.cancelled",
+  "permission.canceled",
+  "permission.timeout",
+]);
+const SESSION_END_EVENTS = new Set([
+  "session.deleted",
+  "session.ended",
+  "session.cancelled",
+  "session.canceled",
+]);
 
 const instanceID = randomUUID();
 const sessionRules = new Map();
@@ -660,21 +676,25 @@ async function rejectUnavailableWaiters() {
   }
 }
 
+function rejectGateWaitersForSession(sessionID, reason) {
+  if (typeof sessionID !== "string" || !sessionID) return;
+  for (const [reviewID, waiter] of gateWaiters) {
+    if (waiter.sessionID !== sessionID) continue;
+    gateWaiters.delete(reviewID);
+    if (waiter.callID) gateDecisionByCall.delete(waiter.callID);
+    waiter.reject(new Error(reason));
+  }
+}
+
 async function waitForGate(reviewID, sessionID, callID) {
   return new Promise((resolve, reject) => {
-    const timer = setTimeout(() => {
-      gateWaiters.delete(reviewID);
-      reject(new Error("CodeCraft tool approval timed out"));
-    }, GATE_TIMEOUT_MS);
     gateWaiters.set(reviewID, {
       sessionID,
       callID,
       resolve(value) {
-        clearTimeout(timer);
         resolve(value);
       },
       reject(error) {
-        clearTimeout(timer);
         reject(error);
       },
     });
@@ -704,16 +724,20 @@ function eventPayload(event) {
       tool: properties.tool,
     };
   }
-  if (
-    event?.type === "question.replied" ||
-    event?.type === "question.rejected" ||
-    event?.type === "permission.replied"
-  ) {
+  if (REVIEW_RESOLUTION_EVENTS.has(event?.type)) {
     return {
       eventType: event.type,
       properties: {
         requestID: properties.requestID ?? properties.id,
         sessionID: properties.sessionID,
+      },
+    };
+  }
+  if (SESSION_END_EVENTS.has(event?.type)) {
+    return {
+      eventType: event.type,
+      properties: {
+        sessionID: properties.sessionID ?? properties.sessionId ?? properties.id,
       },
     };
   }
@@ -817,8 +841,23 @@ async function codecraftOpenCodePlugin(input) {
         lastHeartbeat = Date.now();
         await writeInstanceHeartbeat();
       }
+      const properties = event?.properties ?? {};
+      const sessionID =
+        properties.sessionID ?? properties.sessionId ?? properties.id;
+      const statusType = properties.status?.type;
+      if (
+        SESSION_END_EVENTS.has(event?.type) ||
+        (event?.type === "session.status" &&
+          ["error", "stopped", "terminated", "cancelled", "canceled"].includes(
+            statusType,
+          ))
+      ) {
+        rejectGateWaitersForSession(
+          sessionID,
+          `OpenCode session ended or released the tool gate (${event?.type})`,
+        );
+      }
       if (event?.type === "permission.asked") {
-        const properties = event.properties ?? {};
         const callID = properties.tool?.callID;
         permissionRequests.set(properties.id, {
           callID,
@@ -885,8 +924,8 @@ async function codecraftOpenCodePlugin(input) {
           return;
         }
       }
-      if (event?.type === "permission.replied") {
-        permissionRequests.delete(event.properties?.requestID);
+      if (REVIEW_RESOLUTION_EVENTS.has(event?.type)) {
+        permissionRequests.delete(properties.requestID ?? properties.id);
       }
       if (event?.type === "message.updated") {
         const info = event.properties?.info;

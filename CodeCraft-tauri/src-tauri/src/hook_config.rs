@@ -11,6 +11,7 @@ pub(crate) struct HookInstallConfig {
     pub claude_code: bool,
     pub codex: bool,
     pub open_code: bool,
+    pub pi: bool,
 }
 
 impl Default for HookInstallConfig {
@@ -19,6 +20,7 @@ impl Default for HookInstallConfig {
             claude_code: false,
             codex: false,
             open_code: false,
+            pi: false,
         }
     }
 }

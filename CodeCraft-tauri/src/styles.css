@@ -799,6 +799,17 @@ button {
   opacity: 0.9;
 }
 
+.session-product__mark[data-product-kind="opencode"] img,
+.session-product__option-mark[data-product-kind="opencode"] img {
+  filter: invert(1);
+}
+
+.session-product__mark[data-product-kind="pi"] img,
+.session-product__option-mark[data-product-kind="pi"] img {
+  filter: invert(1);
+  opacity: 0.92;
+}
+
 .session-product__option-label {
   min-width: 0;
   overflow: hidden;
@@ -926,7 +937,13 @@ button {
 }
 
 .session-source-card__mark--opencode img {
+  filter: invert(1);
   opacity: 0.95;
+}
+
+.session-source-card__mark--pi img {
+  filter: invert(1);
+  opacity: 0.92;
 }
 
 .session-source-card__status {
@@ -2426,6 +2443,11 @@ button {
   filter: invert(1);
 }
 
+.hook-agent-button__mark[data-agent="opencode"] img,
+.hook-agent-button__mark[data-agent="pi"] img {
+  filter: invert(1);
+}
+
 .hook-agent-button__copy {
   display: flex;
   min-width: 0;
@@ -2528,7 +2550,9 @@ button {
   animation: hook-operation-enter 180ms ease-out both;
 }
 
-:root[data-theme="light"] .hook-agent-button__mark[data-agent="codex"] img {
+:root[data-theme="light"] .hook-agent-button__mark[data-agent="codex"] img,
+:root[data-theme="light"] .hook-agent-button__mark[data-agent="opencode"] img,
+:root[data-theme="light"] .hook-agent-button__mark[data-agent="pi"] img {
   filter: none;
 }
 
@@ -4983,7 +5007,19 @@ button {
 :root[data-theme="light"]
   .session-product__option-mark[data-product-kind="codex"]
   img,
-:root[data-theme="light"] .session-source-card__mark--codex img {
+:root[data-theme="light"] .session-source-card__mark--codex img,
+:root[data-theme="light"]
+  .session-product__mark[data-product-kind="opencode"]
+  img,
+:root[data-theme="light"]
+  .session-product__option-mark[data-product-kind="opencode"]
+  img,
+:root[data-theme="light"] .session-source-card__mark--opencode img,
+:root[data-theme="light"] .session-product__mark[data-product-kind="pi"] img,
+:root[data-theme="light"]
+  .session-product__option-mark[data-product-kind="pi"]
+  img,
+:root[data-theme="light"] .session-source-card__mark--pi img {
   filter: none;
 }
 

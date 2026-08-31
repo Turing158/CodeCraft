@@ -17,8 +17,18 @@ import {
   type OpenCodeSession,
   type OpenCodeSessionStatus,
 } from "./opencode-sessions";
+import {
+  piSessionKey,
+  piStatusLabel,
+  type PiSession,
+  type PiSessionStatus,
+} from "./pi-sessions";
 
-export type UnifiedSession = ClaudeSession | CodexSession | OpenCodeSession;
+export type UnifiedSession =
+  | ClaudeSession
+  | CodexSession
+  | OpenCodeSession
+  | PiSession;
 
 const CODEX_VISUAL_STATUS: Record<CodexSessionStatus, ClaudeSessionStatus> = {
   working: "working",
@@ -41,6 +51,15 @@ const OPENCODE_VISUAL_STATUS: Record<
   stopped: "stopped",
 };
 
+const PI_VISUAL_STATUS: Record<PiSessionStatus, ClaudeSessionStatus> = {
+  working: "working",
+  waitingForInput: "waiting",
+  waitingForApproval: "attention",
+  toolRunning: "working",
+  stopped: "stopped",
+  idle: "idle",
+};
+
 const LIVE_STATUS_RANK: Record<ClaudeSessionStatus, number> = {
   working: 0,
   toolFailed: 1,
@@ -58,24 +77,36 @@ export const isOpenCodeSession = (
   session: UnifiedSession,
 ): session is OpenCodeSession => "pluginInstanceId" in session;
 
+export const isPiSession = (
+  session: UnifiedSession,
+): session is PiSession => "installId" in session;
+
 export const unifiedSessionSource = (
   session: UnifiedSession,
-): "claude" | "codex" | "opencode" =>
+): "claude" | "codex" | "opencode" | "pi" =>
   isCodexSession(session)
     ? "codex"
     : isOpenCodeSession(session)
       ? "opencode"
-      : "claude";
+      : isPiSession(session)
+        ? "pi"
+        : "claude";
 
 export const unifiedSessionKey = (session: UnifiedSession): string =>
-  isOpenCodeSession(session) ? openCodeSessionKey(session) : session.id;
+  isOpenCodeSession(session)
+    ? openCodeSessionKey(session)
+    : isPiSession(session)
+      ? piSessionKey(session)
+      : session.id;
 
 export const unifiedSessionStatusLabel = (session: UnifiedSession): string =>
   isCodexSession(session)
     ? codexStatusLabel(session.status)
     : isOpenCodeSession(session)
       ? openCodeStatusLabel(session.status)
-      : sessionStatusLabel(session.status);
+      : isPiSession(session)
+        ? piStatusLabel(session.status)
+        : sessionStatusLabel(session.status);
 
 export const unifiedSessionVisualStatus = (
   session: UnifiedSession,
@@ -84,7 +115,9 @@ export const unifiedSessionVisualStatus = (
     ? CODEX_VISUAL_STATUS[session.status]
     : isOpenCodeSession(session)
       ? OPENCODE_VISUAL_STATUS[session.status]
-      : session.status;
+      : isPiSession(session)
+        ? PI_VISUAL_STATUS[session.status]
+        : session.status;
 
 export const unifiedSessionIsRunning = (session: UnifiedSession): boolean => {
   const status = unifiedSessionVisualStatus(session);
@@ -94,7 +127,11 @@ export const unifiedSessionIsRunning = (session: UnifiedSession): boolean => {
 export const unifiedSessionLiveContent = (
   session: UnifiedSession,
 ): ClaudeLiveContent => {
-  if (!isCodexSession(session) && !isOpenCodeSession(session)) {
+  if (
+    !isCodexSession(session) &&
+    !isOpenCodeSession(session) &&
+    !isPiSession(session)
+  ) {
     return sessionLiveContent(session);
   }
 
@@ -112,14 +149,20 @@ export const unifiedSessionLiveContent = (
           kind: "status",
           text: isCodexSession(session)
             ? codexStatusLabel(session.status)
-            : openCodeStatusLabel(session.status),
+            : isOpenCodeSession(session)
+              ? openCodeStatusLabel(session.status)
+              : piStatusLabel(session.status),
         };
 };
 
 export const unifiedSessionLiveStatusText = (
   session: UnifiedSession,
 ): string => {
-  if (!isCodexSession(session) && !isOpenCodeSession(session)) {
+  if (
+    !isCodexSession(session) &&
+    !isOpenCodeSession(session) &&
+    !isPiSession(session)
+  ) {
     return sessionLiveStatusText(session);
   }
   if (
@@ -130,7 +173,9 @@ export const unifiedSessionLiveStatusText = (
   }
   return isCodexSession(session)
     ? codexStatusLabel(session.status)
-    : openCodeStatusLabel(session.status);
+    : isOpenCodeSession(session)
+      ? openCodeStatusLabel(session.status)
+      : piStatusLabel(session.status);
 };
 
 export const hasUnifiedWorkingSession = (

@@ -38,8 +38,10 @@ use crate::{
         SESSION_COOKIE,
     },
     lan_config::{self, LanBindMode, LanServerConfig},
-    lan_net, ApprovalIntegrationState, ClaudeIntegrationState, CodexIntegrationState,
-    OpenCodeIntegrationState,
+    lan_net,
+    pi::{PiApprovalDecision, PiQuestionAnswer},
+    ApprovalIntegrationState, ClaudeIntegrationState, CodexIntegrationState,
+    OpenCodeIntegrationState, PiIntegrationState,
 };
 
 /// Custom header a write request must carry. Browsers cannot add it during a
@@ -226,6 +228,10 @@ fn snapshot_value(app: &tauri::AppHandle) -> Value {
         .ok()
         .and_then(|snapshot| serde_json::to_value(snapshot).ok())
         .unwrap_or(Value::Null);
+    let pi = crate::pi_snapshot(&app.state::<PiIntegrationState>())
+        .ok()
+        .and_then(|snapshot| serde_json::to_value(snapshot).ok())
+        .unwrap_or(Value::Null);
     // Per-agent install state drives which agent cards the console shows. The
     // desktop panel already relies on this list for its hook settings, so the
     // LAN console reads the same source of truth.
@@ -256,6 +262,7 @@ fn snapshot_value(app: &tauri::AppHandle) -> Value {
         "claude": claude,
         "codex": codex,
         "opencode": opencode,
+        "pi": pi,
         "integrations": integrations,
     })
 }
@@ -512,6 +519,24 @@ struct OpenCodeGateBody {
     action: String,
 }
 
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct PiPermissionBody {
+    extension_instance_id: String,
+    session_id: String,
+    request_id: String,
+    decision: PiApprovalDecision,
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct PiQuestionBody {
+    extension_instance_id: String,
+    session_id: String,
+    request_id: String,
+    answers: Vec<PiQuestionAnswer>,
+}
+
 /// Runs a write handler after the shared access checks, then records the audit
 /// line when the config asks for it.
 fn with_write_access<F>(
@@ -645,6 +670,63 @@ async fn post_codex_approval(
                 &app.state::<CodexIntegrationState>(),
                 &body.request_id,
                 body.decision,
+            )
+        },
+    )
+}
+
+async fn post_pi_permission(
+    State(http_state): State<LanHttpState>,
+    ConnectInfo(client): ConnectInfo<SocketAddr>,
+    headers: HeaderMap,
+    Json(body): Json<PiPermissionBody>,
+) -> Response {
+    let app = http_state.app.clone();
+    let decision_label = match body.decision {
+        PiApprovalDecision::AllowOnce => "allowOnce",
+        PiApprovalDecision::AllowSession => "allowSession",
+        PiApprovalDecision::Deny => "deny",
+    };
+    with_write_access(
+        &http_state,
+        &headers,
+        client,
+        "pi-permission",
+        &body.request_id,
+        decision_label,
+        || {
+            crate::apply_pi_approval(
+                &app.state::<PiIntegrationState>(),
+                &body.extension_instance_id,
+                &body.session_id,
+                &body.request_id,
+                body.decision,
+            )
+        },
+    )
+}
+
+async fn post_pi_question(
+    State(http_state): State<LanHttpState>,
+    ConnectInfo(client): ConnectInfo<SocketAddr>,
+    headers: HeaderMap,
+    Json(body): Json<PiQuestionBody>,
+) -> Response {
+    let app = http_state.app.clone();
+    with_write_access(
+        &http_state,
+        &headers,
+        client,
+        "pi-question",
+        &body.request_id,
+        "answer",
+        || {
+            crate::apply_pi_question(
+                &app.state::<PiIntegrationState>(),
+                &body.extension_instance_id,
+                &body.session_id,
+                &body.request_id,
+                body.answers,
             )
         },
     )
@@ -796,6 +878,8 @@ fn router(app: tauri::AppHandle) -> Router {
         .route("/api/claude/question", post(post_claude_question))
         .route("/api/claude/plan", post(post_claude_plan))
         .route("/api/codex/approval", post(post_codex_approval))
+        .route("/api/pi/permission", post(post_pi_permission))
+        .route("/api/pi/question", post(post_pi_question))
         .route("/api/opencode/question", post(post_opencode_question))
         .route(
             "/api/opencode/question/reject",

@@ -26,8 +26,15 @@ import {
   type OpenCodeSession,
   type OpenCodeSnapshot,
 } from "../../src/opencode-sessions";
+import {
+  piSessionEntryView,
+  piSessionKey,
+  piStatusLabel,
+  type PiSession,
+  type PiSnapshot,
+} from "../../src/pi-sessions";
 
-export type ConsoleSource = "claude" | "codex" | "opencode";
+export type ConsoleSource = "claude" | "codex" | "opencode" | "pi";
 
 export type PendingKind = "permission" | "question" | "plan";
 
@@ -58,6 +65,10 @@ export interface ConsolePending {
     reviewId: string;
     requestId?: string;
     reviewType: OpenCodeReview["reviewType"];
+  };
+  pi?: {
+    extensionInstanceId: string;
+    sessionId: string;
   };
 }
 
@@ -100,6 +111,7 @@ export interface RawSnapshot {
   claude?: ClaudeSessionSnapshot | null;
   codex?: CodexSnapshot | null;
   opencode?: OpenCodeSnapshot | null;
+  pi?: PiSnapshot | null;
   integrations?: RawHookIntegration[] | null;
 }
 
@@ -129,6 +141,13 @@ const emptyCodex: CodexSnapshot = {
 };
 
 const emptyOpenCode: OpenCodeSnapshot = {
+  connected: false,
+  integrationError: null,
+  sessions: [],
+  instances: [],
+};
+
+const emptyPi: PiSnapshot = {
   connected: false,
   integrationError: null,
   sessions: [],
@@ -269,27 +288,68 @@ const openCodePending = (
   };
 };
 
+const piPending = (session: PiSession): ConsolePending | null => {
+  const target = {
+    extensionInstanceId: session.extensionInstanceId,
+    sessionId: session.id,
+  };
+  switch (piSessionEntryView(session)) {
+    case "permission":
+      return session.permission
+        ? {
+            kind: "permission",
+            requestId: session.permission.id,
+            readOnly: false,
+            permission: session.permission,
+            pi: target,
+          }
+        : null;
+    case "question":
+      return session.question
+        ? {
+            kind: "question",
+            requestId: session.question.id,
+            readOnly: false,
+            question: session.question,
+            pi: target,
+          }
+        : null;
+    default:
+      return null;
+  }
+};
+
 const sourceFromHookId = (id: string | undefined): ConsoleSource | undefined => {
   if (id === "claudeCode") return "claude";
   if (id === "codex") return "codex";
   if (id === "openCode") return "opencode";
+  if (id === "pi") return "pi";
   return undefined;
 };
 
 const integrationName = (source: ConsoleSource): string =>
-  source === "claude" ? "Claude Code" : source === "codex" ? "Codex" : "OpenCode";
+  source === "claude"
+    ? "Claude Code"
+    : source === "codex"
+      ? "Codex"
+      : source === "opencode"
+        ? "OpenCode"
+        : "PI";
 
 const sessionCountFor = (
   source: ConsoleSource,
   claudeLength: number,
   codexLength: number,
   opencodeLength: number,
+  piLength: number,
 ): number =>
   source === "claude"
     ? claudeLength
     : source === "codex"
       ? codexLength
-      : opencodeLength;
+      : source === "opencode"
+        ? opencodeLength
+        : piLength;
 
 const openCodeEntry = (session: OpenCodeSession): ConsoleEntry => ({
   key: `opencode:${session.pluginInstanceId}:${session.id}`,
@@ -309,6 +369,26 @@ const openCodeEntry = (session: OpenCodeSession): ConsoleEntry => ({
   })),
   outputs: session.outputs.map((output) => ({ id: output.id, text: output.text })),
   pending: openCodePending(session),
+});
+
+const piEntry = (session: PiSession): ConsoleEntry => ({
+  key: piSessionKey(session),
+  source: "pi",
+  sessionId: session.id,
+  title: session.title,
+  status: session.status,
+  statusLabel: piStatusLabel(session.status),
+  cwd: session.cwd,
+  updatedAt: session.updatedAt,
+  activities: session.activities.map((activity) => ({
+    id: activity.id,
+    tool: activity.tool,
+    summary: activity.summary,
+    status: activity.status,
+    updatedAt: activity.updatedAt,
+  })),
+  outputs: session.outputs.map((output) => ({ id: output.id, text: output.text })),
+  pending: piPending(session),
 });
 
 const codexEntry = (
@@ -359,11 +439,15 @@ export const mergeSnapshot = (raw: RawSnapshot): ConsoleSnapshot => {
   const opencode = isRecord(raw.opencode)
     ? { ...emptyOpenCode, ...(raw.opencode as OpenCodeSnapshot) }
     : emptyOpenCode;
+  const pi = isRecord(raw.pi)
+    ? { ...emptyPi, ...(raw.pi as PiSnapshot) }
+    : emptyPi;
 
   const entries = [
     ...claude.sessions.map(claudeEntry),
     ...codex.sessions.map((session) => codexEntry(session, codex.interactions)),
     ...opencode.sessions.map(openCodeEntry),
+    ...pi.sessions.map(piEntry),
   ].sort(compareEntries);
 
   return {
@@ -375,6 +459,7 @@ export const mergeSnapshot = (raw: RawSnapshot): ConsoleSnapshot => {
       claude.sessions.length,
       codex.sessions.length,
       opencode.sessions.length,
+      pi.sessions.length,
     ),
   };
 };
@@ -384,6 +469,7 @@ const buildIntegrations = (
   claudeLength: number,
   codexLength: number,
   opencodeLength: number,
+  piLength: number,
 ): ConsoleIntegration[] => {
   const hookStatuses = Array.isArray(raw.integrations) ? raw.integrations : [];
   if (hookStatuses.length === 0) {
@@ -418,6 +504,15 @@ const buildIntegrations = (
         agentInstalled: true,
         hookInstalled: true,
       },
+      {
+        source: "pi",
+        name: integrationName("pi"),
+        connected: piConnected(raw),
+        error: integrationError(raw, "pi"),
+        sessionCount: piLength,
+        agentInstalled: true,
+        hookInstalled: true,
+      },
     ];
   }
 
@@ -429,14 +524,22 @@ const buildIntegrations = (
         ? claudeConnected(raw)
         : source === "codex"
           ? codexConnected(raw)
-          : opencodeConnected(raw);
+          : source === "opencode"
+            ? opencodeConnected(raw)
+            : piConnected(raw);
     return [
       {
         source,
         name: status.name ?? integrationName(source),
         connected,
         error: integrationError(raw, source),
-        sessionCount: sessionCountFor(source, claudeLength, codexLength, opencodeLength),
+        sessionCount: sessionCountFor(
+          source,
+          claudeLength,
+          codexLength,
+          opencodeLength,
+          piLength,
+        ),
         agentInstalled: status.agentInstalled === true,
         hookInstalled: status.hookInstalled === true,
       },
@@ -450,6 +553,8 @@ const codexConnected = (raw: RawSnapshot): boolean =>
   isRecord(raw.codex) ? raw.codex.connected === true : false;
 const opencodeConnected = (raw: RawSnapshot): boolean =>
   isRecord(raw.opencode) ? raw.opencode.connected === true : false;
+const piConnected = (raw: RawSnapshot): boolean =>
+  isRecord(raw.pi) ? raw.pi.connected === true : false;
 
 const integrationError = (raw: RawSnapshot, source: ConsoleSource): string | null => {
   const value =
@@ -461,9 +566,13 @@ const integrationError = (raw: RawSnapshot, source: ConsoleSource): string | nul
         ? isRecord(raw.codex)
           ? raw.codex.integrationError
           : null
-        : isRecord(raw.opencode)
-          ? raw.opencode.integrationError
-          : null;
+        : source === "opencode"
+          ? isRecord(raw.opencode)
+            ? raw.opencode.integrationError
+            : null
+          : isRecord(raw.pi)
+            ? raw.pi.integrationError
+            : null;
   return (value ?? null) as string | null;
 };
 

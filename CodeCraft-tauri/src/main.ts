@@ -64,9 +64,19 @@ import {
   type OpenCodeSnapshot,
 } from "./opencode-sessions";
 import {
+  piPendingReview,
+  piSessionEntryView,
+  piSessionKey,
+  type PiPermissionRequest,
+  type PiQuestionRequest,
+  type PiSession,
+  type PiSnapshot,
+} from "./pi-sessions";
+import {
   hasUnifiedWorkingSession,
   isCodexSession,
   isOpenCodeSession,
+  isPiSession,
   primaryUnifiedLiveSession,
   unifiedSessionKey,
   unifiedSessionIsRunning,
@@ -395,6 +405,10 @@ const openCodeIconUrl = new URL(
   "../src-tauri/icons/icon/opencode.svg?no-inline",
   import.meta.url,
 ).href;
+const piIconUrl = new URL(
+  "../src-tauri/icons/icon/pi.svg?no-inline",
+  import.meta.url,
+).href;
 // The pack artwork stays external for the same CSP reason as the logo above:
 // these files are small enough that Vite would otherwise inline them.
 const soundPackIconUrls: Record<Exclude<SoundPackId, "custom">, string> = {
@@ -458,17 +472,24 @@ const codexSessionCard = panel?.querySelector<HTMLElement>(
 const openCodeSessionCard = panel?.querySelector<HTMLElement>(
   "#opencode-session-card",
 );
+const piSessionCard = panel?.querySelector<HTMLElement>("#pi-session-card");
 const codexSessionList = panel?.querySelector<HTMLUListElement>(
   "#codex-session-list",
 );
 const openCodeSessionList = panel?.querySelector<HTMLUListElement>(
   "#opencode-session-list",
 );
+const piSessionList = panel?.querySelector<HTMLUListElement>(
+  "#pi-session-list",
+);
 const claudeConnectionStatus = panel?.querySelector<HTMLButtonElement>(
   "#claude-connection-status",
 );
 const openCodeConnectionStatus = panel?.querySelector<HTMLElement>(
   "#opencode-connection-status",
+);
+const piConnectionStatus = panel?.querySelector<HTMLElement>(
+  "#pi-connection-status",
 );
 const claudeSessionCardIcon = panel?.querySelector<HTMLImageElement>(
   "#claude-session-card-icon",
@@ -478,6 +499,9 @@ const codexSessionCardIcon = panel?.querySelector<HTMLImageElement>(
 );
 const openCodeSessionCardIcon = panel?.querySelector<HTMLImageElement>(
   "#opencode-session-card-icon",
+);
+const piSessionCardIcon = panel?.querySelector<HTMLImageElement>(
+  "#pi-session-card-icon",
 );
 const sessionProduct = panel?.querySelector<HTMLElement>(".session-product");
 const sessionProductTrigger = panel?.querySelector<HTMLButtonElement>(
@@ -994,13 +1018,17 @@ if (
   !claudeSessionCard ||
   !codexSessionCard ||
   !openCodeSessionCard ||
+  !piSessionCard ||
   !codexSessionList ||
   !openCodeSessionList ||
+  !piSessionList ||
   !claudeConnectionStatus ||
   !openCodeConnectionStatus ||
+  !piConnectionStatus ||
   !claudeSessionCardIcon ||
   !codexSessionCardIcon ||
   !openCodeSessionCardIcon ||
+  !piSessionCardIcon ||
   !sessionProduct ||
   !sessionProductTrigger ||
   !sessionProductIcon ||
@@ -1300,12 +1328,16 @@ let refreshingOpenCodeSessions = false;
 let selectedSessionId: string | undefined;
 let selectedCodexSessionId: string | undefined;
 let selectedOpenCodeSessionKey: string | undefined;
-let selectedSessionSource: "claude" | "codex" | "opencode" = "claude";
+let selectedPiSessionKey: string | undefined;
+let selectedSessionSource: "claude" | "codex" | "opencode" | "pi" =
+  "claude";
 let lastRefreshError: string | undefined;
 let lastOpenCodeRefreshError: string | undefined;
+let lastPiRefreshError: string | undefined;
 let sessionItems = new Map<string, HTMLLIElement>();
 let codexSessionItems = new Map<string, HTMLLIElement>();
 let openCodeSessionItems = new Map<string, HTMLLIElement>();
+let piSessionItems = new Map<string, HTMLLIElement>();
 let latestCodexSnapshot: CodexSnapshot = {
   connected: false,
   integrationError: null,
@@ -1326,6 +1358,12 @@ let lastAutoRevealedOpenCodeReviewId: string | undefined;
 let submittedOpenCodeReviewId: string | undefined;
 let followupOpenCodeReviewId: string | undefined;
 let activeOpenCodeReview: OpenCodeReview | undefined;
+let latestPiSnapshot: PiSnapshot = {
+  connected: false,
+  integrationError: null,
+  sessions: [],
+  instances: [],
+};
 let displayedContentView: ContentView = "sessions";
 let requestedContentView: ContentView = "sessions";
 let questionOriginView: ContentView | undefined;
@@ -1339,14 +1377,18 @@ let latestClaudeSnapshot: ClaudeSessionSnapshot = {
   sessions: [],
 };
 const soundFrames = new Map<string, SoundSessionFrame>();
-const soundSourcePrimed: Record<"claude" | "codex" | "opencode", boolean> = {
+const soundSourcePrimed: Record<
+  "claude" | "codex" | "opencode" | "pi",
+  boolean
+> = {
   claude: false,
   codex: false,
   opencode: false,
+  pi: false,
 };
 
 const observeSoundFrames = (
-  source: "claude" | "codex" | "opencode",
+  source: "claude" | "codex" | "opencode" | "pi",
   frames: Map<string, SoundSessionFrame>,
 ) => {
   const primed = soundSourcePrimed[source];
@@ -1452,6 +1494,26 @@ const observeOpenCodeSounds = (sessions: OpenCodeSession[]) => {
     ),
   );
 };
+
+const observePiSounds = (sessions: PiSession[]) => {
+  observeSoundFrames(
+    "pi",
+    new Map(
+      sessions.map((session) => [
+        piSessionKey(session),
+        {
+          status: session.status,
+          activityIds: session.activities.map((activity) => activity.id),
+          failedActivityIds: session.activities
+            .filter((activity) => activity.status === "failed")
+            .map((activity) => activity.id),
+          permissionId: session.permission?.id ?? null,
+          planId: null,
+        },
+      ]),
+    ),
+  );
+};
 let renderedDetailSignature: string | undefined;
 let contentViewTransitionTimer: ReturnType<typeof setTimeout> | undefined;
 let incomingViewFrame: number | undefined;
@@ -1459,13 +1521,18 @@ let settingsPanelTransition: Animation | undefined;
 let settingsPanelTransitionToken = 0;
 let displayedSettingsSection = "general";
 let requestedSettingsSection = "general";
-type SessionProductId = "all" | "claude-code" | "codex" | "opencode";
+type SessionProductId =
+  | "all"
+  | "claude-code"
+  | "codex"
+  | "opencode"
+  | "pi";
 type SessionSourceProductId = Exclude<SessionProductId, "all">;
 type SessionProduct = {
   id: SessionProductId;
   triggerLabel: string;
   optionLabel: string;
-  kind: "codecraft" | "claude" | "codex" | "opencode";
+  kind: "codecraft" | "claude" | "codex" | "opencode" | "pi";
   iconUrl: string;
 };
 
@@ -1498,6 +1565,13 @@ const sessionProducts: SessionProduct[] = [
     kind: "opencode",
     iconUrl: openCodeIconUrl,
   },
+  {
+    id: "pi",
+    triggerLabel: "PI",
+    optionLabel: "PI",
+    kind: "pi",
+    iconUrl: piIconUrl,
+  },
 ];
 const installedSessionProductIds = new Set<SessionSourceProductId>();
 let selectedSessionProductId: SessionProductId = "all";
@@ -1516,7 +1590,9 @@ let sessionCleanupSelectionPending = false;
 let questionOptionsMeasureFrame: number | undefined;
 let renderedQuestionRequestId: string | undefined;
 let activeQuestionRequest: ClaudeQuestionRequest | undefined;
-let activeQuestionSource: "claude" | "codex" | "opencode" = "claude";
+let activeQuestionSource: "claude" | "codex" | "opencode" | "pi" =
+  "claude";
+let activePiQuestion: PiQuestionRequest | undefined;
 let activeCodexQuestionThreadId: string | undefined;
 let activeQuestionIndex = 0;
 let questionDrafts: QuestionDraft[] = [];
@@ -1528,7 +1604,10 @@ let manuallyHiddenPermissionRequestId: string | undefined;
 let lastAutoRevealedPermissionRequestId: string | undefined;
 let renderedPermissionRequestId: string | undefined;
 let activePermissionRequest: ClaudePermissionRequest | undefined;
-let activePermissionSource: "claude" | "codex" | "opencode" = "claude";
+let activePermissionSource: "claude" | "codex" | "opencode" | "pi" = "claude";
+let activePiPermission: PiPermissionRequest | undefined;
+let dismissedPiReviewId: string | undefined;
+let lastAutoRevealedPiReviewId: string | undefined;
 let locallySubmittedPermissionRequestId: string | undefined;
 let planOriginView: ContentView | undefined;
 let manuallyHiddenPlanRequestId: string | undefined;
@@ -2134,7 +2213,11 @@ const hasSelectedSessionDetail = () =>
           (session) =>
             openCodeSessionKey(session) === selectedOpenCodeSessionKey,
         )
-      : latestSessions.some((session) => session.id === selectedSessionId);
+      : selectedSessionSource === "pi"
+        ? latestPiSnapshot.sessions.some(
+            (session) => piSessionKey(session) === selectedPiSessionKey,
+          )
+        : latestSessions.some((session) => session.id === selectedSessionId);
 
 const returnViewForReview = (origin: ContentView | undefined) =>
   reviewReturnView(origin, hasSelectedSessionDetail());
@@ -2984,6 +3067,7 @@ const syncOpenCodeQuestionStatus = (review: OpenCodeReview) => {
 const clearActiveQuestionRequest = () => {
   renderedQuestionRequestId = undefined;
   activeQuestionRequest = undefined;
+  activePiQuestion = undefined;
   activeQuestionIndex = 0;
   questionDrafts = [];
   activeCodexQuestionThreadId = undefined;
@@ -3034,6 +3118,8 @@ questionBackButton.addEventListener("click", () => {
     dismissedCodexInteractionId = activeQuestionRequest.id;
   } else if (activeQuestionSource === "opencode") {
     dismissedOpenCodeReviewId = activeQuestionRequest.id;
+  } else if (activeQuestionSource === "pi") {
+    dismissedPiReviewId = activeQuestionRequest.id;
   } else {
     manuallyHiddenQuestionRequestId = activeQuestionRequest.id;
   }
@@ -3216,6 +3302,16 @@ questionSubmitButton.addEventListener("click", async () => {
       questionRejectButton.disabled = true;
       setQuestionSubmitStatus(translate("正在回传回答…"));
       submittedToOpenCode = true;
+    } else if (activeQuestionSource === "pi") {
+      const request = activePiQuestion;
+      if (!request) return;
+      await invoke("pi_respond_question", {
+        extensionInstanceId: request.extensionInstanceId,
+        sessionId: request.sessionId,
+        requestId: request.id,
+        answers: submission.answers,
+      });
+      dismissedPiReviewId = request.id;
     } else {
       await invoke("submit_claude_question_answer", {
         requestId: submission.requestId,
@@ -3235,7 +3331,9 @@ questionSubmitButton.addEventListener("click", async () => {
     switchContentView(returnView);
   } catch (error) {
     console.error("Unable to submit question answers", error);
-    if (activeQuestionSource === "opencode") {
+    if (
+      activeQuestionSource === "opencode" || activeQuestionSource === "pi"
+    ) {
       const message = error instanceof Error ? error.message : String(error);
       setQuestionSubmitStatus(`${translate("回传失败：")}${message}`, "error");
     }
@@ -3264,6 +3362,12 @@ const renderPermissionRequest = (request: ClaudePermissionRequest) => {
   const allowDescription = permissionAllowButton.querySelector(
     ".question-option__description",
   );
+  const alwaysLabel = permissionAlwaysAllowButton.querySelector(
+    ".question-option__label",
+  );
+  const alwaysDescription = permissionAlwaysAllowButton.querySelector(
+    ".question-option__description",
+  );
   permissionAlwaysAllowButton.hidden = !request.canAlwaysAllow;
   if (allowLabel) {
     allowLabel.textContent = request.canAlwaysAllow ? "允许一次" : "允许";
@@ -3272,6 +3376,10 @@ const renderPermissionRequest = (request: ClaudePermissionRequest) => {
     allowDescription.textContent = request.canAlwaysAllow
       ? "仅执行这一次，不保存规则"
       : "执行这个工具调用";
+  }
+  if (alwaysLabel) alwaysLabel.textContent = "始终允许";
+  if (alwaysDescription) {
+    alwaysDescription.textContent = "执行并记住，之后不再询问";
   }
 
   if (request.cwd) {
@@ -3291,6 +3399,7 @@ const renderPermissionRequest = (request: ClaudePermissionRequest) => {
 const clearActivePermissionRequest = () => {
   renderedPermissionRequestId = undefined;
   activePermissionRequest = undefined;
+  activePiPermission = undefined;
   permissionSummaryText.textContent = "";
   permissionCwd.textContent = "";
   permissionCwd.hidden = true;
@@ -3405,6 +3514,21 @@ const submitPermissionDecision = async (decision: PermissionDecision) => {
       submittedOpenCodeReviewId = openCodeReviewKey(review);
       followupOpenCodeReviewId = undefined;
       submittedToOpenCode = true;
+    } else if (activePermissionSource === "pi") {
+      const pending = activePiPermission;
+      if (!pending) return;
+      await invoke("pi_respond_approval", {
+        extensionInstanceId: pending.extensionInstanceId,
+        sessionId: pending.sessionId,
+        requestId: pending.id,
+        decision:
+          decision === "allowAlways"
+            ? "allowSession"
+            : decision === "allow"
+              ? "allowOnce"
+              : "deny",
+      });
+      dismissedPiReviewId = pending.id;
     } else {
       await invoke("submit_claude_permission_decision", {
         requestId: request.id,
@@ -3417,6 +3541,8 @@ const submitPermissionDecision = async (decision: PermissionDecision) => {
     }
     if (activePermissionSource === "codex") {
       dismissedCodexInteractionId = request.id;
+    } else if (activePermissionSource === "pi") {
+      dismissedPiReviewId = request.id;
     } else {
       locallySubmittedPermissionRequestId = request.id;
     }
@@ -3425,7 +3551,10 @@ const submitPermissionDecision = async (decision: PermissionDecision) => {
     switchContentView(returnView);
   } catch (error) {
     console.error("Unable to submit the permission decision", error);
-    if (activePermissionSource === "opencode") {
+    if (
+      activePermissionSource === "opencode" ||
+      activePermissionSource === "pi"
+    ) {
       const message = error instanceof Error ? error.message : String(error);
       setPermissionSubmitStatus(
         `${translate("回传失败：")}${message}`,
@@ -3444,6 +3573,8 @@ permissionBackButton.addEventListener("click", () => {
     dismissedCodexInteractionId = activePermissionRequest.id;
   } else if (activePermissionSource === "opencode") {
     dismissedOpenCodeReviewId = activePermissionRequest.id;
+  } else if (activePermissionSource === "pi") {
+    dismissedPiReviewId = activePermissionRequest.id;
   } else {
     manuallyHiddenPermissionRequestId = activePermissionRequest.id;
   }
@@ -3487,9 +3618,34 @@ const syncPlanSourceControls = () => {
     translate("自定义指令"),
   );
   planCustomSubmitButton.textContent = translate("提交");
+  const executeLabel = planAutoButton.querySelector(
+    ".question-option__label",
+  );
+  const executeDescription = planAutoButton.querySelector(
+    ".question-option__description",
+  );
+  if (executeLabel) {
+    executeLabel.textContent = "实行计划  auto mode";
+  }
+  if (executeDescription) {
+    executeDescription.textContent = "以自动模式执行此计划";
+  }
   planActionBadge.textContent = isCodexPlan
     ? "在原 Codex 中选择"
     : "点击后立即回传";
+};
+
+const syncPiPermissionStatus = () => {
+  const alwaysLabel = permissionAlwaysAllowButton.querySelector(
+    ".question-option__label",
+  );
+  const alwaysDescription = permissionAlwaysAllowButton.querySelector(
+    ".question-option__description",
+  );
+  if (alwaysLabel) alwaysLabel.textContent = "本会话允许相同工具";
+  if (alwaysDescription) {
+    alwaysDescription.textContent = "按 PI 会话和工具保存，PI 重启后仍然有效";
+  }
 };
 
 const renderPlanRequest = (
@@ -3564,7 +3720,7 @@ type PlanExecutionMode = "auto";
 
 const submitPlanDecision = async (mode: PlanExecutionMode, note?: string) => {
   const request = activePlanRequest;
-  if (!request || activePlanSource !== "claude") return;
+  if (!request || activePlanSource === "codex") return;
 
   const returnView = returnViewForReview(planOriginView);
   setPlanButtonsDisabled(true);
@@ -3580,7 +3736,7 @@ const submitPlanDecision = async (mode: PlanExecutionMode, note?: string) => {
     planOriginView = undefined;
     switchContentView(returnView);
   } catch (error) {
-    console.error("Unable to submit the plan decision to Claude Code", error);
+    console.error("Unable to submit the plan decision", error);
   } finally {
     setPlanButtonsDisabled(false);
   }
@@ -3620,7 +3776,7 @@ planCustomSubmitButton.addEventListener("click", () => {
 });
 
 planCustomInput.addEventListener("keydown", (event) => {
-  if (activePlanSource !== "claude") return;
+  if (activePlanSource === "codex") return;
   if (event.key !== "Enter" || event.isComposing) return;
   event.preventDefault();
   planCustomSubmitButton.click();
@@ -3807,9 +3963,13 @@ const syncProductVisibility = () => {
     installedSessionProductIds.has("opencode") &&
     (selectedSessionProductId === "all" ||
       selectedSessionProductId === "opencode");
+  const showPi =
+    installedSessionProductIds.has("pi") &&
+    (selectedSessionProductId === "all" || selectedSessionProductId === "pi");
   claudeSessionCard.hidden = !showClaude;
   codexSessionCard.hidden = !showCodex;
   openCodeSessionCard.hidden = !showOpenCode;
+  piSessionCard.hidden = !showPi;
   sessionSourceCards.dataset.filter = selectedSessionProductId;
   renderSessionSummary();
 };
@@ -3820,6 +3980,7 @@ const sessionProductIdForHookAgent = (
   if (id === "claudeCode") return "claude-code";
   if (id === "codex") return "codex";
   if (id === "openCode") return "opencode";
+  if (id === "pi") return "pi";
   return undefined;
 };
 
@@ -3980,6 +4141,7 @@ syncSessionProductWidth();
 claudeSessionCardIcon.src = claudeCodeIconUrl;
 codexSessionCardIcon.src = codexIconUrl;
 openCodeSessionCardIcon.src = openCodeIconUrl;
+piSessionCardIcon.src = piIconUrl;
 
 claudeConnectionStatus.addEventListener("click", () => {
   if (claudeConnectionStatus.dataset.connected === "true") return;
@@ -4048,6 +4210,7 @@ const latestUnifiedSessions = (): UnifiedSession[] => [
   ...latestSessions,
   ...latestCodexSnapshot.sessions,
   ...latestOpenCodeSnapshot.sessions,
+  ...latestPiSnapshot.sessions,
 ];
 
 const collapsedPanelHeight = () =>
@@ -4219,6 +4382,7 @@ const renderSessionDetail = (session: UnifiedSession) => {
     session.activities,
     session.outputs,
     isOpenCodeSession(session) ? session.pendingReviews : null,
+    isPiSession(session) ? [session.question, session.permission] : null,
   ]);
   if (signature === renderedDetailSignature) return;
 
@@ -4233,12 +4397,12 @@ const renderSessionDetail = (session: UnifiedSession) => {
 
   renderedDetailSignature = signature;
   sessionDetailView.dataset.sessionId = sessionKey;
-  sessionDetailView.dataset.sessionStatus = session.status;
+  sessionDetailView.dataset.sessionStatus = unifiedSessionVisualStatus(session);
   sessionDetailTitle.textContent = session.title;
   sessionDetailTitle.title = session.title;
-  sessionDetailStatus.dataset.status = session.status;
+  sessionDetailStatus.dataset.status = unifiedSessionVisualStatus(session);
   sessionDetailStatus.replaceChildren(
-    createPixelStatusSvg(session.status, "pixel-status"),
+    createPixelStatusSvg(unifiedSessionVisualStatus(session), "pixel-status"),
     document.createTextNode(unifiedSessionStatusLabel(session)),
   );
 
@@ -4253,7 +4417,7 @@ const renderSessionDetail = (session: UnifiedSession) => {
   if (session.activities.length === 0) {
     const empty = document.createElement("li");
     empty.className = "detail-empty";
-    empty.textContent = "等待 Claude 调用工具";
+    empty.textContent = "等待会话调用工具";
     sessionActivityList.replaceChildren(empty);
   } else {
     const items = [...session.activities].reverse().map((activity) => {
@@ -4294,7 +4458,7 @@ const renderSessionDetail = (session: UnifiedSession) => {
   if (session.outputs.length === 0) {
     const empty = document.createElement("p");
     empty.className = "detail-empty";
-    empty.textContent = "等待 Claude 产生可读取的转录输出";
+    empty.textContent = "等待会话产生可读取的输出";
     sessionOutput.replaceChildren(empty);
   } else {
     const outputEntries = session.outputs.map((output) => {
@@ -4318,6 +4482,9 @@ const setSelectedSession = (sessionId: string) => {
 
   selectedSessionId = sessionId;
   selectedSessionSource = "claude";
+  selectedCodexSessionId = undefined;
+  selectedOpenCodeSessionKey = undefined;
+  selectedPiSessionKey = undefined;
   for (const button of sessionList.querySelectorAll<HTMLButtonElement>(
     ".session-button",
   )) {
@@ -4370,6 +4537,8 @@ const setSelectedCodexSession = (sessionId: string) => {
   selectedCodexSessionId = sessionId;
   selectedSessionSource = "codex";
   selectedSessionId = undefined;
+  selectedOpenCodeSessionKey = undefined;
+  selectedPiSessionKey = undefined;
   for (const button of codexSessionList.querySelectorAll<HTMLButtonElement>(
     ".session-button",
   )) {
@@ -4432,6 +4601,7 @@ const setSelectedOpenCodeSession = (sessionKey: string) => {
   selectedSessionSource = "opencode";
   selectedSessionId = undefined;
   selectedCodexSessionId = undefined;
+  selectedPiSessionKey = undefined;
   for (const button of openCodeSessionList.querySelectorAll<HTMLButtonElement>(
     ".session-button",
   )) {
@@ -4450,6 +4620,64 @@ const setSelectedOpenCodeSession = (sessionKey: string) => {
   sessionDetailBack.focus({ preventScroll: true });
 };
 
+const showPiReview = (session: PiSession, shouldAutoReveal: boolean) => {
+  const reveal = (view: ReviewContentView) => {
+    if (requestedContentView !== view) {
+      rememberReviewOrigin(view);
+      switchContentView(view);
+    }
+    if (!shouldAutoReveal || !collapseExpandSettings.approvalAutoExpand) return;
+    void revealPanelForAttention().catch((error: unknown) => {
+      console.error("Unable to reveal the PI review", error);
+    });
+  };
+
+  const entryView = piSessionEntryView(session);
+  if (entryView === "question" && session.question) {
+    clearActivePermissionRequest();
+    activeQuestionSource = "pi";
+    activePiQuestion = session.question;
+    renderQuestionRequest(session.question);
+    reveal("question");
+    return;
+  }
+  if (entryView === "permission" && session.permission) {
+    clearActiveQuestionRequest();
+    activePermissionSource = "pi";
+    activePiPermission = session.permission;
+    renderPermissionRequest(session.permission);
+    syncPiPermissionStatus();
+    reveal("permission");
+  }
+};
+
+const setSelectedPiSession = (sessionKey: string) => {
+  const session = latestPiSnapshot.sessions.find(
+    (item) => piSessionKey(item) === sessionKey,
+  );
+  if (!session) return;
+  selectedPiSessionKey = sessionKey;
+  selectedSessionSource = "pi";
+  selectedSessionId = undefined;
+  selectedCodexSessionId = undefined;
+  selectedOpenCodeSessionKey = undefined;
+  for (const button of piSessionList.querySelectorAll<HTMLButtonElement>(
+    ".session-button",
+  )) {
+    button.setAttribute(
+      "aria-pressed",
+      String(button.dataset.sessionKey === sessionKey),
+    );
+  }
+  if (piSessionEntryView(session) !== "detail") {
+    showPiReview(session, false);
+    return;
+  }
+  renderSessionDetail(session);
+  switchContentView("detail");
+  sessionDetailBack.focus({ preventScroll: true });
+};
+
 const renderSessionSummary = () => {
   const claudeActiveCount = latestSessions.filter(
     (session) => session.status !== "idle",
@@ -4460,15 +4688,20 @@ const renderSessionSummary = () => {
   const openCodeActiveCount = latestOpenCodeSnapshot.sessions.filter(
     (session) => session.status !== "idle",
   ).length;
+  const piActiveCount = latestPiSnapshot.sessions.filter(
+    (session) => session.status !== "idle",
+  ).length;
   const activeCounts: Record<SessionSourceProductId, number> = {
     "claude-code": claudeActiveCount,
     codex: codexActiveCount,
     opencode: openCodeActiveCount,
+    pi: piActiveCount,
   };
   const connectionStates: Record<SessionSourceProductId, boolean> = {
     "claude-code": latestClaudeSnapshot.connected,
     codex: latestCodexSnapshot.connected,
     opencode: isOpenCodeHookHealthy(),
+    pi: latestPiSnapshot.connected,
   };
   const selectedSources =
     selectedSessionProductId === "all"
@@ -4728,6 +4961,101 @@ const renderOpenCodeSnapshot = (snapshot: OpenCodeSnapshot) => {
   if (shouldAutoReveal) lastAutoRevealedOpenCodeReviewId = reviewId;
 };
 
+const renderPiSnapshot = (snapshot: PiSnapshot) => {
+  snapshot = {
+    ...snapshot,
+    sessions: filterAutoCleanedSessions(
+      filterDismissedSessions(
+        snapshot.sessions,
+        dismissedSessionKeys,
+        piSessionKey,
+        unifiedSessionIsRunning,
+      ),
+      sessionCleanupSettings,
+    ),
+  };
+  observePiSounds(snapshot.sessions);
+  latestPiSnapshot = snapshot;
+  setSourceStatusLabel(
+    piConnectionStatus,
+    snapshot.connected ? "Hook 正常" : "Hook 异常",
+  );
+  piConnectionStatus.dataset.connected = String(snapshot.connected);
+  piConnectionStatus.title = snapshot.connected
+    ? "PI Hook 连接正常"
+    : (snapshot.integrationError ?? "PI Hook 未连接");
+
+  if (
+    !snapshot.sessions.some(
+      (session) => piSessionKey(session) === selectedPiSessionKey,
+    )
+  ) {
+    selectedPiSessionKey = undefined;
+    if (selectedSessionSource === "pi") renderedDetailSignature = undefined;
+  }
+  renderUnifiedSessionList(piSessionList, snapshot.sessions, piSessionItems);
+  const selected = snapshot.sessions.find(
+    (session) => piSessionKey(session) === selectedPiSessionKey,
+  );
+  if (
+    selectedSessionSource === "pi" &&
+    requestedContentView === "detail" &&
+    selected
+  ) {
+    renderSessionDetail(selected);
+  }
+  renderSessionSummary();
+  syncCollapsedSessionState();
+
+  const pending = piPendingReview(snapshot.sessions);
+  if (!pending) {
+    if (
+      (requestedContentView === "permission" &&
+        activePermissionSource === "pi") ||
+      (requestedContentView === "question" && activeQuestionSource === "pi")
+    ) {
+      const origin =
+        requestedContentView === "permission"
+          ? permissionOriginView
+          : questionOriginView;
+      const returnView = returnViewForReview(origin);
+      permissionOriginView = undefined;
+      questionOriginView = undefined;
+      clearActiveQuestionRequest();
+      clearActivePermissionRequest();
+      switchContentView(returnView);
+    }
+    dismissedPiReviewId = undefined;
+    lastAutoRevealedPiReviewId = undefined;
+    return;
+  }
+  if (pending.request.id === dismissedPiReviewId) return;
+  const shouldAutoReveal = pending.request.id !== lastAutoRevealedPiReviewId;
+  showPiReview(pending.session, shouldAutoReveal);
+  if (shouldAutoReveal) lastAutoRevealedPiReviewId = pending.request.id;
+};
+
+const refreshPiSessions = async () => {
+  if (!isTauriRuntime) return;
+  try {
+    const snapshot = await invoke<PiSnapshot>("list_pi_sessions");
+    renderPiSnapshot(snapshot);
+    lastPiRefreshError = undefined;
+  } catch (error: unknown) {
+    const message = error instanceof Error ? error.message : String(error);
+    renderPiSnapshot({
+      connected: false,
+      integrationError: message,
+      sessions: [],
+      instances: [],
+    });
+    if (message !== lastPiRefreshError) {
+      console.error("Unable to refresh PI sessions", error);
+      lastPiRefreshError = message;
+    }
+  }
+};
+
 const refreshOpenCodeSessions = async () => {
   if (refreshingOpenCodeSessions || !isTauriRuntime) return;
   refreshingOpenCodeSessions = true;
@@ -4756,6 +5084,7 @@ sessionDetailBack.addEventListener("click", () => {
   selectedSessionId = undefined;
   selectedCodexSessionId = undefined;
   selectedOpenCodeSessionKey = undefined;
+  selectedPiSessionKey = undefined;
   renderedDetailSignature = undefined;
   switchContentView("sessions");
 });
@@ -5505,7 +5834,7 @@ approvalAutoExpandInput.addEventListener("change", () => {
 
 syncCollapseExpandControls();
 
-type HookAgentId = "claudeCode" | "codex" | "openCode";
+type HookAgentId = "claudeCode" | "codex" | "openCode" | "pi";
 type HookIntegrationStatus = {
   id: HookAgentId;
   name: string;
@@ -5549,6 +5878,7 @@ const browserHookIntegrations: HookIntegrationStatus[] = [
     agentInstalled: true,
     hookInstalled: false,
   },
+  { id: "pi", name: "PI", agentInstalled: true, hookInstalled: false },
 ];
 
 const openCodeHookIntegration = () =>
@@ -5647,6 +5977,7 @@ const syncHookRefreshButton = () => {
 const hookIconUrl = (id: HookAgentId) => {
   if (id === "claudeCode") return claudeCodeIconUrl;
   if (id === "openCode") return openCodeIconUrl;
+  if (id === "pi") return piIconUrl;
   return codexIconUrl;
 };
 
@@ -5662,6 +5993,8 @@ const createHookAgentButton = (status: HookIntegrationStatus) => {
       ? "claude"
       : status.id === "openCode"
         ? "opencode"
+        : status.id === "pi"
+          ? "pi"
         : "codex";
   mark.setAttribute("aria-hidden", "true");
   const image = document.createElement("img");
@@ -5675,7 +6008,7 @@ const createHookAgentButton = (status: HookIntegrationStatus) => {
   name.textContent = status.name;
   const detail = document.createElement("small");
   detail.textContent =
-    status.id === "openCode" && status.installPath
+    (status.id === "openCode" || status.id === "pi") && status.installPath
       ? status.installPath
       : "CodeCraft 会话同步与审阅 Hook";
   copy.append(name, detail);
@@ -5700,7 +6033,7 @@ const syncHookAgentButton = (
   );
   if (detail) {
     detail.textContent =
-      status.id === "openCode" && status.installPath
+      (status.id === "openCode" || status.id === "pi") && status.installPath
         ? status.installPath
         : "CodeCraft 会话同步与审阅 Hook";
   }
@@ -7222,7 +7555,7 @@ const createSessionButton = (session: UnifiedSession): HTMLLIElement => {
   button.dataset.sessionId = session.id;
   button.dataset.sessionKey = unifiedSessionKey(session);
   button.dataset.sessionSource = unifiedSessionSource(session);
-  button.dataset.sessionStatus = session.status;
+  button.dataset.sessionStatus = unifiedSessionVisualStatus(session);
   button.setAttribute(
     "aria-pressed",
     String(
@@ -7230,7 +7563,9 @@ const createSessionButton = (session: UnifiedSession): HTMLLIElement => {
         ? session.id === selectedCodexSessionId
         : isOpenCodeSession(session)
           ? openCodeSessionKey(session) === selectedOpenCodeSessionKey
-          : session.id === selectedSessionId,
+          : isPiSession(session)
+            ? piSessionKey(session) === selectedPiSessionKey
+            : session.id === selectedSessionId,
     ),
   );
   button.title = `${unifiedSessionStatusLabel(session)} · ${session.title}`;
@@ -7239,10 +7574,15 @@ const createSessionButton = (session: UnifiedSession): HTMLLIElement => {
       ? setSelectedCodexSession(session.id)
       : isOpenCodeSession(session)
         ? setSelectedOpenCodeSession(openCodeSessionKey(session))
-        : setSelectedSession(session.id),
+        : isPiSession(session)
+          ? setSelectedPiSession(piSessionKey(session))
+          : setSelectedSession(session.id),
   );
 
-  const statusIcon = createPixelStatusSvg(session.status, "pixel-status");
+  const statusIcon = createPixelStatusSvg(
+    unifiedSessionVisualStatus(session),
+    "pixel-status",
+  );
 
   const statusLabel = document.createElement("span");
   statusLabel.className = "sr-only";
@@ -7303,8 +7643,9 @@ const updateSessionButton = (
     return listItem;
   }
 
-  if (button.dataset.sessionStatus !== session.status) {
-    button.dataset.sessionStatus = session.status;
+  const visualStatus = unifiedSessionVisualStatus(session);
+  if (button.dataset.sessionStatus !== visualStatus) {
+    button.dataset.sessionStatus = visualStatus;
   }
   button.dataset.sessionKey = unifiedSessionKey(session);
   button.dataset.sessionSource = unifiedSessionSource(session);
@@ -7315,7 +7656,9 @@ const updateSessionButton = (
         ? session.id === selectedCodexSessionId
         : isOpenCodeSession(session)
           ? openCodeSessionKey(session) === selectedOpenCodeSessionKey
-          : session.id === selectedSessionId,
+          : isPiSession(session)
+            ? piSessionKey(session) === selectedPiSessionKey
+            : session.id === selectedSessionId,
     ),
   );
   button.title = `${unifiedSessionStatusLabel(session)} · ${session.title}`;
@@ -7325,7 +7668,7 @@ const updateSessionButton = (
   content.dataset.contentKind = liveContent.kind;
   content.textContent = liveContent.text;
   content.title = liveContent.text;
-  statusIcon.dataset.status = session.status;
+  statusIcon.dataset.status = visualStatus;
   time.dateTime = new Date(session.startedAt).toISOString();
   time.textContent = formatSessionTime(session.startedAt);
 
@@ -7651,7 +7994,7 @@ interface CodeCraftContextData {
   sessionButton?: HTMLButtonElement;
   sessionId?: string;
   sessionKey?: string;
-  sessionSource?: "claude" | "codex" | "opencode";
+  sessionSource?: "claude" | "codex" | "opencode" | "pi";
   workingSquareTheme?: WorkingSquareImageTheme;
 }
 
@@ -7673,17 +8016,23 @@ const dismissSessionFromList = (data: CodeCraftContextData | undefined) => {
     return;
   }
   const sessionKey = data.sessionKey ?? data.sessionId;
-  dismissedSessionKeys.add(`${data.sessionSource}:${sessionKey}`);
+  dismissedSessionKeys.add(
+    data.sessionSource === "pi"
+      ? sessionKey
+      : `${data.sessionSource}:${sessionKey}`,
+  );
 
   if (
     (data.sessionSource === "claude" && selectedSessionId === data.sessionId) ||
     (data.sessionSource === "codex" && selectedCodexSessionId === data.sessionId) ||
     (data.sessionSource === "opencode" &&
-      selectedOpenCodeSessionKey === sessionKey)
+      selectedOpenCodeSessionKey === sessionKey) ||
+    (data.sessionSource === "pi" && selectedPiSessionKey === sessionKey)
   ) {
     selectedSessionId = undefined;
     selectedCodexSessionId = undefined;
     selectedOpenCodeSessionKey = undefined;
+    selectedPiSessionKey = undefined;
     renderedDetailSignature = undefined;
     if (requestedContentView === "detail") switchContentView("sessions");
   }
@@ -7705,11 +8054,18 @@ const dismissSessionFromList = (data: CodeCraftContextData | undefined) => {
         (interaction) => interaction.threadId !== data.sessionId,
       ),
     });
-  } else {
+  } else if (data.sessionSource === "opencode") {
     renderOpenCodeSnapshot({
       ...latestOpenCodeSnapshot,
       sessions: latestOpenCodeSnapshot.sessions.filter(
         (session) => openCodeSessionKey(session) !== sessionKey,
+      ),
+    });
+  } else {
+    renderPiSnapshot({
+      ...latestPiSnapshot,
+      sessions: latestPiSnapshot.sessions.filter(
+        (session) => piSessionKey(session) !== sessionKey,
       ),
     });
   }
@@ -7764,7 +8120,8 @@ const contextMenu = new ContextMenuController<CodeCraftContextData>(
         sessionButton?.dataset.sessionId &&
         (sessionSource === "claude" ||
           sessionSource === "codex" ||
-          sessionSource === "opencode")
+          sessionSource === "opencode" ||
+          sessionSource === "pi")
       ) {
         return {
           kind: "session",
@@ -7838,6 +8195,7 @@ const contextMenu = new ContextMenuController<CodeCraftContextData>(
             void refreshClaudeSessions();
             void refreshCodexPanel();
             void refreshOpenCodeSessions();
+            void refreshPiSessions();
           },
         },
         {
@@ -7962,10 +8320,12 @@ if (isTauriRuntime) {
   void refreshClaudeSessions();
   void refreshCodexPanel();
   void refreshOpenCodeSessions();
+  void refreshPiSessions();
   sessionRefreshTimer = setInterval(() => {
     void refreshClaudeSessions();
     void refreshCodexPanel();
     void refreshOpenCodeSessions();
+    void refreshPiSessions();
   }, SESSION_REFRESH_INTERVAL_MS);
 } else {
   const previewParameters = new URLSearchParams(window.location.search);

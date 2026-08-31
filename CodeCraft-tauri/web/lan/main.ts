@@ -520,7 +520,9 @@ const updateSessionCardView = (view: SessionCardView, entry: ConsoleEntry) => {
       ? "Claude"
       : entry.source === "codex"
         ? "Codex"
-        : "OpenCode",
+        : entry.source === "opencode"
+          ? "OpenCode"
+          : "PI",
     motion,
   );
   swapText(view.title, entry.title, motion);
@@ -754,7 +756,9 @@ const renderReview = (entry: ConsoleEntry | undefined) => {
     if (actionable) {
       const isCodex = entry.source === "codex";
       const isOpenCode = entry.source === "opencode";
+      const isPi = entry.source === "pi";
       const openCodeTarget = pending.openCode;
+      const piTarget = pending.pi;
       const openCodePermission = (action: "once" | "always" | "reject") =>
         openCodeTarget
           ? api.submitOpenCodePermission(openCodeTarget, action)
@@ -769,7 +773,9 @@ const renderReview = (entry: ConsoleEntry | undefined) => {
                   ? openCodeTarget?.reviewType === "strictToolGate"
                     ? api.submitOpenCodeGate(openCodeTarget, "allowOnce")
                     : openCodePermission("once")
-                  : api.submitPermission(pending.requestId, "allow"),
+                  : isPi && piTarget
+                    ? api.submitPiPermission(piTarget, pending.requestId, "allowOnce")
+                    : api.submitPermission(pending.requestId, "allow"),
             "已允许一次",
           );
         }),
@@ -785,8 +791,10 @@ const renderReview = (entry: ConsoleEntry | undefined) => {
                       ? openCodeTarget?.reviewType === "strictToolGate"
                         ? api.submitOpenCodeGate(openCodeTarget, "allowSession")
                         : openCodePermission("always")
-                      : api.submitPermission(pending.requestId, "allowAlways"),
-              "已在本会话中始终允许",
+                      : isPi && piTarget
+                        ? api.submitPiPermission(piTarget, pending.requestId, "allowSession")
+                        : api.submitPermission(pending.requestId, "allowAlways"),
+              isPi ? "已保存本会话允许规则" : "已在本会话中始终允许",
             );
           }),
         );
@@ -801,7 +809,9 @@ const renderReview = (entry: ConsoleEntry | undefined) => {
                   ? openCodeTarget?.reviewType === "strictToolGate"
                     ? api.submitOpenCodeGate(openCodeTarget, "reject")
                     : openCodePermission("reject")
-                  : api.submitPermission(pending.requestId, "deny"),
+                  : isPi && piTarget
+                    ? api.submitPiPermission(piTarget, pending.requestId, "deny")
+                    : api.submitPermission(pending.requestId, "deny"),
             "已拒绝",
           );
         }),
@@ -810,8 +820,8 @@ const renderReview = (entry: ConsoleEntry | undefined) => {
   } else if (pending.kind === "plan" && pending.plan) {
     reviewTool.textContent = pending.plan.toolName;
     reviewSummary.innerHTML = renderMarkdown(pending.plan.plan);
-    reviewQuestions.replaceChildren();
     questionRequestId = undefined;
+    reviewQuestions.replaceChildren();
     if (actionable) {
       reviewActions.append(
         actionButton("按计划执行", "primary", () => {
@@ -832,8 +842,13 @@ const renderReview = (entry: ConsoleEntry | undefined) => {
         const request = pending.question;
         if (!request) return;
         const submission = createLocalQuestionSubmission(request, questionDrafts);
-        const action =
-          entry.source === "opencode" && pending.openCode
+        const action = entry.source === "pi" && pending.pi
+          ? api.submitPiQuestion(
+              pending.pi,
+              submission.requestId,
+              submission.answers,
+            )
+          : entry.source === "opencode" && pending.openCode
             ? api.submitOpenCodeQuestion(
                 pending.openCode,
                 submission.answers.map((answer) => [
@@ -898,7 +913,9 @@ const renderDetail = () => {
       ? "Claude Code"
       : entry.source === "codex"
         ? "Codex"
-        : "OpenCode",
+        : entry.source === "opencode"
+          ? "OpenCode"
+          : "PI",
     entry.cwd ? "目录：" + entry.cwd : undefined,
     "更新于 " + formatSessionTime(entry.updatedAt),
   ]

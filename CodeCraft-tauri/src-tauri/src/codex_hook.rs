@@ -41,10 +41,11 @@ pub(crate) const HOOK_EVENTS: [&str; 11] = [
     "SubagentStart",
     "SubagentStop",
 ];
-const APPROVAL_WAIT_TIMEOUT: Duration = Duration::from_secs(300);
 const APPROVAL_POLL_INTERVAL: Duration = Duration::from_millis(200);
 const APP_HEARTBEAT_STALE: Duration = Duration::from_secs(20);
 const APPROVAL_HOOK_TIMEOUT_SECONDS: u64 = 330;
+// Codex's synchronous hook timeout is the hard upper bound for approvals.
+const APPROVAL_WAIT_TIMEOUT: Duration = Duration::from_secs(APPROVAL_HOOK_TIMEOUT_SECONDS);
 const CODECRAFT_REQUEST_ID_FIELD: &str = "codecraft_request_id";
 const CODECRAFT_PLAN_FIELD: &str = "codecraft_plan";
 const MAX_CAPTURE_PLAN_CHARS: usize = 12_000;
@@ -1573,6 +1574,10 @@ mod tests {
         );
         assert_eq!(
             config["hooks"]["PermissionRequest"][0]["hooks"][0]["timeout"],
+            APPROVAL_HOOK_TIMEOUT_SECONDS
+        );
+        assert_eq!(
+            APPROVAL_WAIT_TIMEOUT.as_secs(),
             APPROVAL_HOOK_TIMEOUT_SECONDS
         );
         let handlers = config["hooks"]["SessionStart"][0]["hooks"]

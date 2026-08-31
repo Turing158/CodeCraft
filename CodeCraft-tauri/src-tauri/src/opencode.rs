@@ -408,11 +408,29 @@ impl OpenCodeStore {
                 session.updated_at = captured_at;
                 upsert_review(session, review);
             }
-            "question.replied" | "question.rejected" | "permission.replied" => {
+            "question.replied"
+            | "question.rejected"
+            | "question.cancelled"
+            | "question.canceled"
+            | "question.timeout"
+            | "permission.replied"
+            | "permission.cancelled"
+            | "permission.canceled"
+            | "permission.timeout" => {
                 let properties = payload.get("properties").unwrap_or(payload);
                 if let Some(request_id) = string_field(properties, "requestID") {
                     self.remove_request(plugin_instance_id, request_id);
                 }
+            }
+            "session.deleted" | "session.ended" | "session.cancelled" | "session.canceled" => {
+                let properties = payload.get("properties").unwrap_or(payload);
+                let Some(session_id) = string_field(properties, "sessionID")
+                    .or_else(|| string_field(properties, "sessionId"))
+                    .or_else(|| string_field(properties, "id"))
+                else {
+                    return;
+                };
+                self.clear_session_reviews(plugin_instance_id, session_id);
             }
             "permission.asked" => {
                 let Some(session_id) = string_field(payload, "sessionID") else {
@@ -458,6 +476,13 @@ impl OpenCodeStore {
                     .get("status")
                     .and_then(|value| string_field(value, "type"))
                     .unwrap_or("working");
+                if matches!(
+                    status,
+                    "error" | "stopped" | "terminated" | "cancelled" | "canceled"
+                ) {
+                    self.clear_session_reviews(plugin_instance_id, session_id);
+                    return;
+                }
                 let session = self.session_mut(plugin_instance_id, session_id, captured_at, cwd);
                 session.updated_at = captured_at;
                 session.status = if !session.pending_reviews.is_empty() {
@@ -725,6 +750,29 @@ impl OpenCodeStore {
             }
         }
         self.mark_resolved(plugin_instance_id, request_id);
+    }
+
+    fn clear_session_reviews(&mut self, plugin_instance_id: &str, session_id: &str) {
+        let key = Self::session_key(plugin_instance_id, session_id);
+        let review_ids = self
+            .sessions
+            .get(&key)
+            .map(|session| {
+                session
+                    .pending_reviews
+                    .iter()
+                    .map(|review| review.review_id().to_string())
+                    .collect::<Vec<_>>()
+            })
+            .unwrap_or_default();
+        for review_id in review_ids {
+            self.mark_resolved(plugin_instance_id, &review_id);
+        }
+        if let Some(session) = self.sessions.get_mut(&key) {
+            session.pending_reviews.clear();
+            session.status = OpenCodeSessionStatus::Stopped;
+            session.updated_at = now_ms();
+        }
     }
 
     pub(crate) fn drain_inbox(&mut self) -> Result<(), String> {
@@ -1276,6 +1324,82 @@ mod tests {
         assert_eq!(questions[0].options[0].label, "Yes");
         assert_eq!(questions[0].options[1].label, "No");
         assert!(questions[0].allow_other);
+    }
+
+    #[test]
+    fn clears_a_review_when_opencode_reports_cancellation() {
+        let mut store = OpenCodeStore::default();
+        store.process_event(
+            "instance",
+            10,
+            Some("C:/project".to_string()),
+            &json!({
+                "eventType": "permission.asked",
+                "requestID": "permission_1",
+                "sessionID": "session_1",
+                "permission": "bash"
+            }),
+        );
+        store.process_event(
+            "instance",
+            11,
+            None,
+            &json!({
+                "eventType": "permission.timeout",
+                "properties": {
+                    "requestID": "permission_1",
+                    "sessionID": "session_1"
+                }
+            }),
+        );
+
+        assert!(store.sessions["instance:session_1"]
+            .pending_reviews
+            .is_empty());
+    }
+
+    #[test]
+    fn clears_reviews_when_an_opencode_session_ends() {
+        let mut store = OpenCodeStore::default();
+        store.process_event(
+            "instance",
+            10,
+            Some("C:/project".to_string()),
+            &json!({
+                "eventType": "permission.asked",
+                "requestID": "permission_1",
+                "sessionID": "session_1",
+                "permission": "bash"
+            }),
+        );
+        store.process_event(
+            "instance",
+            11,
+            None,
+            &json!({
+                "eventType": "session.deleted",
+                "properties": {"sessionID": "session_1"}
+            }),
+        );
+
+        let session = &store.sessions["instance:session_1"];
+        assert!(session.pending_reviews.is_empty());
+        assert_eq!(session.status, OpenCodeSessionStatus::Stopped);
+
+        store.process_event(
+            "instance",
+            12,
+            None,
+            &json!({
+                "eventType": "permission.asked",
+                "requestID": "permission_1",
+                "sessionID": "session_1",
+                "permission": "bash"
+            }),
+        );
+        assert!(store.sessions["instance:session_1"]
+            .pending_reviews
+            .is_empty());
     }
 
     #[test]
