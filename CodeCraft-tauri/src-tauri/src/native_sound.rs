@@ -240,7 +240,7 @@ fn frame_for(source: &str, session: &Value, interactions: &[Value]) -> SoundFram
         .and_then(|reviews| reviews.first());
 
     let permission_id = match source {
-        "claude" | "pi" | "dsh" => session
+        "claude" | "pi" | "dsh" | "zcode" => session
             .get("permission")
             .and_then(|value| value.get("id"))
             .and_then(Value::as_str)
@@ -265,7 +265,7 @@ fn frame_for(source: &str, session: &Value, interactions: &[Value]) -> SoundFram
         _ => None,
     };
     let plan_id = match source {
-        "claude" | "dsh" => session
+        "claude" | "dsh" | "zcode" => session
             .get("plan")
             .and_then(|value| value.get("id"))
             .and_then(Value::as_str)
@@ -354,6 +354,7 @@ impl NativeSoundObserver {
             let instance = match source {
                 "opencode" | "dsh" => session.get("pluginInstanceId"),
                 "pi" => session.get("extensionInstanceId"),
+                "zcode" => None,
                 _ => None,
             }
             .and_then(Value::as_str);
@@ -465,5 +466,20 @@ mod tests {
         let frame = frame_for("dsh", &dsh, &[]);
         assert_eq!(frame.permission_id, Some("dsh-permission".to_string()));
         assert_eq!(frame.plan_id, Some("dsh-plan".to_string()));
+    }
+
+    #[test]
+    fn zcode_permission_and_plan_reviews_map_to_sound_frames() {
+        let session = json!({
+            "id": "zcode-session",
+            "status": "waitingForApproval",
+            "activities": [],
+            "permission": { "id": "zcode-permission" },
+            "plan": { "id": "zcode-plan" },
+            "question": { "id": "zcode-question" }
+        });
+        let frame = frame_for("zcode", &session, &[]);
+        assert_eq!(frame.permission_id, Some("zcode-permission".to_string()));
+        assert_eq!(frame.plan_id, Some("zcode-plan".to_string()));
     }
 }

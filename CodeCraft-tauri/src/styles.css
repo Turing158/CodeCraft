@@ -810,6 +810,20 @@ button {
   opacity: 0.92;
 }
 
+.session-product__mark[data-product-kind="dsh"],
+.session-product__option-mark[data-product-kind="dsh"],
+.session-product__mark[data-product-kind="zcode"],
+.session-product__option-mark[data-product-kind="zcode"] {
+  background: transparent;
+}
+
+.session-product__mark[data-product-kind="dsh"] img,
+.session-product__option-mark[data-product-kind="dsh"] img,
+.session-product__mark[data-product-kind="zcode"] img,
+.session-product__option-mark[data-product-kind="zcode"] img {
+  filter: invert(1);
+}
+
 .session-product__option-label {
   min-width: 0;
   overflow: hidden;
@@ -944,6 +958,25 @@ button {
 .session-source-card__mark--pi img {
   filter: invert(1);
   opacity: 0.92;
+}
+
+.session-source-card__mark--dsh,
+.session-source-card__mark--zcode {
+  background: transparent;
+}
+
+.session-source-card__mark--dsh img,
+.session-source-card__mark--zcode img {
+  filter: invert(1);
+}
+
+.session-source-card__mark--zcode {
+  border-color: rgba(34, 197, 94, 0.35);
+}
+
+.session-source-card__mark--zcode img {
+  width: 19px;
+  height: 19px;
 }
 
 .session-source-card__status {
@@ -2448,6 +2481,16 @@ button {
   filter: invert(1);
 }
 
+.hook-agent-button__mark[data-agent="dsh"],
+.hook-agent-button__mark[data-agent="zcode"] {
+  background: transparent;
+}
+
+.hook-agent-button__mark[data-agent="dsh"] img,
+.hook-agent-button__mark[data-agent="zcode"] img {
+  filter: invert(1);
+}
+
 .hook-agent-button__copy {
   display: flex;
   min-width: 0;
@@ -2548,6 +2591,13 @@ button {
   font-size: calc(9px * var(--font-scale));
   line-height: 1.45;
   animation: hook-operation-enter 180ms ease-out both;
+}
+
+.hook-settings__note {
+  margin: 0 2px;
+  color: var(--text-muted);
+  font-size: calc(8px * var(--font-scale));
+  line-height: 1.5;
 }
 
 :root[data-theme="light"] .hook-agent-button__mark[data-agent="codex"] img,
@@ -4653,7 +4703,8 @@ button {
   flex: 0 0 40px;
 }
 
-#plan-open-codex {
+#plan-open-codex,
+#plan-open-zcode {
   grid-column: 1 / -1;
   min-height: 44px;
   align-items: center;
@@ -4665,7 +4716,8 @@ button {
   grid-column: 1 / -1;
 }
 
-#plan-open-codex svg {
+#plan-open-codex svg,
+#plan-open-zcode svg {
   width: 15px;
   height: 15px;
   flex: 0 0 15px;
@@ -5020,6 +5072,17 @@ button {
   .session-product__option-mark[data-product-kind="pi"]
   img,
 :root[data-theme="light"] .session-source-card__mark--pi img {
+  filter: none;
+}
+
+:root[data-theme="light"] .session-product__mark[data-product-kind="dsh"] img,
+:root[data-theme="light"] .session-product__option-mark[data-product-kind="dsh"] img,
+:root[data-theme="light"] .session-product__mark[data-product-kind="zcode"] img,
+:root[data-theme="light"] .session-product__option-mark[data-product-kind="zcode"] img,
+:root[data-theme="light"] .session-source-card__mark--dsh img,
+:root[data-theme="light"] .session-source-card__mark--zcode img,
+:root[data-theme="light"] .hook-agent-button__mark[data-agent="dsh"] img,
+:root[data-theme="light"] .hook-agent-button__mark[data-agent="zcode"] img {
   filter: none;
 }
 

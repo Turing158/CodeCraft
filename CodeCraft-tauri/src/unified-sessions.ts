@@ -29,13 +29,20 @@ import {
   type DshSession,
   type DshSessionStatus,
 } from "./dsh-sessions";
+import {
+  zcodeSessionKey,
+  zcodeSessionStatusLabel,
+  type ZCodeSession,
+  type ZCodeSessionStatus,
+} from "./zcode-sessions";
 
 export type UnifiedSession =
   | ClaudeSession
   | CodexSession
   | OpenCodeSession
   | PiSession
-  | DshSession;
+  | DshSession
+  | ZCodeSession;
 
 const CODEX_VISUAL_STATUS: Record<CodexSessionStatus, ClaudeSessionStatus> = {
   working: "working",
@@ -77,6 +84,16 @@ const DSH_VISUAL_STATUS: Record<DshSessionStatus, ClaudeSessionStatus> = {
   idle: "idle",
 };
 
+const ZCODE_VISUAL_STATUS: Record<ZCodeSessionStatus, ClaudeSessionStatus> = {
+  working: "working",
+  waitingForInput: "waiting",
+  waitingForApproval: "attention",
+  toolRunning: "working",
+  toolFailed: "toolFailed",
+  stopped: "stopped",
+  idle: "idle",
+};
+
 const LIVE_STATUS_RANK: Record<ClaudeSessionStatus, number> = {
   working: 0,
   toolFailed: 1,
@@ -102,9 +119,13 @@ export const isDshSession = (
   session: UnifiedSession,
 ): session is DshSession => "bridgeInstanceId" in session;
 
+export const isZCodeSession = (
+  session: UnifiedSession,
+): session is ZCodeSession => "reviewState" in session;
+
 export const unifiedSessionSource = (
   session: UnifiedSession,
-): "claude" | "codex" | "opencode" | "pi" | "dsh" =>
+): "claude" | "codex" | "opencode" | "pi" | "dsh" | "zcode" =>
   isCodexSession(session)
     ? "codex"
     : isOpenCodeSession(session)
@@ -113,7 +134,9 @@ export const unifiedSessionSource = (
         ? "pi"
         : isDshSession(session)
           ? "dsh"
-          : "claude";
+          : isZCodeSession(session)
+            ? "zcode"
+            : "claude";
 
 export const unifiedSessionKey = (session: UnifiedSession): string =>
   isOpenCodeSession(session)
@@ -122,7 +145,9 @@ export const unifiedSessionKey = (session: UnifiedSession): string =>
       ? piSessionKey(session)
       : isDshSession(session)
         ? dshSessionKey(session)
-      : session.id;
+        : isZCodeSession(session)
+          ? zcodeSessionKey(session)
+          : session.id;
 
 export const unifiedSessionStatusLabel = (session: UnifiedSession): string =>
   isCodexSession(session)
@@ -133,7 +158,9 @@ export const unifiedSessionStatusLabel = (session: UnifiedSession): string =>
         ? piStatusLabel(session.status)
         : isDshSession(session)
           ? dshStatusLabel(session.status)
-        : sessionStatusLabel(session.status);
+          : isZCodeSession(session)
+            ? zcodeSessionStatusLabel(session)
+            : sessionStatusLabel(session.status);
 
 export const unifiedSessionVisualStatus = (
   session: UnifiedSession,
@@ -146,7 +173,9 @@ export const unifiedSessionVisualStatus = (
         ? PI_VISUAL_STATUS[session.status]
         : isDshSession(session)
           ? DSH_VISUAL_STATUS[session.status]
-        : session.status;
+          : isZCodeSession(session)
+            ? ZCODE_VISUAL_STATUS[session.status]
+            : session.status;
 
 export const unifiedSessionIsRunning = (session: UnifiedSession): boolean => {
   const status = unifiedSessionVisualStatus(session);
@@ -160,7 +189,8 @@ export const unifiedSessionLiveContent = (
     !isCodexSession(session) &&
     !isOpenCodeSession(session) &&
     !isPiSession(session) &&
-    !isDshSession(session)
+    !isDshSession(session) &&
+    !isZCodeSession(session)
   ) {
     return sessionLiveContent(session);
   }
@@ -183,7 +213,9 @@ export const unifiedSessionLiveContent = (
               ? openCodeStatusLabel(session.status)
               : isPiSession(session)
                 ? piStatusLabel(session.status)
-                : dshStatusLabel(session.status),
+                : isDshSession(session)
+                ? dshStatusLabel(session.status)
+                  : zcodeSessionStatusLabel(session),
         };
 };
 
@@ -194,7 +226,8 @@ export const unifiedSessionLiveStatusText = (
     !isCodexSession(session) &&
     !isOpenCodeSession(session) &&
     !isPiSession(session) &&
-    !isDshSession(session)
+    !isDshSession(session) &&
+    !isZCodeSession(session)
   ) {
     return sessionLiveStatusText(session);
   }
@@ -210,7 +243,9 @@ export const unifiedSessionLiveStatusText = (
         ? openCodeStatusLabel(session.status)
         : isPiSession(session)
           ? piStatusLabel(session.status)
-          : dshStatusLabel(session.status);
+          : isDshSession(session)
+            ? dshStatusLabel(session.status)
+            : zcodeSessionStatusLabel(session);
 };
 
 export const hasUnifiedWorkingSession = (

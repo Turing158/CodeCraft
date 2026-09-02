@@ -46,9 +46,11 @@ const ENGLISH: Record<string, string> = {
   "Hook 未安装": "Hook not installed",
   "Claude Code 会话列表": "Claude Code session list",
   "Codex 会话列表": "Codex session list",
+  "ZCode 会话列表": "ZCode session list",
   暂无活跃会话: "No active sessions",
   暂无会话: "No sessions",
   "Codex Hook 状态": "Codex Hook status",
+  "ZCode Hook 状态": "ZCode Hook status",
   连接异常: "Connection issue",
   返回会话列表: "Back to sessions",
   返回: "Back",
@@ -69,6 +71,7 @@ const ENGLISH: Record<string, string> = {
   问题导航: "Question navigation",
   上一步: "Previous",
   "前往 Codex": "Open in Codex",
+  "前往 ZCode 处理": "Open in ZCode",
   下一步: "Next",
   提交: "Submit",
   确认代码助手工具调用: "Confirm the coding assistant's tool call",
@@ -163,8 +166,8 @@ const ENGLISH: Record<string, string> = {
   左侧: "Left",
   右侧: "Right",
   自动审批: "Automatic approvals",
-  "Claude Code、Codex 与 OpenCode 共用此策略；风险审批只自动通过低风险命令。":
-    "Claude Code, Codex, and OpenCode share this policy; risk-based approval only allows low-risk commands automatically.",
+  "Claude Code、Codex、OpenCode、PI、DeepSeek Harness 与 ZCode 共用此策略；风险审批只自动通过低风险工具，问题与计划始终需要人工决定。":
+    "Claude Code, Codex, OpenCode, PI, DeepSeek Harness, and ZCode share this policy. Risk-based approval only allows low-risk tools automatically; questions and plans always require a person.",
   手动审批: "Manual",
   风险审批: "Risk-based",
   自动审批风险提示: "Automatic approval risk warning",
@@ -412,6 +415,19 @@ const ENGLISH: Record<string, string> = {
   "Codex Hook 工具调用": "Codex Hook tool call",
   "Codex Hook 请求执行操作": "Codex Hook requested an action",
   "CodeCraft 会话同步与审阅 Hook": "CodeCraft session sync and review Hook",
+  "ZCode Hook 已连接": "ZCode Hook connected",
+  "在设置中安装 ZCode Hook": "Install the ZCode Hook in Settings",
+  "等待 ZCode": "Waiting for ZCode",
+  "允许 ZCode 退出计划模式": "Allow ZCode to exit plan mode",
+  "请为每个问题提供非空回答":
+    "Provide a non-empty answer for every question",
+  "ZCode 支持工具、问题与计划审阅；进行中回答不可见，问题审批无音效，Hook 阻塞期间 ZCode 界面不显示提示。":
+    "ZCode supports tool, question, and plan review. In-progress assistant text is unavailable, question reviews have no sound, and ZCode shows no prompt while the Hook is blocking.",
+  "ZCode 会话": "ZCode session",
+  等待回答: "Waiting for an answer",
+  本轮已停止: "This turn stopped",
+  "已交回 ZCode": "Returned to ZCode",
+  决定已提交: "Decision submitted",
   "安装Hook中...": "Installing Hook...",
   "卸载Hook中...": "Removing Hook...",
   未安装: "Not installed",
@@ -469,6 +485,13 @@ const TRADITIONAL_OVERRIDES: Record<string, string> = {
   暂无会话: "暫無會話",
   暂无活跃会话: "暫無活躍會話",
   只读: "唯讀",
+  调用工具中: "工具呼叫中",
+  等待回答: "等待回答",
+  本轮已停止: "本輪已停止",
+  "已交回 ZCode": "已交回 ZCode",
+  决定已提交: "決定已提交",
+  "ZCode 支持工具、问题与计划审阅；进行中回答不可见，问题审批无音效，Hook 阻塞期间 ZCode 界面不显示提示。":
+    "ZCode 支援工具、問題與計畫審閱；進行中的回答不可見，問題審批沒有音效，Hook 阻塞期間 ZCode 介面不顯示提示。",
   访问令牌: "存取權杖",
   访问地址: "存取位址",
 };
@@ -1006,11 +1029,23 @@ const formattedTranslations: FormattedTranslation[] = [
   },
   {
     patterns: {
+      "zh-CN": /^ZCode ([0-9.]+) Hook 已连接$/,
+      "zh-TW": /^ZCode ([0-9.]+) Hook 已連線$/,
+      en: /^ZCode ([0-9.]+) Hook connected$/,
+    },
+    format: {
+      "zh-CN": (version) => `ZCode ${version} Hook 已连接`,
+      "zh-TW": (version) => `ZCode ${version} Hook 已連線`,
+      en: (version) => `ZCode ${version} Hook connected`,
+    },
+  },
+  {
+    patterns: {
       "zh-CN":
-        /^(工作中|等待输入|需要处理|工具调用失败|停止|空闲|等待审批) · (.+)$/,
+        /^(工作中|等待输入|等待回答|需要处理|调用工具中|工具调用失败|停止|本轮已停止|空闲|等待审批|已交回 ZCode|决定已提交) · (.+)$/,
       "zh-TW":
-        /^(工作中|等待輸入|需要處理|工具呼叫失敗|停止|閒置|等待審批) · (.+)$/,
-      en: /^(Working|Waiting for input|Needs attention|Tool call failed|Stopped|Idle|Waiting for approval) · (.+)$/,
+        /^(工作中|等待輸入|等待回答|需要處理|工具呼叫中|工具呼叫失敗|停止|本輪已停止|閒置|等待審批|已交回 ZCode|決定已提交) · (.+)$/,
+      en: /^(Working|Waiting for input|Waiting for an answer|Needs attention|Calling a tool|Tool call failed|Stopped|This turn stopped|Idle|Waiting for approval|Returned to ZCode|Decision submitted) · (.+)$/,
     },
     format: {
       "zh-CN": (status, title) =>

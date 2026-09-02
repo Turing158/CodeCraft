@@ -9,6 +9,7 @@ export type ClaudeSessionStatus =
 export interface ClaudeQuestionOption {
   label: string;
   description: string | null;
+  preview?: unknown;
 }
 
 export interface ClaudeQuestion {

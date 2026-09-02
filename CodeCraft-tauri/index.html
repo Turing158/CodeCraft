@@ -442,6 +442,46 @@
                     <li class="session-list__empty">暂无活跃会话</li>
                   </ul>
                 </section>
+
+                <section
+                  id="zcode-session-card"
+                  class="session-source-card"
+                  aria-labelledby="zcode-session-card-title"
+                >
+                  <header class="session-source-card__header">
+                    <div class="session-source-card__identity">
+                      <span
+                        class="session-source-card__mark session-source-card__mark--zcode"
+                        aria-hidden="true"
+                      >
+                        <img id="zcode-session-card-icon" alt="" />
+                      </span>
+                      <h2 id="zcode-session-card-title">ZCode</h2>
+                    </div>
+                    <div
+                      id="zcode-connection-status"
+                      class="session-source-card__status session-source-card__status--static"
+                      data-connected="false"
+                      title="ZCode Hook 状态"
+                    >
+                      <span
+                        class="session-source-card__status-dot"
+                        aria-hidden="true"
+                      ></span>
+                      <span class="session-source-card__status-label"
+                        >Hook 异常</span
+                      >
+                    </div>
+                  </header>
+                  <ul
+                    id="zcode-session-list"
+                    class="session-list"
+                    aria-label="ZCode 会话列表"
+                    aria-live="polite"
+                  >
+                    <li class="session-list__empty">暂无活跃会话</li>
+                  </ul>
+                </section>
               </div>
             </section>
 
@@ -936,6 +976,29 @@
                     </svg>
                     <span>前往 Codex</span>
                   </button>
+                  <button
+                    id="plan-open-zcode"
+                    class="question-action question-action--primary plan-open-zcode"
+                    type="button"
+                    hidden
+                  >
+                    <svg
+                      aria-hidden="true"
+                      viewBox="0 0 24 24"
+                      fill="none"
+                      stroke="currentColor"
+                      stroke-width="1.8"
+                      stroke-linecap="round"
+                      stroke-linejoin="round"
+                    >
+                      <path d="M15 3h6v6" />
+                      <path d="m10 14 11-11" />
+                      <path
+                        d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"
+                      />
+                    </svg>
+                    <span>前往 ZCode 处理</span>
+                  </button>
                 </div>
                 <p
                   id="plan-submit-status"
@@ -1118,10 +1181,7 @@
                     <div class="settings-card__header">
                       <div>
                         <h2 id="approval-mode-title">自动审批</h2>
-                        <p>
-                          Claude Code、Codex 与 OpenCode
-                          共用此策略；风险审批只自动通过低风险命令。
-                        </p>
+                        <p>Claude Code、Codex、OpenCode、PI、DeepSeek Harness 与 ZCode 共用此策略；风险审批只自动通过低风险工具，问题与计划始终需要人工决定。</p>
                       </div>
                     </div>
 
@@ -1768,6 +1828,9 @@
                       <span>所有可用 Hook 均已安装</span>
                     </div>
                   </section>
+                  <p class="hook-settings__note">
+                    ZCode 支持工具、问题与计划审阅；进行中回答不可见，问题审批无音效，Hook 阻塞期间 ZCode 界面不显示提示。
+                  </p>
                   <p
                     id="hook-settings-status"
                     class="hook-settings__status"

@@ -13,6 +13,7 @@ pub(crate) struct HookInstallConfig {
     pub open_code: bool,
     pub pi: bool,
     pub deep_seek_harness: bool,
+    pub z_code: bool,
 }
 
 impl Default for HookInstallConfig {
@@ -23,6 +24,7 @@ impl Default for HookInstallConfig {
             open_code: false,
             pi: false,
             deep_seek_harness: false,
+            z_code: false,
         }
     }
 }
@@ -69,6 +71,7 @@ mod tests {
         assert!(!config.open_code);
         assert!(!config.pi);
         assert!(!config.deep_seek_harness);
+        assert!(!config.z_code);
     }
 
     #[test]
@@ -79,5 +82,6 @@ mod tests {
         assert!(!config.open_code);
         assert!(!config.pi);
         assert!(!config.deep_seek_harness);
+        assert!(!config.z_code);
     }
 }

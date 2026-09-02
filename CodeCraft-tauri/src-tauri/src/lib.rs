@@ -34,9 +34,12 @@ mod opencode;
 mod opencode_hook;
 mod pi;
 mod pi_hook;
+mod zcode;
+mod zcode_hook;
 
 pub use claude_hook::capture_claude_hook;
 pub use codex_hook::capture_codex_hook;
+pub use zcode_hook::capture_zcode_hook;
 
 const PANEL_WIDTH: f64 = 500.0;
 const MIN_PANEL_WIDTH: f64 = 360.0;
@@ -111,6 +114,12 @@ struct DshIntegrationState {
     bridge: Mutex<Option<dsh_hook::DshBridgeInfo>>,
 }
 
+#[derive(Default)]
+struct ZCodeIntegrationState {
+    store: Mutex<zcode::ZCodeStore>,
+    hook_error: Mutex<Option<String>>,
+}
+
 struct PanelWindowState {
     horizontal_position: Mutex<f64>,
 }
@@ -153,6 +162,7 @@ enum HookAgentId {
     OpenCode,
     Pi,
     DeepSeekHarness,
+    ZCode,
 }
 
 impl hook_config::HookInstallConfig {
@@ -163,6 +173,7 @@ impl hook_config::HookInstallConfig {
             HookAgentId::OpenCode => self.open_code,
             HookAgentId::Pi => self.pi,
             HookAgentId::DeepSeekHarness => self.deep_seek_harness,
+            HookAgentId::ZCode => self.z_code,
         }
     }
 
@@ -173,6 +184,7 @@ impl hook_config::HookInstallConfig {
             HookAgentId::OpenCode => self.open_code = enabled,
             HookAgentId::Pi => self.pi = enabled,
             HookAgentId::DeepSeekHarness => self.deep_seek_harness = enabled,
+            HookAgentId::ZCode => self.z_code = enabled,
         }
     }
 }
@@ -185,6 +197,7 @@ impl HookAgentId {
             Self::OpenCode => "opencode",
             Self::Pi => "pi",
             Self::DeepSeekHarness => "dsh",
+            Self::ZCode => "zcode",
         }
     }
 
@@ -195,6 +208,7 @@ impl HookAgentId {
             Self::OpenCode => "OpenCode",
             Self::Pi => "PI",
             Self::DeepSeekHarness => "DeepSeek Harness",
+            Self::ZCode => "ZCode",
         }
     }
 }
@@ -255,6 +269,9 @@ fn agent_is_installed(agent: HookAgentId, state: &CodexIntegrationState) -> Resu
             || command_is_installed("npx")
             || command_is_installed("npx.cmd"));
     }
+    if matches!(agent, HookAgentId::ZCode) {
+        return Ok(zcode_hook::detect_zcode_installation().is_some());
+    }
     let _ = state;
     Ok(command_is_installed(agent.command()))
 }
@@ -295,6 +312,18 @@ fn dsh_install_state_label(state: dsh_hook::DshHookInstallState) -> String {
     .to_string()
 }
 
+fn zcode_install_state_label(state: zcode_hook::ZCodeHookInstallState) -> String {
+    match state {
+        zcode_hook::ZCodeHookInstallState::NotInstalled => "notInstalled",
+        zcode_hook::ZCodeHookInstallState::Installed => "installed",
+        zcode_hook::ZCodeHookInstallState::Modified => "modified",
+        zcode_hook::ZCodeHookInstallState::Conflict => "conflict",
+        zcode_hook::ZCodeHookInstallState::Incompatible => "incompatible",
+        zcode_hook::ZCodeHookInstallState::Error => "error",
+    }
+    .to_string()
+}
+
 fn codex_hook_project_dir(state: &CodexIntegrationState) -> Result<Option<String>, String> {
     Ok(state
         .hook_config
@@ -318,6 +347,7 @@ pub(crate) fn hook_statuses(
     state: &CodexIntegrationState,
     opencode_state: &OpenCodeIntegrationState,
     dsh_state: &DshIntegrationState,
+    zcode_state: &ZCodeIntegrationState,
 ) -> Result<Vec<HookIntegrationStatus>, String> {
     let project_dir = codex_hook_project_dir(state)?;
     let opencode = opencode_hook::status_and_sync()?;
@@ -405,6 +435,26 @@ pub(crate) fn hook_statuses(
                 bundled_version: Some(status.bundled_version.to_string()),
                 installed_version: status.installed_version,
                 running_versions,
+                error: status.error.or(runtime_error),
+            }
+        },
+        {
+            let status = zcode_hook::status()?;
+            let runtime_error = zcode_state
+                .hook_error
+                .lock()
+                .map_err(|error| error.to_string())?
+                .clone();
+            HookIntegrationStatus {
+                id: HookAgentId::ZCode,
+                name: HookAgentId::ZCode.display_name(),
+                agent_installed: agent_is_installed(HookAgentId::ZCode, state)?,
+                hook_installed: status.installed(),
+                install_state: Some(zcode_install_state_label(status.state)),
+                install_path: Some(status.install_path),
+                bundled_version: Some("3.10.1".to_string()),
+                installed_version: status.detected_version,
+                running_versions: Vec::new(),
                 error: status.error.or(runtime_error),
             }
         },
@@ -1408,6 +1458,19 @@ fn codex_window_score(title: &str, process_name: &str, hints: &[String]) -> u16 
         + (if is_terminal_process { 10 } else { 0 })
 }
 
+fn zcode_window_score(title: &str, process_name: &str) -> u16 {
+    let title = title.to_ascii_lowercase();
+    let process_name = process_name.to_ascii_lowercase();
+    let is_zcode_process = process_name == "zcode.exe";
+    let mentions_zcode = title.contains("zcode");
+
+    if !is_zcode_process && !mentions_zcode {
+        return 0;
+    }
+
+    (if is_zcode_process { 100 } else { 0 }) + (if mentions_zcode { 60 } else { 0 })
+}
+
 #[cfg(windows)]
 fn focus_codex_window_native(
     current_window: &WebviewWindow,
@@ -1540,6 +1603,121 @@ fn focus_codex_window(
     focus_codex_window_native(&window, hints)
 }
 
+#[cfg(windows)]
+fn focus_zcode_window_native(current_window: &WebviewWindow) -> Result<(), String> {
+    use windows::{
+        core::{BOOL, PWSTR},
+        Win32::{
+            Foundation::{CloseHandle, HWND, LPARAM},
+            System::Threading::{
+                OpenProcess, QueryFullProcessImageNameW, PROCESS_NAME_WIN32,
+                PROCESS_QUERY_LIMITED_INFORMATION,
+            },
+            UI::WindowsAndMessaging::{
+                EnumWindows, GetWindowTextW, GetWindowThreadProcessId, IsIconic, IsWindowVisible,
+                SetForegroundWindow, ShowWindow, SW_RESTORE,
+            },
+        },
+    };
+
+    struct SearchContext {
+        current_hwnd: HWND,
+        best: Option<(HWND, u16)>,
+    }
+
+    unsafe fn process_name(hwnd: HWND) -> String {
+        let mut process_id = 0;
+        GetWindowThreadProcessId(hwnd, Some(&mut process_id));
+        if process_id == 0 {
+            return String::new();
+        }
+
+        let Ok(process) = OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, false, process_id) else {
+            return String::new();
+        };
+        let mut buffer = vec![0u16; 32_768];
+        let mut length = buffer.len() as u32;
+        let result = QueryFullProcessImageNameW(
+            process,
+            PROCESS_NAME_WIN32,
+            PWSTR(buffer.as_mut_ptr()),
+            &mut length,
+        );
+        let _ = CloseHandle(process);
+        if result.is_err() {
+            return String::new();
+        }
+
+        let path = String::from_utf16_lossy(&buffer[..length as usize]);
+        Path::new(&path)
+            .file_name()
+            .and_then(|name| name.to_str())
+            .unwrap_or_default()
+            .to_string()
+    }
+
+    unsafe extern "system" fn visit_window(hwnd: HWND, lparam: LPARAM) -> BOOL {
+        let context = &mut *(lparam.0 as *mut SearchContext);
+        if hwnd == context.current_hwnd || !IsWindowVisible(hwnd).as_bool() {
+            return BOOL(1);
+        }
+
+        let mut title_buffer = [0u16; 512];
+        let title_length = GetWindowTextW(hwnd, &mut title_buffer);
+        let title = if title_length > 0 {
+            String::from_utf16_lossy(&title_buffer[..title_length as usize])
+        } else {
+            String::new()
+        };
+        let score = zcode_window_score(&title, &process_name(hwnd));
+        if score
+            > context
+                .best
+                .map(|(_, best_score)| best_score)
+                .unwrap_or_default()
+        {
+            context.best = Some((hwnd, score));
+        }
+        BOOL(1)
+    }
+
+    let mut context = SearchContext {
+        current_hwnd: current_window.hwnd().map_err(|error| error.to_string())?,
+        best: None,
+    };
+
+    unsafe {
+        EnumWindows(
+            Some(visit_window),
+            LPARAM((&mut context as *mut SearchContext) as isize),
+        )
+        .map_err(|error| error.to_string())?;
+    }
+
+    let (target, _) = context
+        .best
+        .ok_or_else(|| "未找到可切换的 ZCode 窗口".to_string())?;
+    unsafe {
+        if IsIconic(target).as_bool() {
+            let _ = ShowWindow(target, SW_RESTORE);
+        }
+        if !SetForegroundWindow(target).as_bool() {
+            return Err("无法将 ZCode 窗口切换到前台".to_string());
+        }
+    }
+    Ok(())
+}
+
+#[cfg(not(windows))]
+fn focus_zcode_window_native(_current_window: &WebviewWindow) -> Result<(), String> {
+    Err("当前平台不支持切换到 ZCode 窗口".to_string())
+}
+
+#[tauri::command]
+fn focus_zcode_window(window: WebviewWindow) -> Result<(), String> {
+    focus_zcode_window_native(&window)
+}
+
 #[tauri::command]
 fn list_claude_sessions(
     state: tauri::State<'_, ClaudeIntegrationState>,
@@ -1580,8 +1758,9 @@ fn list_hook_integrations(
     state: tauri::State<'_, CodexIntegrationState>,
     opencode_state: tauri::State<'_, OpenCodeIntegrationState>,
     dsh_state: tauri::State<'_, DshIntegrationState>,
+    zcode_state: tauri::State<'_, ZCodeIntegrationState>,
 ) -> Result<Vec<HookIntegrationStatus>, String> {
-    hook_statuses(&state, &opencode_state, &dsh_state)
+    hook_statuses(&state, &opencode_state, &dsh_state, &zcode_state)
 }
 
 #[tauri::command]
@@ -1847,6 +2026,134 @@ pub(crate) fn apply_dsh_plan(
     deliver_dsh_response(state, request_id, response)
 }
 
+#[tauri::command]
+fn list_zcode_sessions(
+    state: tauri::State<'_, ZCodeIntegrationState>,
+) -> Result<zcode::ZCodeSnapshot, String> {
+    zcode_snapshot(&state)
+}
+
+pub(crate) fn zcode_snapshot(
+    state: &ZCodeIntegrationState,
+) -> Result<zcode::ZCodeSnapshot, String> {
+    let status = zcode_hook::status()?;
+    let mut store = state.store.lock().map_err(|error| error.to_string())?;
+    if !status.installed() {
+        store.clear();
+        store.set_integration_error(status.error.or_else(|| {
+            Some(match status.state {
+                zcode_hook::ZCodeHookInstallState::Incompatible => {
+                    "当前 ZCode 版本与 CodeCraft Hook 不兼容".to_string()
+                }
+                zcode_hook::ZCodeHookInstallState::Modified => {
+                    "ZCode Hook 配置已被修改，需要修复".to_string()
+                }
+                zcode_hook::ZCodeHookInstallState::Conflict => {
+                    "检测到重复的 CodeCraft ZCode Hook".to_string()
+                }
+                _ => "ZCode Hook 未安装".to_string(),
+            })
+        }));
+    } else {
+        store.drain_inbox()?;
+        store.set_integration_error(
+            state
+                .hook_error
+                .lock()
+                .map_err(|error| error.to_string())?
+                .clone(),
+        );
+    }
+    Ok(store.snapshot(status.detected_path, status.detected_version))
+}
+
+#[tauri::command]
+fn zcode_respond_approval(
+    state: tauri::State<'_, ZCodeIntegrationState>,
+    session_id: String,
+    request_id: String,
+    decision: zcode_hook::ZCodeApprovalDecision,
+    message: Option<String>,
+) -> Result<(), String> {
+    apply_zcode_approval(&state, &session_id, &request_id, decision, message)
+}
+
+pub(crate) fn apply_zcode_approval(
+    state: &ZCodeIntegrationState,
+    session_id: &str,
+    request_id: &str,
+    decision: zcode_hook::ZCodeApprovalDecision,
+    message: Option<String>,
+) -> Result<(), String> {
+    let mut store = state.store.lock().map_err(|error| error.to_string())?;
+    store.drain_inbox()?;
+    store.submit_permission(session_id, request_id, decision, message)
+}
+
+#[tauri::command]
+fn zcode_respond_question(
+    state: tauri::State<'_, ZCodeIntegrationState>,
+    session_id: String,
+    request_id: String,
+    answers: Vec<zcode_hook::ZCodeQuestionAnswer>,
+    annotations: Option<serde_json::Value>,
+) -> Result<(), String> {
+    apply_zcode_question(&state, &session_id, &request_id, answers, annotations)
+}
+
+pub(crate) fn apply_zcode_question(
+    state: &ZCodeIntegrationState,
+    session_id: &str,
+    request_id: &str,
+    answers: Vec<zcode_hook::ZCodeQuestionAnswer>,
+    annotations: Option<serde_json::Value>,
+) -> Result<(), String> {
+    let mut store = state.store.lock().map_err(|error| error.to_string())?;
+    store.drain_inbox()?;
+    store.submit_question(session_id, request_id, answers, annotations)
+}
+
+#[tauri::command]
+fn zcode_respond_plan(
+    state: tauri::State<'_, ZCodeIntegrationState>,
+    session_id: String,
+    request_id: String,
+    approved: bool,
+    feedback: Option<String>,
+) -> Result<(), String> {
+    apply_zcode_plan(&state, &session_id, &request_id, approved, feedback)
+}
+
+pub(crate) fn apply_zcode_plan(
+    state: &ZCodeIntegrationState,
+    session_id: &str,
+    request_id: &str,
+    approved: bool,
+    feedback: Option<String>,
+) -> Result<(), String> {
+    let feedback_for_zcode = zcode_plan_feedback(approved, feedback.as_deref());
+    {
+        let mut store = state.store.lock().map_err(|error| error.to_string())?;
+        store.drain_inbox()?;
+        store.submit_plan(session_id, request_id, approved, feedback)?;
+    }
+    if let Some(feedback) = feedback_for_zcode {
+        zcode_hook::queue_plan_feedback(session_id, &feedback);
+    }
+    Ok(())
+}
+
+fn zcode_plan_feedback(approved: bool, feedback: Option<&str>) -> Option<String> {
+    (!approved)
+        .then(|| {
+            feedback
+                .map(str::trim)
+                .filter(|value| !value.is_empty())
+                .map(str::to_string)
+        })
+        .flatten()
+}
+
 pub(crate) fn apply_pi_question(
     state: &PiIntegrationState,
     extension_instance_id: &str,
@@ -2003,6 +2310,7 @@ async fn install_agent_hook(agent: HookAgentId, app: tauri::AppHandle) -> Result
         let opencode_state = app.state::<OpenCodeIntegrationState>();
         let pi_state = app.state::<PiIntegrationState>();
         let dsh_state = app.state::<DshIntegrationState>();
+        let zcode_state = app.state::<ZCodeIntegrationState>();
         if !agent_is_installed(agent, &codex_state)? {
             return Err(format!("{} 未安装", agent.display_name()));
         }
@@ -2055,6 +2363,14 @@ async fn install_agent_hook(agent: HookAgentId, app: tauri::AppHandle) -> Result
                     .lock()
                     .map_err(|error| error.to_string())? = status.error;
             }
+            HookAgentId::ZCode => {
+                let status = zcode_hook::install(&executable)?;
+                save_hook_installation_state(agent, true)?;
+                *zcode_state
+                    .hook_error
+                    .lock()
+                    .map_err(|error| error.to_string())? = status.error;
+            }
         }
         Ok(())
     })
@@ -2070,6 +2386,7 @@ async fn uninstall_agent_hook(agent: HookAgentId, app: tauri::AppHandle) -> Resu
         let opencode_state = app.state::<OpenCodeIntegrationState>();
         let pi_state = app.state::<PiIntegrationState>();
         let dsh_state = app.state::<DshIntegrationState>();
+        let zcode_state = app.state::<ZCodeIntegrationState>();
         if !agent_is_installed(agent, &codex_state)? {
             return Err(format!("{} 未安装", agent.display_name()));
         }
@@ -2130,6 +2447,19 @@ async fn uninstall_agent_hook(agent: HookAgentId, app: tauri::AppHandle) -> Resu
                     .map_err(|error| error.to_string())? =
                     Some("DeepSeek Harness Hook 未安装".to_string());
                 dsh_state
+                    .store
+                    .lock()
+                    .map_err(|error| error.to_string())?
+                    .clear();
+            }
+            HookAgentId::ZCode => {
+                zcode_hook::uninstall()?;
+                save_hook_installation_state(agent, false)?;
+                *zcode_state
+                    .hook_error
+                    .lock()
+                    .map_err(|error| error.to_string())? = Some("ZCode Hook 未安装".to_string());
+                zcode_state
                     .store
                     .lock()
                     .map_err(|error| error.to_string())?
@@ -2664,13 +2994,16 @@ fn watch_tray_and_minimal_mode_sounds(app: tauri::AppHandle) {
             let pi_snapshot = pi_snapshot(&pi_state);
             let dsh_state = app.state::<DshIntegrationState>();
             let dsh_snapshot = dsh_snapshot(&dsh_state);
+            let zcode_state = app.state::<ZCodeIntegrationState>();
+            let zcode_snapshot = zcode_snapshot(&zcode_state);
 
-            if let (Ok(claude), Ok(codex), Ok(opencode), Ok(pi), Ok(dsh)) = (
+            if let (Ok(claude), Ok(codex), Ok(opencode), Ok(pi), Ok(dsh), Ok(zcode)) = (
                 &claude_snapshot,
                 &codex_snapshot,
                 &opencode_snapshot,
                 &pi_snapshot,
                 &dsh_snapshot,
+                &zcode_snapshot,
             ) {
                 let active_session_count = claude
                     .sessions
@@ -2697,6 +3030,11 @@ fn watch_tray_and_minimal_mode_sounds(app: tauri::AppHandle) {
                         })
                         .count()
                     + dsh
+                        .sessions
+                        .iter()
+                        .filter(|session| session.is_active())
+                        .count()
+                    + zcode
                         .sessions
                         .iter()
                         .filter(|session| session.is_active())
@@ -2759,6 +3097,11 @@ fn watch_tray_and_minimal_mode_sounds(app: tauri::AppHandle) {
                             observer.observe("dsh", &value);
                         }
                     }
+                    if let Ok(snapshot) = &zcode_snapshot {
+                        if let Ok(value) = serde_json::to_value(snapshot) {
+                            observer.observe("zcode", &value);
+                        }
+                    }
                 }
             }
             thread::sleep(Duration::from_secs(1));
@@ -2785,6 +3128,7 @@ pub fn run() {
         .manage(OpenCodeIntegrationState::default())
         .manage(PiIntegrationState::default())
         .manage(DshIntegrationState::default())
+        .manage(ZCodeIntegrationState::default())
         .manage(ApprovalIntegrationState::default())
         .manage(NativeSoundIntegrationState::default())
         .manage(TrayMenuState::default())
@@ -2852,6 +3196,37 @@ pub fn run() {
                 .hook_error
                 .lock()
                 .map_err(|error| error.to_string())? = bridge_error.or(dsh_error);
+
+            let zcode_state = app.state::<ZCodeIntegrationState>();
+            let zcode_configured = hook_install_config.is_enabled(HookAgentId::ZCode);
+            let zcode_status = zcode_hook::status();
+            let zcode_error = match zcode_status {
+                Ok(status) if status.installed() => status.error,
+                Ok(status)
+                    if zcode_configured
+                        && matches!(
+                            status.state,
+                            zcode_hook::ZCodeHookInstallState::NotInstalled
+                                | zcode_hook::ZCodeHookInstallState::Modified
+                                | zcode_hook::ZCodeHookInstallState::Incompatible
+                        ) =>
+                {
+                    match executable.as_deref() {
+                        Some(executable) => zcode_hook::install(executable)
+                            .ok()
+                            .and_then(|installed| installed.error),
+                        None => Some("Unable to locate the CodeCraft executable".to_string()),
+                    }
+                }
+                Ok(status) => status
+                    .error
+                    .or_else(|| Some("ZCode Hook 未安装".to_string())),
+                Err(error) => Some(error),
+            };
+            *zcode_state
+                .hook_error
+                .lock()
+                .map_err(|error| error.to_string())? = zcode_error;
 
             let pi_state = app.state::<PiIntegrationState>();
             let pi_configured = hook_install_config.is_enabled(HookAgentId::Pi);
@@ -3091,6 +3466,7 @@ pub fn run() {
             take_reopen_request,
             take_open_settings_request,
             focus_codex_window,
+            focus_zcode_window,
             get_approval_settings,
             set_approval_settings,
             set_native_sound_settings,
@@ -3108,6 +3484,10 @@ pub fn run() {
             dsh_respond_approval,
             dsh_respond_question,
             dsh_respond_plan,
+            list_zcode_sessions,
+            zcode_respond_approval,
+            zcode_respond_question,
+            zcode_respond_plan,
             install_agent_hook,
             uninstall_agent_hook,
             list_opencode_sessions,
@@ -3156,6 +3536,17 @@ mod tests {
     use super::*;
 
     #[test]
+    fn plan_feedback_is_queued_only_for_a_rejection_with_text() {
+        assert_eq!(
+            zcode_plan_feedback(false, Some("  revise the database step  ")),
+            Some("revise the database step".to_string())
+        );
+        assert_eq!(zcode_plan_feedback(true, Some("ignored")), None);
+        assert_eq!(zcode_plan_feedback(false, Some("  ")), None);
+        assert_eq!(zcode_plan_feedback(false, None), None);
+    }
+
+    #[test]
     fn minimal_mode_keeps_the_backend_alive_without_a_webview() {
         assert!(should_prevent_windowless_exit(None, true));
         assert!(!should_prevent_windowless_exit(None, false));
@@ -3186,6 +3577,14 @@ mod tests {
             codex_window_score("CodeCraft", "codecraft-tauri.exe", &hints),
             0
         );
+    }
+
+    #[test]
+    fn finds_zcode_hosts_by_process_or_title() {
+        assert!(zcode_window_score("ZCode", "ZCode.exe") > 0);
+        assert!(zcode_window_score("", "ZCode.exe") > 0);
+        assert!(zcode_window_score("ZCode", "ZCode Helper.exe") > 0);
+        assert_eq!(zcode_window_score("CodeCraft", "codecraft-tauri.exe"), 0);
     }
 
     #[test]

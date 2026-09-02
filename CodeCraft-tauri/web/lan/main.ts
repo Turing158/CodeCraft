@@ -760,9 +760,11 @@ const renderReview = (entry: ConsoleEntry | undefined) => {
       const isOpenCode = entry.source === "opencode";
       const isPi = entry.source === "pi";
       const isDsh = entry.source === "dsh";
+      const isZCode = entry.source === "zcode";
       const openCodeTarget = pending.openCode;
       const piTarget = pending.pi;
       const dshTarget = pending.dsh;
+      const zcodeTarget = pending.zcode;
       const openCodePermission = (action: "once" | "always" | "reject") =>
         openCodeTarget
           ? api.submitOpenCodePermission(openCodeTarget, action)
@@ -785,6 +787,12 @@ const renderReview = (entry: ConsoleEntry | undefined) => {
                           pending.requestId,
                           "allowOnce",
                         )
+                      : isZCode && zcodeTarget
+                        ? api.submitZCodePermission(
+                            zcodeTarget,
+                            pending.requestId,
+                            "allowOnce",
+                          )
                       : api.submitPermission(pending.requestId, "allow"),
             "已允许一次",
           );
@@ -827,6 +835,12 @@ const renderReview = (entry: ConsoleEntry | undefined) => {
                           pending.requestId,
                           "deny",
                         )
+                      : isZCode && zcodeTarget
+                        ? api.submitZCodePermission(
+                            zcodeTarget,
+                            pending.requestId,
+                            "deny",
+                          )
                       : api.submitPermission(pending.requestId, "deny"),
             "已拒绝",
           );
@@ -840,8 +854,10 @@ const renderReview = (entry: ConsoleEntry | undefined) => {
     reviewQuestions.replaceChildren();
     if (actionable) {
       const isDsh = entry.source === "dsh" && pending.dsh;
+      const isZCode = entry.source === "zcode" && pending.zcode;
+      const isFeedbackPlan = isDsh || isZCode;
       reviewActions.append(
-        actionButton(isDsh ? "批准计划" : "按计划执行", "primary", () => {
+        actionButton(isFeedbackPlan ? "批准计划" : "按计划执行", "primary", () => {
           void guardedSubmit(
             () =>
               isDsh
@@ -851,16 +867,25 @@ const renderReview = (entry: ConsoleEntry | undefined) => {
                     true,
                     null,
                   )
+                : isZCode
+                  ? api.submitZCodePlan(
+                      pending.zcode!,
+                      pending.requestId,
+                      true,
+                      null,
+                    )
                 : api.submitPlan(pending.requestId, null),
-            isDsh ? "已批准计划" : "已开始按计划执行",
+            isFeedbackPlan ? "已批准计划" : "已开始按计划执行",
           );
         }),
       );
-      if (isDsh) {
+      if (isFeedbackPlan) {
         const feedbackBlock = document.createElement("div");
         feedbackBlock.className = "question__extra";
         const feedback = document.createElement("textarea");
-        feedback.placeholder = "输入反馈，让 DeepSeek Harness 继续规划";
+        feedback.placeholder = isZCode
+          ? "输入反馈，让 ZCode 继续规划"
+          : "输入反馈，让 DeepSeek Harness 继续规划";
         feedback.disabled = submitting;
         feedbackBlock.append(feedback);
         reviewQuestions.append(feedbackBlock);
@@ -872,13 +897,19 @@ const renderReview = (entry: ConsoleEntry | undefined) => {
               return;
             }
             void guardedSubmit(
-              () =>
-                api.submitDshPlan(
-                  pending.dsh!,
-                  pending.requestId,
-                  false,
-                  note,
-                ),
+              () => isZCode
+                ? api.submitZCodePlan(
+                    pending.zcode!,
+                    pending.requestId,
+                    false,
+                    note,
+                  )
+                : api.submitDshPlan(
+                    pending.dsh!,
+                    pending.requestId,
+                    false,
+                    note,
+                  ),
               "已提交计划反馈",
             );
           }),
@@ -915,6 +946,12 @@ const renderReview = (entry: ConsoleEntry | undefined) => {
                   submission.requestId,
                   submission.answers,
                 )
+              : entry.source === "zcode" && pending.zcode
+                ? api.submitZCodeQuestion(
+                    pending.zcode,
+                    submission.requestId,
+                    submission.answers,
+                  )
               : api.submitQuestion(submission.requestId, submission.answers);
         void guardedSubmit(() => action, "已提交回答");
       });

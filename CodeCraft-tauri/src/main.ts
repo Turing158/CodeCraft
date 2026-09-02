@@ -83,11 +83,24 @@ import {
   type DshSnapshot,
 } from "./dsh-sessions";
 import {
+  normalizeZCodeQuestionAnswers,
+  zcodePendingReview,
+  zcodeQuestionAnswersAreValid,
+  zcodeQuestionForUi,
+  zcodeSessionKey,
+  type ZCodePermissionRequest,
+  type ZCodePlanRequest,
+  type ZCodeQuestionRequest,
+  type ZCodeSession,
+  type ZCodeSnapshot,
+} from "./zcode-sessions";
+import {
   hasUnifiedWorkingSession,
   isCodexSession,
   isOpenCodeSession,
   isPiSession,
   isDshSession,
+  isZCodeSession,
   primaryUnifiedLiveSession,
   unifiedSessionKey,
   unifiedSessionIsRunning,
@@ -425,6 +438,10 @@ const dshIconUrl = new URL(
   "../src-tauri/icons/icon/deepseek.svg?no-inline",
   import.meta.url,
 ).href;
+const zcodeIconUrl = new URL(
+  "../src-tauri/icons/icon/zcode.svg?no-inline",
+  import.meta.url,
+).href;
 // The pack artwork stays external for the same CSP reason as the logo above:
 // these files are small enough that Vite would otherwise inline them.
 const soundPackIconUrls: Record<Exclude<SoundPackId, "custom">, string> = {
@@ -490,6 +507,7 @@ const openCodeSessionCard = panel?.querySelector<HTMLElement>(
 );
 const piSessionCard = panel?.querySelector<HTMLElement>("#pi-session-card");
 const dshSessionCard = panel?.querySelector<HTMLElement>("#dsh-session-card");
+const zcodeSessionCard = panel?.querySelector<HTMLElement>("#zcode-session-card");
 const codexSessionList = panel?.querySelector<HTMLUListElement>(
   "#codex-session-list",
 );
@@ -502,6 +520,9 @@ const piSessionList = panel?.querySelector<HTMLUListElement>(
 const dshSessionList = panel?.querySelector<HTMLUListElement>(
   "#dsh-session-list",
 );
+const zcodeSessionList = panel?.querySelector<HTMLUListElement>(
+  "#zcode-session-list",
+);
 const claudeConnectionStatus = panel?.querySelector<HTMLButtonElement>(
   "#claude-connection-status",
 );
@@ -513,6 +534,9 @@ const piConnectionStatus = panel?.querySelector<HTMLElement>(
 );
 const dshConnectionStatus = panel?.querySelector<HTMLElement>(
   "#dsh-connection-status",
+);
+const zcodeConnectionStatus = panel?.querySelector<HTMLElement>(
+  "#zcode-connection-status",
 );
 const claudeSessionCardIcon = panel?.querySelector<HTMLImageElement>(
   "#claude-session-card-icon",
@@ -528,6 +552,9 @@ const piSessionCardIcon = panel?.querySelector<HTMLImageElement>(
 );
 const dshSessionCardIcon = panel?.querySelector<HTMLImageElement>(
   "#dsh-session-card-icon",
+);
+const zcodeSessionCardIcon = panel?.querySelector<HTMLImageElement>(
+  "#zcode-session-card-icon",
 );
 const sessionProduct = panel?.querySelector<HTMLElement>(".session-product");
 const sessionProductTrigger = panel?.querySelector<HTMLButtonElement>(
@@ -989,6 +1016,8 @@ const planCustomSubmitButton = panel?.querySelector<HTMLButtonElement>(
 const planActionBadge = panel?.querySelector<HTMLElement>("#plan-action-badge");
 const planOpenCodexButton =
   panel?.querySelector<HTMLButtonElement>("#plan-open-codex");
+const planOpenZCodeButton =
+  panel?.querySelector<HTMLButtonElement>("#plan-open-zcode");
 
 const setSourceStatusLabel = (button: HTMLElement, label: string) => {
   const labelElement = button.querySelector<HTMLElement>(
@@ -1046,19 +1075,23 @@ if (
   !openCodeSessionCard ||
   !piSessionCard ||
   !dshSessionCard ||
+  !zcodeSessionCard ||
   !codexSessionList ||
   !openCodeSessionList ||
   !piSessionList ||
   !dshSessionList ||
+  !zcodeSessionList ||
   !claudeConnectionStatus ||
   !openCodeConnectionStatus ||
   !piConnectionStatus ||
   !dshConnectionStatus ||
+  !zcodeConnectionStatus ||
   !claudeSessionCardIcon ||
   !codexSessionCardIcon ||
   !openCodeSessionCardIcon ||
   !piSessionCardIcon ||
   !dshSessionCardIcon ||
+  !zcodeSessionCardIcon ||
   !sessionProduct ||
   !sessionProductTrigger ||
   !sessionProductIcon ||
@@ -1230,7 +1263,8 @@ if (
   !planCustomInput ||
   !planCustomSubmitButton ||
   !planActionBadge ||
-  !planOpenCodexButton
+  !planOpenCodexButton ||
+  !planOpenZCodeButton
 ) {
   throw new Error("CodeCraft session panel is incomplete");
 }
@@ -1360,17 +1394,26 @@ let selectedCodexSessionId: string | undefined;
 let selectedOpenCodeSessionKey: string | undefined;
 let selectedPiSessionKey: string | undefined;
 let selectedDshSessionKey: string | undefined;
-type ReviewSource = "claude" | "codex" | "opencode" | "pi" | "dsh";
+let selectedZCodeSessionKey: string | undefined;
+type ReviewSource =
+  | "claude"
+  | "codex"
+  | "opencode"
+  | "pi"
+  | "dsh"
+  | "zcode";
 let selectedSessionSource: ReviewSource = "claude";
 let lastRefreshError: string | undefined;
 let lastOpenCodeRefreshError: string | undefined;
 let lastPiRefreshError: string | undefined;
 let lastDshRefreshError: string | undefined;
+let lastZCodeRefreshError: string | undefined;
 let sessionItems = new Map<string, HTMLLIElement>();
 let codexSessionItems = new Map<string, HTMLLIElement>();
 let openCodeSessionItems = new Map<string, HTMLLIElement>();
 let piSessionItems = new Map<string, HTMLLIElement>();
 let dshSessionItems = new Map<string, HTMLLIElement>();
+let zcodeSessionItems = new Map<string, HTMLLIElement>();
 let latestCodexSnapshot: CodexSnapshot = {
   connected: false,
   integrationError: null,
@@ -1404,6 +1447,23 @@ let latestDshSnapshot: DshSnapshot = {
   sessions: [],
   instances: [],
 };
+let latestZCodeSnapshot: ZCodeSnapshot = {
+  connected: false,
+  integrationError: null,
+  detectedPath: null,
+  detectedVersion: null,
+  capabilities: {
+    observation: true,
+    toolApproval: true,
+    questionAnswer: true,
+    planReview: true,
+    planFeedback: true,
+    allowAlways: false,
+    streamingAnswer: false,
+    questionSound: false,
+  },
+  sessions: [],
+};
 let displayedContentView: ContentView = "sessions";
 let requestedContentView: ContentView = "sessions";
 let questionOriginView: ContentView | undefined;
@@ -1426,6 +1486,7 @@ const soundSourcePrimed: Record<
   opencode: false,
   pi: false,
   dsh: false,
+  zcode: false,
 };
 
 const observeSoundFrames = (
@@ -1574,6 +1635,25 @@ const observeDshSounds = (sessions: DshSession[]) => {
     ),
   );
 };
+const observeZCodeSounds = (sessions: ZCodeSession[]) => {
+  observeSoundFrames(
+    "zcode",
+    new Map(
+      sessions.map((session) => [
+        zcodeSessionKey(session),
+        {
+          status: session.status,
+          activityIds: session.activities.map((activity) => activity.id),
+          failedActivityIds: session.activities
+            .filter((activity) => activity.status === "failed")
+            .map((activity) => activity.id),
+          permissionId: session.permission?.id ?? null,
+          planId: session.plan?.id ?? null,
+        },
+      ]),
+    ),
+  );
+};
 let renderedDetailSignature: string | undefined;
 let contentViewTransitionTimer: ReturnType<typeof setTimeout> | undefined;
 let incomingViewFrame: number | undefined;
@@ -1587,13 +1667,21 @@ type SessionProductId =
   | "codex"
   | "opencode"
   | "pi"
-  | "dsh";
+  | "dsh"
+  | "zcode";
 type SessionSourceProductId = Exclude<SessionProductId, "all">;
 type SessionProduct = {
   id: SessionProductId;
   triggerLabel: string;
   optionLabel: string;
-  kind: "codecraft" | "claude" | "codex" | "opencode" | "pi" | "dsh";
+  kind:
+    | "codecraft"
+    | "claude"
+    | "codex"
+    | "opencode"
+    | "pi"
+    | "dsh"
+    | "zcode";
   iconUrl: string;
 };
 
@@ -1640,6 +1728,13 @@ const sessionProducts: SessionProduct[] = [
     kind: "dsh",
     iconUrl: dshIconUrl,
   },
+  {
+    id: "zcode",
+    triggerLabel: "ZCode",
+    optionLabel: "ZCode",
+    kind: "zcode",
+    iconUrl: zcodeIconUrl,
+  },
 ];
 const installedSessionProductIds = new Set<SessionSourceProductId>();
 let selectedSessionProductId: SessionProductId = "all";
@@ -1661,6 +1756,7 @@ let activeQuestionRequest: ClaudeQuestionRequest | undefined;
 let activeQuestionSource: ReviewSource = "claude";
 let activePiQuestion: PiQuestionRequest | undefined;
 let activeDshQuestion: DshQuestionRequest | undefined;
+let activeZCodeQuestion: ZCodeQuestionRequest | undefined;
 let activeCodexQuestionThreadId: string | undefined;
 let activeQuestionIndex = 0;
 let questionDrafts: QuestionDraft[] = [];
@@ -1675,6 +1771,7 @@ let activePermissionRequest: ClaudePermissionRequest | undefined;
 let activePermissionSource: ReviewSource = "claude";
 let activePiPermission: PiPermissionRequest | undefined;
 let activeDshPermission: DshPermissionRequest | undefined;
+let activeZCodePermission: ZCodePermissionRequest | undefined;
 let dismissedPiReviewId: string | undefined;
 let lastAutoRevealedPiReviewId: string | undefined;
 let locallySubmittedPermissionRequestId: string | undefined;
@@ -1686,8 +1783,11 @@ let activePlanRequest: ClaudePlanRequest | undefined;
 let activePlanSource: ReviewSource = "claude";
 let activeCodexPlanThreadId: string | undefined;
 let activeDshPlan: DshPlanRequest | undefined;
+let activeZCodePlan: ZCodePlanRequest | undefined;
 let dismissedDshReviewId: string | undefined;
 let lastAutoRevealedDshReviewId: string | undefined;
+let dismissedZCodeReviewId: string | undefined;
+let lastAutoRevealedZCodeReviewId: string | undefined;
 let locallySubmittedPlanRequestId: string | undefined;
 let settingsNavResizeObserver: ResizeObserver | undefined;
 let localeLayoutFrame: number | undefined;
@@ -2911,10 +3011,20 @@ const createQuestionOptionButton = (
   label.textContent = option.label;
   button.append(label);
 
-  if (option.description) {
+  const previewText =
+    typeof option.preview === "string"
+      ? option.preview.trim()
+      : option.preview === undefined || option.preview === null
+        ? ""
+        : JSON.stringify(option.preview);
+  const supportingText = [option.description, previewText]
+    .filter((value): value is string => Boolean(value))
+    .join(" | ");
+  if (supportingText) {
     const description = document.createElement("span");
     description.className = "question-option__description";
-    description.textContent = option.description;
+    description.textContent = supportingText;
+    description.title = supportingText;
     button.append(description);
   }
 
@@ -3145,6 +3255,7 @@ const clearActiveQuestionRequest = () => {
   activeQuestionRequest = undefined;
   activePiQuestion = undefined;
   activeDshQuestion = undefined;
+  activeZCodeQuestion = undefined;
   activeQuestionIndex = 0;
   questionDrafts = [];
   activeCodexQuestionThreadId = undefined;
@@ -3199,6 +3310,8 @@ questionBackButton.addEventListener("click", () => {
     dismissedPiReviewId = activeQuestionRequest.id;
   } else if (activeQuestionSource === "dsh") {
     dismissedDshReviewId = activeQuestionRequest.id;
+  } else if (activeQuestionSource === "zcode") {
+    dismissedZCodeReviewId = activeQuestionRequest.id;
   } else {
     manuallyHiddenQuestionRequestId = activeQuestionRequest.id;
   }
@@ -3266,6 +3379,19 @@ const focusCodexSessionWindow = async (
     }
   } catch (error) {
     console.error("Unable to focus the Codex window", error);
+  } finally {
+    button.disabled = false;
+  }
+};
+
+const focusZCodeWindow = async (button: HTMLButtonElement) => {
+  button.disabled = true;
+  try {
+    if (isTauriRuntime) {
+      await invoke("focus_zcode_window");
+    }
+  } catch (error) {
+    console.error("Unable to focus the ZCode window", error);
   } finally {
     button.disabled = false;
   }
@@ -3402,6 +3528,23 @@ questionSubmitButton.addEventListener("click", async () => {
         answers: normalizeDshQuestionAnswers(submission.answers),
       });
       dismissedDshReviewId = request.id;
+    } else if (activeQuestionSource === "zcode") {
+      const request = activeZCodeQuestion;
+      if (!request) return;
+      if (!zcodeQuestionAnswersAreValid(submission.answers)) {
+        setQuestionSubmitStatus(
+          translate("请为每个问题提供非空回答"),
+          "error",
+        );
+        return;
+      }
+      await invoke("zcode_respond_question", {
+        sessionId: request.sessionId,
+        requestId: request.id,
+        answers: normalizeZCodeQuestionAnswers(submission.answers),
+        annotations: null,
+      });
+      dismissedZCodeReviewId = request.id;
     } else {
       await invoke("submit_claude_question_answer", {
         requestId: submission.requestId,
@@ -3424,7 +3567,8 @@ questionSubmitButton.addEventListener("click", async () => {
     if (
       activeQuestionSource === "opencode" ||
       activeQuestionSource === "pi" ||
-      activeQuestionSource === "dsh"
+      activeQuestionSource === "dsh" ||
+      activeQuestionSource === "zcode"
     ) {
       const message = error instanceof Error ? error.message : String(error);
       setQuestionSubmitStatus(`${translate("回传失败：")}${message}`, "error");
@@ -3493,6 +3637,7 @@ const clearActivePermissionRequest = () => {
   activePermissionRequest = undefined;
   activePiPermission = undefined;
   activeDshPermission = undefined;
+  activeZCodePermission = undefined;
   permissionSummaryText.textContent = "";
   permissionCwd.textContent = "";
   permissionCwd.hidden = true;
@@ -3633,6 +3778,16 @@ const submitPermissionDecision = async (decision: PermissionDecision) => {
         decision: decision === "allow" ? "allowOnce" : "deny",
       });
       dismissedDshReviewId = pending.id;
+    } else if (activePermissionSource === "zcode") {
+      const pending = activeZCodePermission;
+      if (!pending || decision === "allowAlways") return;
+      await invoke("zcode_respond_approval", {
+        sessionId: pending.sessionId,
+        requestId: pending.id,
+        decision: decision === "allow" ? "allowOnce" : "deny",
+        message: null,
+      });
+      dismissedZCodeReviewId = pending.id;
     } else {
       await invoke("submit_claude_permission_decision", {
         requestId: request.id,
@@ -3649,6 +3804,8 @@ const submitPermissionDecision = async (decision: PermissionDecision) => {
       dismissedPiReviewId = request.id;
     } else if (activePermissionSource === "dsh") {
       dismissedDshReviewId = request.id;
+    } else if (activePermissionSource === "zcode") {
+      dismissedZCodeReviewId = request.id;
     } else {
       locallySubmittedPermissionRequestId = request.id;
     }
@@ -3660,7 +3817,8 @@ const submitPermissionDecision = async (decision: PermissionDecision) => {
     if (
       activePermissionSource === "opencode" ||
       activePermissionSource === "pi" ||
-      activePermissionSource === "dsh"
+      activePermissionSource === "dsh" ||
+      activePermissionSource === "zcode"
     ) {
       const message = error instanceof Error ? error.message : String(error);
       setPermissionSubmitStatus(
@@ -3684,6 +3842,8 @@ permissionBackButton.addEventListener("click", () => {
     dismissedPiReviewId = activePermissionRequest.id;
   } else if (activePermissionSource === "dsh") {
     dismissedDshReviewId = activePermissionRequest.id;
+  } else if (activePermissionSource === "zcode") {
+    dismissedZCodeReviewId = activePermissionRequest.id;
   } else {
     manuallyHiddenPermissionRequestId = activePermissionRequest.id;
   }
@@ -3716,20 +3876,26 @@ const syncPlanSourceControls = () => {
   const isCodexPlan = activePlanSource === "codex";
   const isClaudePlan = activePlanSource === "claude";
   const isDshPlan = activePlanSource === "dsh";
+  const isZCodePlan = activePlanSource === "zcode";
+  const isFeedbackPlan = isDshPlan;
   planView.dataset.planSource = activePlanSource;
-  planAutoButton.hidden = !isClaudePlan && !isDshPlan;
+  planAutoButton.hidden = !isClaudePlan && !isFeedbackPlan;
   planAutoRememberButton.hidden = !isClaudePlan;
-  planCustomInput.hidden = !isClaudePlan && !isDshPlan;
-  planCustomSubmitButton.hidden = !isClaudePlan && !isDshPlan;
+  planCustomInput.hidden = !isClaudePlan && !isFeedbackPlan;
+  planCustomSubmitButton.hidden = !isClaudePlan && !isFeedbackPlan;
   planOpenCodexButton.hidden = !isCodexPlan;
-  planCustomInput.placeholder = isDshPlan
+  planOpenZCodeButton.hidden = !isZCodePlan;
+  const zcodeOpenLabel = translate("前往 ZCode 处理");
+  planOpenZCodeButton.querySelector("span")!.textContent = zcodeOpenLabel;
+  planOpenZCodeButton.setAttribute("aria-label", zcodeOpenLabel);
+  planCustomInput.placeholder = isFeedbackPlan
     ? "输入继续规划的反馈"
     : translate("请输入需要修改的内容");
   planCustomInput.setAttribute(
     "aria-label",
     translate("自定义指令"),
   );
-  planCustomSubmitButton.textContent = isDshPlan
+  planCustomSubmitButton.textContent = isFeedbackPlan
     ? "继续规划"
     : translate("提交");
   const executeLabel = planAutoButton.querySelector(
@@ -3739,14 +3905,18 @@ const syncPlanSourceControls = () => {
     ".question-option__description",
   );
   if (executeLabel) {
-    executeLabel.textContent = isDshPlan ? "批准计划" : "实行计划  auto mode";
+    executeLabel.textContent = isFeedbackPlan ? "批准计划" : "实行计划  auto mode";
   }
   if (executeDescription) {
-    executeDescription.textContent = isDshPlan
+    executeDescription.textContent = isFeedbackPlan
       ? "允许 DeepSeek Harness 退出计划模式"
       : "以自动模式执行此计划";
   }
-  planActionBadge.textContent = isCodexPlan ? "在原 Codex 中选择" : "点击后立即回传";
+  planActionBadge.textContent = isCodexPlan
+    ? "在原 Codex 中选择"
+    : isZCodePlan
+      ? "在 ZCode 中处理"
+      : "点击后立即回传";
 };
 
 const syncPiPermissionStatus = () => {
@@ -3800,6 +3970,7 @@ const clearActivePlanRequest = () => {
   activePlanRequest = undefined;
   activeCodexPlanThreadId = undefined;
   activeDshPlan = undefined;
+  activeZCodePlan = undefined;
   activePlanSource = "claude";
   syncPlanSourceControls();
   planSummaryText.innerHTML = "";
@@ -3819,6 +3990,7 @@ const setPlanButtonsDisabled = (disabled: boolean) => {
   planCustomInput.disabled = disabled;
   planCustomSubmitButton.disabled = disabled;
   planOpenCodexButton.disabled = disabled;
+  planOpenZCodeButton.disabled = disabled;
 };
 
 const setPlanSubmitStatus = (
@@ -3853,6 +4025,16 @@ const submitPlanDecision = async (mode: PlanExecutionMode, note?: string) => {
         feedback: note?.trim() || null,
       });
       dismissedDshReviewId = pending.id;
+    } else if (activePlanSource === "zcode") {
+      const pending = activeZCodePlan;
+      if (!pending) return;
+      await invoke("zcode_respond_plan", {
+        sessionId: pending.sessionId,
+        requestId: pending.id,
+        approved: note === undefined,
+        feedback: note?.trim() || null,
+      });
+      dismissedZCodeReviewId = pending.id;
     } else {
       await invoke("submit_claude_plan_decision", {
         requestId: request.id,
@@ -3878,6 +4060,8 @@ planBackButton.addEventListener("click", () => {
     dismissedCodexInteractionId = activePlanRequest.id;
   } else if (activePlanSource === "dsh") {
     dismissedDshReviewId = activePlanRequest.id;
+  } else if (activePlanSource === "zcode") {
+    dismissedZCodeReviewId = activePlanRequest.id;
   } else {
     manuallyHiddenPlanRequestId = activePlanRequest.id;
   }
@@ -3916,6 +4100,11 @@ planCustomInput.addEventListener("keydown", (event) => {
 planOpenCodexButton.addEventListener("click", () => {
   if (activePlanSource !== "codex" || !activeCodexPlanThreadId) return;
   void focusCodexSessionWindow(activeCodexPlanThreadId, planOpenCodexButton);
+});
+
+planOpenZCodeButton.addEventListener("click", () => {
+  if (activePlanSource !== "zcode") return;
+  void focusZCodeWindow(planOpenZCodeButton);
 });
 
 const createSessionProductIcon = (
@@ -4100,11 +4289,15 @@ const syncProductVisibility = () => {
   const showDsh =
     installedSessionProductIds.has("dsh") &&
     (selectedSessionProductId === "all" || selectedSessionProductId === "dsh");
+  const showZCode =
+    installedSessionProductIds.has("zcode") &&
+    (selectedSessionProductId === "all" || selectedSessionProductId === "zcode");
   claudeSessionCard.hidden = !showClaude;
   codexSessionCard.hidden = !showCodex;
   openCodeSessionCard.hidden = !showOpenCode;
   piSessionCard.hidden = !showPi;
   dshSessionCard.hidden = !showDsh;
+  zcodeSessionCard.hidden = !showZCode;
   sessionSourceCards.dataset.filter = selectedSessionProductId;
   renderSessionSummary();
 };
@@ -4117,6 +4310,7 @@ const sessionProductIdForHookAgent = (
   if (id === "openCode") return "opencode";
   if (id === "pi") return "pi";
   if (id === "deepSeekHarness") return "dsh";
+  if (id === "zCode") return "zcode";
   return undefined;
 };
 
@@ -4279,6 +4473,7 @@ codexSessionCardIcon.src = codexIconUrl;
 openCodeSessionCardIcon.src = openCodeIconUrl;
 piSessionCardIcon.src = piIconUrl;
 dshSessionCardIcon.src = dshIconUrl;
+zcodeSessionCardIcon.src = zcodeIconUrl;
 
 claudeConnectionStatus.addEventListener("click", () => {
   if (claudeConnectionStatus.dataset.connected === "true") return;
@@ -4349,6 +4544,7 @@ const latestUnifiedSessions = (): UnifiedSession[] => [
   ...latestOpenCodeSnapshot.sessions,
   ...latestPiSnapshot.sessions,
   ...latestDshSnapshot.sessions,
+  ...latestZCodeSnapshot.sessions,
 ];
 
 const collapsedPanelHeight = () =>
@@ -4523,7 +4719,9 @@ const renderSessionDetail = (session: UnifiedSession) => {
     isPiSession(session) ? [session.question, session.permission] : null,
     isDshSession(session)
       ? [session.question, session.permission, session.plan]
-      : null,
+      : isZCodeSession(session)
+        ? [session.question, session.permission, session.plan, session.reviewState]
+        : null,
   ]);
   if (signature === renderedDetailSignature) return;
 
@@ -4627,6 +4825,7 @@ const setSelectedSession = (sessionId: string) => {
   selectedOpenCodeSessionKey = undefined;
   selectedPiSessionKey = undefined;
   selectedDshSessionKey = undefined;
+  selectedZCodeSessionKey = undefined;
   for (const button of sessionList.querySelectorAll<HTMLButtonElement>(
     ".session-button",
   )) {
@@ -4682,6 +4881,7 @@ const setSelectedCodexSession = (sessionId: string) => {
   selectedOpenCodeSessionKey = undefined;
   selectedPiSessionKey = undefined;
   selectedDshSessionKey = undefined;
+  selectedZCodeSessionKey = undefined;
   for (const button of codexSessionList.querySelectorAll<HTMLButtonElement>(
     ".session-button",
   )) {
@@ -4746,6 +4946,7 @@ const setSelectedOpenCodeSession = (sessionKey: string) => {
   selectedCodexSessionId = undefined;
   selectedPiSessionKey = undefined;
   selectedDshSessionKey = undefined;
+  selectedZCodeSessionKey = undefined;
   for (const button of openCodeSessionList.querySelectorAll<HTMLButtonElement>(
     ".session-button",
   )) {
@@ -4806,6 +5007,7 @@ const setSelectedPiSession = (sessionKey: string) => {
   selectedCodexSessionId = undefined;
   selectedOpenCodeSessionKey = undefined;
   selectedDshSessionKey = undefined;
+  selectedZCodeSessionKey = undefined;
   for (const button of piSessionList.querySelectorAll<HTMLButtonElement>(
     ".session-button",
   )) {
@@ -4879,6 +5081,7 @@ const setSelectedDshSession = (sessionKey: string) => {
   selectedCodexSessionId = undefined;
   selectedOpenCodeSessionKey = undefined;
   selectedPiSessionKey = undefined;
+  selectedZCodeSessionKey = undefined;
   for (const button of dshSessionList.querySelectorAll<HTMLButtonElement>(
     ".session-button",
   )) {
@@ -4889,6 +5092,71 @@ const setSelectedDshSession = (sessionKey: string) => {
   }
   if (dshPendingReview([session])) {
     showDshReview(session, false);
+    return;
+  }
+  renderSessionDetail(session);
+  switchContentView("detail");
+  sessionDetailBack.focus({ preventScroll: true });
+};
+
+const showZCodeReview = (session: ZCodeSession, shouldAutoReveal: boolean) => {
+  const reveal = (view: ReviewContentView) => {
+    if (requestedContentView !== view) {
+      rememberReviewOrigin(view);
+      switchContentView(view);
+    }
+    if (!shouldAutoReveal || !collapseExpandSettings.approvalAutoExpand) return;
+    void revealPanelForAttention().catch((error: unknown) => {
+      console.error("Unable to reveal the ZCode review", error);
+    });
+  };
+  const pending = zcodePendingReview([session]);
+  if (!pending) return;
+  if (pending.view === "plan") {
+    clearActiveQuestionRequest();
+    clearActivePermissionRequest();
+    activeZCodePlan = pending.request;
+    renderPlanRequest(pending.request, "zcode");
+    reveal("plan");
+    return;
+  }
+  if (pending.view === "permission") {
+    clearActiveQuestionRequest();
+    activePermissionSource = "zcode";
+    activeZCodePermission = pending.request;
+    renderPermissionRequest(pending.request);
+    reveal("permission");
+    return;
+  }
+  clearActivePermissionRequest();
+  activeQuestionSource = "zcode";
+  activeZCodeQuestion = pending.request;
+  renderQuestionRequest(zcodeQuestionForUi(pending.request));
+  reveal("question");
+};
+
+const setSelectedZCodeSession = (sessionKey: string) => {
+  const session = latestZCodeSnapshot.sessions.find(
+    (item) => zcodeSessionKey(item) === sessionKey,
+  );
+  if (!session) return;
+  selectedZCodeSessionKey = sessionKey;
+  selectedSessionSource = "zcode";
+  selectedSessionId = undefined;
+  selectedCodexSessionId = undefined;
+  selectedOpenCodeSessionKey = undefined;
+  selectedPiSessionKey = undefined;
+  selectedDshSessionKey = undefined;
+  for (const button of zcodeSessionList.querySelectorAll<HTMLButtonElement>(
+    ".session-button",
+  )) {
+    button.setAttribute(
+      "aria-pressed",
+      String(button.dataset.sessionKey === sessionKey),
+    );
+  }
+  if (zcodePendingReview([session])) {
+    showZCodeReview(session, false);
     return;
   }
   renderSessionDetail(session);
@@ -4912,12 +5180,16 @@ const renderSessionSummary = () => {
   const dshActiveCount = latestDshSnapshot.sessions.filter(
     (session) => session.status !== "idle",
   ).length;
+  const zcodeActiveCount = latestZCodeSnapshot.sessions.filter(
+    (session) => session.status !== "idle",
+  ).length;
   const activeCounts: Record<SessionSourceProductId, number> = {
     "claude-code": claudeActiveCount,
     codex: codexActiveCount,
     opencode: openCodeActiveCount,
     pi: piActiveCount,
     dsh: dshActiveCount,
+    zcode: zcodeActiveCount,
   };
   const connectionStates: Record<SessionSourceProductId, boolean> = {
     "claude-code": latestClaudeSnapshot.connected,
@@ -4925,6 +5197,7 @@ const renderSessionSummary = () => {
     opencode: isOpenCodeHookHealthy(),
     pi: latestPiSnapshot.connected,
     dsh: latestDshSnapshot.connected,
+    zcode: latestZCodeSnapshot.connected,
   };
   const selectedSources =
     selectedSessionProductId === "all"
@@ -5375,6 +5648,104 @@ const refreshDshSessions = async () => {
   }
 };
 
+const renderZCodeSnapshot = (snapshot: ZCodeSnapshot) => {
+  snapshot = {
+    ...snapshot,
+    sessions: filterAutoCleanedSessions(
+      filterDismissedSessions(
+        snapshot.sessions,
+        dismissedSessionKeys,
+        zcodeSessionKey,
+        unifiedSessionIsRunning,
+      ),
+      sessionCleanupSettings,
+    ),
+  };
+  observeZCodeSounds(snapshot.sessions);
+  latestZCodeSnapshot = snapshot;
+  setSourceStatusLabel(
+    zcodeConnectionStatus,
+    snapshot.connected ? "Hook 正常" : "等待 ZCode",
+  );
+  zcodeConnectionStatus.dataset.connected = String(snapshot.connected);
+  zcodeConnectionStatus.title = snapshot.connected
+    ? snapshot.detectedVersion
+      ? `ZCode ${snapshot.detectedVersion} Hook 已连接`
+      : "ZCode Hook 已连接"
+    : (snapshot.integrationError ?? "在设置中安装 ZCode Hook");
+
+  if (
+    !snapshot.sessions.some(
+      (session) => zcodeSessionKey(session) === selectedZCodeSessionKey,
+    )
+  ) {
+    selectedZCodeSessionKey = undefined;
+    if (selectedSessionSource === "zcode") renderedDetailSignature = undefined;
+  }
+  renderUnifiedSessionList(zcodeSessionList, snapshot.sessions, zcodeSessionItems);
+  const selected = snapshot.sessions.find(
+    (session) => zcodeSessionKey(session) === selectedZCodeSessionKey,
+  );
+  if (
+    selectedSessionSource === "zcode" &&
+    requestedContentView === "detail" &&
+    selected
+  ) {
+    renderSessionDetail(selected);
+  }
+  renderSessionSummary();
+  syncCollapsedSessionState();
+
+  const pending = zcodePendingReview(snapshot.sessions);
+  if (!pending) {
+    const isZCodeView =
+      (requestedContentView === "permission" &&
+        activePermissionSource === "zcode") ||
+      (requestedContentView === "question" && activeQuestionSource === "zcode") ||
+      (requestedContentView === "plan" && activePlanSource === "zcode");
+    if (isZCodeView) {
+      const origin =
+        requestedContentView === "permission"
+          ? permissionOriginView
+          : requestedContentView === "question"
+            ? questionOriginView
+            : planOriginView;
+      clearActiveQuestionRequest();
+      clearActivePermissionRequest();
+      clearActivePlanRequest();
+      switchContentView(returnViewForReview(origin));
+    }
+    dismissedZCodeReviewId = undefined;
+    lastAutoRevealedZCodeReviewId = undefined;
+    return;
+  }
+  if (pending.request.id === dismissedZCodeReviewId) return;
+  const shouldAutoReveal = pending.request.id !== lastAutoRevealedZCodeReviewId;
+  showZCodeReview(pending.session, shouldAutoReveal);
+  if (shouldAutoReveal) lastAutoRevealedZCodeReviewId = pending.request.id;
+};
+
+const refreshZCodeSessions = async () => {
+  if (!isTauriRuntime) return;
+  try {
+    const snapshot = await invoke<ZCodeSnapshot>("list_zcode_sessions");
+    renderZCodeSnapshot(snapshot);
+    lastZCodeRefreshError = undefined;
+  } catch (error: unknown) {
+    const message = error instanceof Error ? error.message : String(error);
+    renderZCodeSnapshot({
+      ...latestZCodeSnapshot,
+      connected: false,
+      integrationError: message,
+      sessions: [],
+    });
+    if (message !== lastZCodeRefreshError) {
+      console.error("Unable to refresh ZCode sessions", error);
+      lastZCodeRefreshError = message;
+    }
+  }
+};
+
 const refreshOpenCodeSessions = async () => {
   if (refreshingOpenCodeSessions || !isTauriRuntime) return;
   refreshingOpenCodeSessions = true;
@@ -5405,6 +5776,7 @@ sessionDetailBack.addEventListener("click", () => {
   selectedOpenCodeSessionKey = undefined;
   selectedPiSessionKey = undefined;
   selectedDshSessionKey = undefined;
+  selectedZCodeSessionKey = undefined;
   renderedDetailSignature = undefined;
   switchContentView("sessions");
 });
@@ -6159,7 +6531,8 @@ type HookAgentId =
   | "codex"
   | "openCode"
   | "pi"
-  | "deepSeekHarness";
+  | "deepSeekHarness"
+  | "zCode";
 type HookIntegrationStatus = {
   id: HookAgentId;
   name: string;
@@ -6209,6 +6582,14 @@ const browserHookIntegrations: HookIntegrationStatus[] = [
     name: "DeepSeek Harness",
     agentInstalled: true,
     hookInstalled: false,
+  },
+  {
+    id: "zCode",
+    name: "ZCode",
+    agentInstalled: true,
+    hookInstalled: false,
+    installPath: "D:\\software\\ZCode\\ZCode.exe",
+    installedVersion: "3.10.1",
   },
 ];
 
@@ -6310,7 +6691,24 @@ const hookIconUrl = (id: HookAgentId) => {
   if (id === "openCode") return openCodeIconUrl;
   if (id === "pi") return piIconUrl;
   if (id === "deepSeekHarness") return dshIconUrl;
+  if (id === "zCode") return zcodeIconUrl;
   return codexIconUrl;
+};
+
+const hookIntegrationDetail = (status: HookIntegrationStatus): string => {
+  if (status.id === "zCode") {
+    const version = status.installedVersion ?? status.runningVersions?.[0];
+    return (
+      [version ? `v${version}` : undefined, status.installPath]
+        .filter((value): value is string => Boolean(value))
+        .join(" · ") || "CodeCraft 会话同步与审阅 Hook"
+    );
+  }
+  return (status.id === "openCode" ||
+    status.id === "pi" ||
+    status.id === "deepSeekHarness") && status.installPath
+    ? status.installPath
+    : "CodeCraft 会话同步与审阅 Hook";
 };
 
 const createHookAgentButton = (status: HookIntegrationStatus) => {
@@ -6329,7 +6727,9 @@ const createHookAgentButton = (status: HookIntegrationStatus) => {
           ? "pi"
           : status.id === "deepSeekHarness"
             ? "dsh"
-            : "codex";
+            : status.id === "zCode"
+              ? "zcode"
+              : "codex";
   mark.setAttribute("aria-hidden", "true");
   const image = document.createElement("img");
   image.alt = "";
@@ -6341,13 +6741,8 @@ const createHookAgentButton = (status: HookIntegrationStatus) => {
   const name = document.createElement("strong");
   name.textContent = status.name;
   const detail = document.createElement("small");
-  detail.textContent =
-    (status.id === "openCode" ||
-      status.id === "pi" ||
-      status.id === "deepSeekHarness") &&
-    status.installPath
-      ? status.installPath
-      : "CodeCraft 会话同步与审阅 Hook";
+  detail.textContent = hookIntegrationDetail(status);
+  detail.title = detail.textContent;
   copy.append(name, detail);
 
   const state = document.createElement("span");
@@ -6369,13 +6764,8 @@ const syncHookAgentButton = (
     ".hook-agent-button__copy small",
   );
   if (detail) {
-    detail.textContent =
-      (status.id === "openCode" ||
-        status.id === "pi" ||
-        status.id === "deepSeekHarness") &&
-      status.installPath
-        ? status.installPath
-        : "CodeCraft 会话同步与审阅 Hook";
+    detail.textContent = hookIntegrationDetail(status);
+    detail.title = detail.textContent;
   }
   button.dataset.agentInstalled = String(status.agentInstalled);
   button.dataset.busy = String(activeOperation !== undefined);
@@ -6417,6 +6807,12 @@ const syncHookAgentButton = (
   ) {
     state.dataset.kind = "action";
     state.textContent = "请重启 OpenCode";
+  } else if (
+    !status.hookInstalled &&
+    status.installState === "notInstalled"
+  ) {
+    state.dataset.kind = "missing";
+    state.textContent = "未安装";
   } else if (status.error) {
     state.dataset.kind = "missing";
     state.textContent = "需处理";
@@ -7907,7 +8303,9 @@ const createSessionButton = (session: UnifiedSession): HTMLLIElement => {
             ? piSessionKey(session) === selectedPiSessionKey
             : isDshSession(session)
               ? dshSessionKey(session) === selectedDshSessionKey
-              : session.id === selectedSessionId,
+              : isZCodeSession(session)
+                ? zcodeSessionKey(session) === selectedZCodeSessionKey
+                : session.id === selectedSessionId,
     ),
   );
   button.title = `${unifiedSessionStatusLabel(session)} · ${session.title}`;
@@ -7920,7 +8318,9 @@ const createSessionButton = (session: UnifiedSession): HTMLLIElement => {
           ? setSelectedPiSession(piSessionKey(session))
           : isDshSession(session)
             ? setSelectedDshSession(dshSessionKey(session))
-            : setSelectedSession(session.id),
+            : isZCodeSession(session)
+              ? setSelectedZCodeSession(zcodeSessionKey(session))
+              : setSelectedSession(session.id),
   );
 
   const statusIcon = createPixelStatusSvg(
@@ -8004,7 +8404,9 @@ const updateSessionButton = (
             ? piSessionKey(session) === selectedPiSessionKey
             : isDshSession(session)
               ? dshSessionKey(session) === selectedDshSessionKey
-              : session.id === selectedSessionId,
+              : isZCodeSession(session)
+                ? zcodeSessionKey(session) === selectedZCodeSessionKey
+                : session.id === selectedSessionId,
     ),
   );
   button.title = `${unifiedSessionStatusLabel(session)} · ${session.title}`;
@@ -8363,7 +8765,9 @@ const dismissSessionFromList = (data: CodeCraftContextData | undefined) => {
   }
   const sessionKey = data.sessionKey ?? data.sessionId;
   dismissedSessionKeys.add(
-    data.sessionSource === "pi" || data.sessionSource === "dsh"
+    data.sessionSource === "pi" ||
+      data.sessionSource === "dsh" ||
+      data.sessionSource === "zcode"
       ? sessionKey
       : `${data.sessionSource}:${sessionKey}`,
   );
@@ -8374,13 +8778,15 @@ const dismissSessionFromList = (data: CodeCraftContextData | undefined) => {
     (data.sessionSource === "opencode" &&
       selectedOpenCodeSessionKey === sessionKey) ||
     (data.sessionSource === "pi" && selectedPiSessionKey === sessionKey) ||
-    (data.sessionSource === "dsh" && selectedDshSessionKey === sessionKey)
+    (data.sessionSource === "dsh" && selectedDshSessionKey === sessionKey) ||
+    (data.sessionSource === "zcode" && selectedZCodeSessionKey === sessionKey)
   ) {
     selectedSessionId = undefined;
     selectedCodexSessionId = undefined;
     selectedOpenCodeSessionKey = undefined;
     selectedPiSessionKey = undefined;
     selectedDshSessionKey = undefined;
+    selectedZCodeSessionKey = undefined;
     renderedDetailSignature = undefined;
     if (requestedContentView === "detail") switchContentView("sessions");
   }
@@ -8416,11 +8822,18 @@ const dismissSessionFromList = (data: CodeCraftContextData | undefined) => {
         (session) => piSessionKey(session) !== sessionKey,
       ),
     });
-  } else {
+  } else if (data.sessionSource === "dsh") {
     renderDshSnapshot({
       ...latestDshSnapshot,
       sessions: latestDshSnapshot.sessions.filter(
         (session) => dshSessionKey(session) !== sessionKey,
+      ),
+    });
+  } else {
+    renderZCodeSnapshot({
+      ...latestZCodeSnapshot,
+      sessions: latestZCodeSnapshot.sessions.filter(
+        (session) => zcodeSessionKey(session) !== sessionKey,
       ),
     });
   }
@@ -8477,7 +8890,8 @@ const contextMenu = new ContextMenuController<CodeCraftContextData>(
           sessionSource === "codex" ||
           sessionSource === "opencode" ||
           sessionSource === "pi" ||
-          sessionSource === "dsh")
+          sessionSource === "dsh" ||
+          sessionSource === "zcode")
       ) {
         return {
           kind: "session",
@@ -8553,6 +8967,7 @@ const contextMenu = new ContextMenuController<CodeCraftContextData>(
             void refreshOpenCodeSessions();
             void refreshPiSessions();
             void refreshDshSessions();
+            void refreshZCodeSessions();
           },
         },
         {
@@ -8679,12 +9094,14 @@ if (isTauriRuntime) {
   void refreshOpenCodeSessions();
   void refreshPiSessions();
   void refreshDshSessions();
+  void refreshZCodeSessions();
   sessionRefreshTimer = setInterval(() => {
     void refreshClaudeSessions();
     void refreshCodexPanel();
     void refreshOpenCodeSessions();
     void refreshPiSessions();
     void refreshDshSessions();
+    void refreshZCodeSessions();
   }, SESSION_REFRESH_INTERVAL_MS);
 } else {
   const previewParameters = new URLSearchParams(window.location.search);

@@ -40,8 +40,21 @@ import {
   type DshSession,
   type DshSnapshot,
 } from "../../src/dsh-sessions";
+import {
+  zcodeQuestionForUi,
+  zcodeSessionKey,
+  zcodeSessionStatusLabel,
+  type ZCodeSession,
+  type ZCodeSnapshot,
+} from "../../src/zcode-sessions";
 
-export type ConsoleSource = "claude" | "codex" | "opencode" | "pi" | "dsh";
+export type ConsoleSource =
+  | "claude"
+  | "codex"
+  | "opencode"
+  | "pi"
+  | "dsh"
+  | "zcode";
 
 export type PendingKind = "permission" | "question" | "plan";
 
@@ -80,6 +93,9 @@ export interface ConsolePending {
   dsh?: {
     bridgeInstanceId: string;
     pluginInstanceId: string;
+    sessionId: string;
+  };
+  zcode?: {
     sessionId: string;
   };
 }
@@ -125,6 +141,7 @@ export interface RawSnapshot {
   opencode?: OpenCodeSnapshot | null;
   pi?: PiSnapshot | null;
   dsh?: DshSnapshot | null;
+  zcode?: ZCodeSnapshot | null;
   integrations?: RawHookIntegration[] | null;
 }
 
@@ -173,6 +190,24 @@ const emptyDsh: DshSnapshot = {
   bridgeInstanceId: null,
   sessions: [],
   instances: [],
+};
+
+const emptyZCode: ZCodeSnapshot = {
+  connected: false,
+  integrationError: null,
+  detectedPath: null,
+  detectedVersion: null,
+  capabilities: {
+    observation: true,
+    toolApproval: true,
+    questionAnswer: true,
+    planReview: true,
+    planFeedback: true,
+    allowAlways: false,
+    streamingAnswer: false,
+    questionSound: false,
+  },
+  sessions: [],
 };
 
 // Codex questions and plans arrive from an external terminal, so the console can
@@ -376,12 +411,45 @@ const dshPending = (session: DshSession): ConsolePending | null => {
   return null;
 };
 
+const zcodePending = (session: ZCodeSession): ConsolePending | null => {
+  const target = { sessionId: session.id };
+  if (session.plan) {
+    return {
+      kind: "plan",
+      requestId: session.plan.id,
+      readOnly: false,
+      plan: session.plan,
+      zcode: target,
+    };
+  }
+  if (session.permission) {
+    return {
+      kind: "permission",
+      requestId: session.permission.id,
+      readOnly: false,
+      permission: session.permission,
+      zcode: target,
+    };
+  }
+  if (session.question) {
+    return {
+      kind: "question",
+      requestId: session.question.id,
+      readOnly: false,
+      question: zcodeQuestionForUi(session.question),
+      zcode: target,
+    };
+  }
+  return null;
+};
+
 const sourceFromHookId = (id: string | undefined): ConsoleSource | undefined => {
   if (id === "claudeCode") return "claude";
   if (id === "codex") return "codex";
   if (id === "openCode") return "opencode";
   if (id === "pi") return "pi";
   if (id === "deepSeekHarness") return "dsh";
+  if (id === "zCode") return "zcode";
   return undefined;
 };
 
@@ -394,25 +462,16 @@ const integrationName = (source: ConsoleSource): string =>
         ? "OpenCode"
         : source === "pi"
           ? "PI"
-          : "DeepSeek Harness";
+          : source === "dsh"
+            ? "DeepSeek Harness"
+            : "ZCode";
+
+type SessionCounts = Record<ConsoleSource, number>;
 
 const sessionCountFor = (
   source: ConsoleSource,
-  claudeLength: number,
-  codexLength: number,
-  opencodeLength: number,
-  piLength: number,
-  dshLength: number,
-): number =>
-  source === "claude"
-    ? claudeLength
-    : source === "codex"
-      ? codexLength
-      : source === "opencode"
-        ? opencodeLength
-        : source === "pi"
-          ? piLength
-          : dshLength;
+  counts: SessionCounts,
+): number => counts[source];
 
 const openCodeEntry = (session: OpenCodeSession): ConsoleEntry => ({
   key: `opencode:${session.pluginInstanceId}:${session.id}`,
@@ -474,6 +533,26 @@ const dshEntry = (session: DshSession): ConsoleEntry => ({
   pending: dshPending(session),
 });
 
+const zcodeEntry = (session: ZCodeSession): ConsoleEntry => ({
+  key: zcodeSessionKey(session),
+  source: "zcode",
+  sessionId: session.id,
+  title: session.title,
+  status: session.status,
+  statusLabel: zcodeSessionStatusLabel(session),
+  cwd: session.cwd,
+  updatedAt: session.updatedAt,
+  activities: session.activities.map((activity) => ({
+    id: activity.id,
+    tool: activity.tool,
+    summary: activity.summary,
+    status: activity.status,
+    updatedAt: activity.updatedAt,
+  })),
+  outputs: session.outputs.map((output) => ({ id: output.id, text: output.text })),
+  pending: zcodePending(session),
+});
+
 const codexEntry = (
   session: CodexSession,
   interactions: CodexInteraction[],
@@ -528,6 +607,9 @@ export const mergeSnapshot = (raw: RawSnapshot): ConsoleSnapshot => {
   const dsh = isRecord(raw.dsh)
     ? { ...emptyDsh, ...(raw.dsh as DshSnapshot) }
     : emptyDsh;
+  const zcode = isRecord(raw.zcode)
+    ? { ...emptyZCode, ...(raw.zcode as ZCodeSnapshot) }
+    : emptyZCode;
 
   const entries = [
     ...claude.sessions.map(claudeEntry),
@@ -535,30 +617,29 @@ export const mergeSnapshot = (raw: RawSnapshot): ConsoleSnapshot => {
     ...opencode.sessions.map(openCodeEntry),
     ...pi.sessions.map(piEntry),
     ...dsh.sessions.map(dshEntry),
+    ...zcode.sessions.map(zcodeEntry),
   ].sort(compareEntries);
+
+  const counts: SessionCounts = {
+    claude: claude.sessions.length,
+    codex: codex.sessions.length,
+    opencode: opencode.sessions.length,
+    pi: pi.sessions.length,
+    dsh: dsh.sessions.length,
+    zcode: zcode.sessions.length,
+  };
 
   return {
     generatedAt: typeof raw.generatedAt === "number" ? raw.generatedAt : 0,
     allowApprovals: raw.allowApprovals === true,
     entries,
-    integrations: buildIntegrations(
-      raw,
-      claude.sessions.length,
-      codex.sessions.length,
-      opencode.sessions.length,
-      pi.sessions.length,
-      dsh.sessions.length,
-    ),
+    integrations: buildIntegrations(raw, counts),
   };
 };
 
 const buildIntegrations = (
   raw: RawSnapshot,
-  claudeLength: number,
-  codexLength: number,
-  opencodeLength: number,
-  piLength: number,
-  dshLength: number,
+  counts: SessionCounts,
 ): ConsoleIntegration[] => {
   const hookStatuses = Array.isArray(raw.integrations) ? raw.integrations : [];
   if (hookStatuses.length === 0) {
@@ -571,7 +652,7 @@ const buildIntegrations = (
         name: integrationName("claude"),
         connected: claudeConnected(raw),
         error: integrationError(raw, "claude"),
-        sessionCount: claudeLength,
+        sessionCount: counts.claude,
         agentInstalled: true,
         hookInstalled: true,
       },
@@ -580,7 +661,7 @@ const buildIntegrations = (
         name: integrationName("codex"),
         connected: codexConnected(raw),
         error: integrationError(raw, "codex"),
-        sessionCount: codexLength,
+        sessionCount: counts.codex,
         agentInstalled: true,
         hookInstalled: true,
       },
@@ -589,7 +670,7 @@ const buildIntegrations = (
         name: integrationName("opencode"),
         connected: opencodeConnected(raw),
         error: integrationError(raw, "opencode"),
-        sessionCount: opencodeLength,
+        sessionCount: counts.opencode,
         agentInstalled: true,
         hookInstalled: true,
       },
@@ -598,7 +679,7 @@ const buildIntegrations = (
         name: integrationName("pi"),
         connected: piConnected(raw),
         error: integrationError(raw, "pi"),
-        sessionCount: piLength,
+        sessionCount: counts.pi,
         agentInstalled: true,
         hookInstalled: true,
       },
@@ -607,7 +688,16 @@ const buildIntegrations = (
         name: integrationName("dsh"),
         connected: dshConnected(raw),
         error: integrationError(raw, "dsh"),
-        sessionCount: dshLength,
+        sessionCount: counts.dsh,
+        agentInstalled: true,
+        hookInstalled: true,
+      },
+      {
+        source: "zcode",
+        name: integrationName("zcode"),
+        connected: zcodeConnected(raw),
+        error: integrationError(raw, "zcode"),
+        sessionCount: counts.zcode,
         agentInstalled: true,
         hookInstalled: true,
       },
@@ -626,21 +716,16 @@ const buildIntegrations = (
             ? opencodeConnected(raw)
             : source === "pi"
               ? piConnected(raw)
-              : dshConnected(raw);
+              : source === "dsh"
+                ? dshConnected(raw)
+                : zcodeConnected(raw);
     return [
       {
         source,
         name: status.name ?? integrationName(source),
         connected,
         error: integrationError(raw, source),
-        sessionCount: sessionCountFor(
-          source,
-          claudeLength,
-          codexLength,
-          opencodeLength,
-          piLength,
-          dshLength,
-        ),
+        sessionCount: sessionCountFor(source, counts),
         agentInstalled: status.agentInstalled === true,
         hookInstalled: status.hookInstalled === true,
       },
@@ -658,6 +743,8 @@ const piConnected = (raw: RawSnapshot): boolean =>
   isRecord(raw.pi) ? raw.pi.connected === true : false;
 const dshConnected = (raw: RawSnapshot): boolean =>
   isRecord(raw.dsh) ? raw.dsh.connected === true : false;
+const zcodeConnected = (raw: RawSnapshot): boolean =>
+  isRecord(raw.zcode) ? raw.zcode.connected === true : false;
 
 const integrationError = (raw: RawSnapshot, source: ConsoleSource): string | null => {
   const value =
@@ -677,9 +764,13 @@ const integrationError = (raw: RawSnapshot, source: ConsoleSource): string | nul
             ? isRecord(raw.pi)
               ? raw.pi.integrationError
               : null
-            : isRecord(raw.dsh)
-              ? raw.dsh.integrationError
-              : null;
+            : source === "dsh"
+              ? isRecord(raw.dsh)
+                ? raw.dsh.integrationError
+                : null
+              : isRecord(raw.zcode)
+                ? raw.zcode.integrationError
+                : null;
   return (value ?? null) as string | null;
 };
 

@@ -23,7 +23,7 @@ A lightweight desktop workbench focused on AI coding sessions · Built for Windo
 
 ## What is this?
 
-If you use AI coding assistants like **Claude Code**, **Codex**, **OpenCode**, **PI**, or **DeepSeek Harness**, you have probably run into this:
+If you use AI coding assistants like **Claude Code**, **Codex**, **OpenCode**, **PI**, **DeepSeek Harness**, or **ZCode**, you have probably run into this:
 
 - You hand it a task, then sit there staring at a black terminal window with no idea whether it has finished;
 - Halfway through it asks "can I run this command?", you don't notice, and it just waits forever;
@@ -37,7 +37,7 @@ CodeCraft exists to fix that. Most of the time it's just an almost invisible sli
 
 | | Capability | Details |
 | :---: | --- | --- |
-| 📋 | **All sessions in one place** | Tasks from Claude Code, Codex, OpenCode, PI, and DeepSeek Harness side by side, with status at a glance: working, waiting for input, needs attention, done, failed. |
+| 📋 | **All sessions in one place** | Tasks from Claude Code, Codex, OpenCode, PI, DeepSeek Harness, and ZCode side by side, with status at a glance: working, waiting for input, needs attention, done, failed. |
 | ✅ | **One-click approval** | When an assistant wants to run a command or edit a file, the request pops up on the panel. Click "Allow once", "Always allow", or "Deny" — no need to switch back to the terminal. |
 | ❓ | **Answer on its behalf** | When an assistant asks a question, pick an option or type a note right in the panel, and the answer is sent back to it. |
 | 📝 | **Confirm plans** | Once an assistant lays out its plan, you decide: click "Run plan" to let it start, or write down what to change so it revises first. |
@@ -57,8 +57,9 @@ CodeCraft doesn't write code itself — it watches the AI coding assistants belo
 | <img src="docs/assets/agent-opencode.svg" width="20" height="20" align="absmiddle" alt="" />&nbsp; **OpenCode**<br /><sub>opencode.ai</sub> | Session status, tool calls, native permission approvals, and questions can all be handled in the panel. Permission decisions support "Allow once", "Always allow", and "Deny", plus an optional all-tool gate mode that routes every tool call through you first. Plan confirmation isn't wired up yet and must be completed back in the OpenCode window. |
 | **PI** | Sessions, tool activity, permissions, and questions are available in the panel and LAN console. It supports allow once, allow for the session, and deny; plan review is not connected yet. |
 | <img src="docs/assets/agent-deepseek.svg" width="20" height="20" align="absmiddle" alt="" />&nbsp; **DeepSeek Harness**<br /><sub>DeepSeek</sub> | A user-level native plugin synchronizes sessions, responses, tool activity, questions, and plan review. Permissions follow DSH's one-shot semantics, so only "Allow once" and "Deny" are offered. Plans can be approved or returned with feedback for further planning. |
+| **ZCode**<br /><sub>Z.ai</sub> | The official seven-event Hook synchronizes external Desktop/CLI sessions, tool results, final answers, questions, and plan review. Ordinary tools offer only "Allow once" and "Deny"; questions and plans always require a person, even in automatic mode. |
 
-All five agents can run at the same time. The filter buttons at the top of the panel let you look at just one of them, or "All" together.
+All six agents can run at the same time. The filter buttons at the top of the panel let you look at just one of them, or "All" together.
 
 > DeepSeek Harness is currently a Developer Preview. CodeCraft primarily targets `@deepseek-ai/dsh@0.1.1-rc.2` and also supports `0.1.2-alpha.2`; the local bridge rejects interactions when the runtime version is unknown or outside this compatibility list.
 
@@ -76,9 +77,21 @@ What does this do? CodeCraft adds a "notification hook" to that assistant's conf
 
 DeepSeek Harness uses `cordis.patch.yml` and a local ESM plugin under `$DSH_HOME` (default `~/.dsh`). CodeCraft only manages its marked configuration block, writes `.bak` files before changes, and preserves other plugins and overlay entries during uninstall.
 
+ZCode uses the user-level `~/.zcode/cli/config.json`. CodeCraft structurally merges the seven official Hook events, creates `config.json.bak` before changes, and preserves existing Hooks, plugins, MCP configuration, and unknown fields. Uninstalling from Hook management removes only CodeCraft-owned entries. The first release targets Windows, with ZCode Desktop `3.10.1` as the validated baseline.
+
 **3. Use your assistant as usual**
 
 Use any connected agent as you normally would. Session cards then appear on the panel by themselves, and when there's a request to handle, the panel expands automatically to get your attention.
+
+### ZCode Developer Preview notes
+
+- The ZCode Hook boundary does not expose in-progress assistant text. Only the final answer is available after the turn's `Stop` event; while a turn runs, CodeCraft can show status and tool activity only.
+- Question reviews follow CodeCraft's existing alert behavior and have no native sound. Ordinary permission and plan reviews do play alerts.
+- While `PreToolUse` waits for CodeCraft, ZCode itself shows no waiting prompt. In minimal mode, keep sounds enabled or use the tray and LAN console to find pending work.
+- If CodeCraft is unavailable or a review times out, ordinary tools fall back to ZCode's native permission flow. `AskUserQuestion` and `ExitPlanMode` release control with empty stdout so CodeCraft never returns an invalid answerless decision.
+- The Hook is an approval and observation boundary, not a sandbox. ZCode still determines the final behavior when the Hook process fails.
+
+If Settings reports an incompatible version, modified configuration, or conflict, confirm the detected ZCode version and path, then reinstall from **Hook management** to repair CodeCraft-owned entries. Repair does not overwrite unrelated user configuration.
 
 ## Remote viewing from phone / tablet
 
@@ -98,7 +111,7 @@ A few security notes:
 
 - **Auto-collapse**: the panel shrinks back to a thin line about 0.25s after your mouse leaves; while tasks are running, a small live status strip stays visible.
 - **Auto-cleanup**: idle or stopped sessions are moved out of the list after a configurable time (30 minutes by default). Sessions that are working or waiting on you are left alone.
-- **Auto-approval**: all connected agents share one policy — confirm each one manually, auto-approve only low-risk commands, or auto-approve everything. DSH does not expose a persistent "Always allow" action.
+- **Auto-approval**: all connected agents share one policy — confirm each request manually, auto-approve low-risk tools, or auto-approve ordinary tool requests. DSH and ZCode do not expose a persistent "Always allow" action, and ZCode questions and plans always require a person.
 - **Position as you like**: drag it left and right along the top edge, or snap it left, center, or right in one click.
 
 ## Requirements

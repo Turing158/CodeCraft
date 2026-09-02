@@ -23,7 +23,7 @@
 
 ## 这是什么？
 
-如果你在用 **Claude Code**、**Codex**、**OpenCode**、**PI** 或 **DeepSeek Harness** 这类"AI 编程助手"，你大概遇到过这些情况：
+如果你在用 **Claude Code**、**Codex**、**OpenCode**、**PI**、**DeepSeek Harness** 或 **ZCode** 这类"AI 编程助手"，你大概遇到过这些情况：
 
 - 让它干活之后，只能一直盯着黑色的命令行窗口，不知道它到底做完了没有；
 - 它中途要问你一句"这个命令能执行吗"，你没看见，它就一直卡在那里等；
@@ -37,7 +37,7 @@ CodeCraft 就是为了解决这件事。它平时只是屏幕最上方一条几�
 
 | | 能力 | 说明 |
 | :---: | --- | --- |
-| 📋 | **会话集中管理** | Claude Code、Codex、OpenCode、PI 和 DeepSeek Harness 的任务并排显示，状态一目了然：工作中、等待输入、需要处理、已完成、失败。 |
+| 📋 | **会话集中管理** | Claude Code、Codex、OpenCode、PI、DeepSeek Harness 和 ZCode 的任务并排显示，状态一目了然：工作中、等待输入、需要处理、已完成、失败。 |
 | ✅ | **一键批准** | 助手想执行某个命令、修改某个文件时，弹到面板上，你点"允许一次""始终允许"或"拒绝"，不用切回终端。 |
 | ❓ | **代它回答** | 助手提问时直接在面板里选选项或写补充说明，答案会回传给它。 |
 | 📝 | **确认计划** | 助手列出行动计划后，由你决定：点"实行计划"让它开始动手，或写下要改的地方让它先调整。 |
@@ -57,8 +57,9 @@ CodeCraft 自己不写代码，它负责盯着下面这些 AI 编程助手。装
 | <img src="docs/assets/agent-opencode.svg" width="20" height="20" align="absmiddle" alt="" />&nbsp; **OpenCode**<br /><sub>opencode.ai</sub> | 会话状态、工具调用、原生权限审批和提问都能在面板里处理，权限决定支持"允许一次""始终允许""拒绝"，另有一个可选的全工具门禁模式，让每个工具调用都先经过你确认。计划确认暂未接入，需要回到 OpenCode 窗口完成。 |
 | **PI** | 会话、工具活动、权限审批和提问可在面板与局域网控制台处理；支持允许一次、会话内允许和拒绝，计划确认暂未接入。 |
 | <img src="docs/assets/agent-deepseek.svg" width="20" height="20" align="absmiddle" alt="" />&nbsp; **DeepSeek Harness**<br /><sub>DeepSeek</sub> | 通过用户级原生插件同步会话、回答、工具活动、提问和计划审阅。权限严格使用 DSH 的一次性语义，只提供"允许一次"和"拒绝"；计划可以批准，或携带反馈继续规划。 |
+| **ZCode**<br /><sub>Z.ai</sub> | 通过官方七事件 Hook 同步外部 Desktop/CLI 会话、工具结果、最终回答、提问和计划审阅。普通工具只提供"允许一次"和"拒绝"；提问与计划即使在全自动模式下也必须由人决定。 |
 
-五个 Agent 可以同时开着，面板顶部的筛选按钮能只看其中一家，或者"全部"一起看。
+六个 Agent 可以同时开着，面板顶部的筛选按钮能只看其中一家，或者"全部"一起看。
 
 > DeepSeek Harness 当前是 Developer Preview。CodeCraft 优先适配 `@deepseek-ai/dsh@0.1.1-rc.2`，并兼容 `0.1.2-alpha.2`；检测不到版本或版本不在兼容列表中时，本地桥会拒绝交互并显示兼容错误。
 
@@ -76,9 +77,21 @@ CodeCraft 自己不写代码，它负责盯着下面这些 AI 编程助手。装
 
 DeepSeek Harness 使用 `$DSH_HOME`（默认 `~/.dsh`）下的 `cordis.patch.yml` 和本地 ESM 插件。CodeCraft 只维护带自身 marker 的配置块，修改前会写入 `.bak`，卸载时保留其他插件和原有 overlay。
 
+ZCode 使用用户级 `~/.zcode/cli/config.json`。CodeCraft 会结构化合并七个官方 Hook 事件，修改前创建 `config.json.bak`，并保留已有 Hook、插件、MCP 和未知字段；在 Hook 管理中卸载时，只删除 CodeCraft 自己的条目。当前首发适配 Windows，验证基线为 ZCode Desktop `3.10.1`。
+
 **3. 正常使用你的助手**
 
 照常在终端里使用已连接的 Agent。接下来会话卡片就会自己出现在面板上；有请求要处理时，面板会自动展开提醒你。
+
+### ZCode Developer Preview 说明
+
+- ZCode Hook 边界拿不到进行中的助手增量文本，只有本轮 `Stop` 后的最终回答；进行中只能看到状态与工具活动。
+- 问题审批沿用 CodeCraft 现有提醒规则，不播放原生音效；普通工具权限和计划审批会播放提醒。
+- `PreToolUse` 等待 CodeCraft 时，ZCode 自己的界面不显示等待提示。极简模式下请保持音效开启，或通过托盘和局域网控制台查看待处理请求。
+- CodeCraft 不可用或审批超时时，普通工具会退回 ZCode 原生权限流程；`AskUserQuestion` 与 `ExitPlanMode` 会放弃接管并保持 stdout 为空，避免返回缺少答案的无效决定。
+- Hook 是审批与观测边界，不是沙箱。Hook 进程失败后的最终行为仍由 ZCode 运行时决定。
+
+如果设置页显示版本不兼容、配置被修改或存在冲突，先确认 ZCode 版本和检测路径，再在 **Hook 管理** 中重新安装以修复 CodeCraft 自有条目。修复不会覆盖用户的其他配置。
 
 ## 手机 / 平板远程查看
 
@@ -98,7 +111,7 @@ DeepSeek Harness 使用 `$DSH_HOME`（默认 `~/.dsh`）下的 `cordis.patch.yml
 
 - **自动收起**：鼠标移开约 0.25 秒后面板缩回细线；有任务在跑时会留一小条实时状态。
 - **自动清理**：空闲或已停止的会话超过设定时间（默认 30 分钟）自动从列表移走，正在工作和等你处理的不会被动。
-- **自动审批**：所有已连接 Agent 共用同一策略，可以手动逐个确认、只自动通过低风险命令，或自动通过全部审批；DSH 不提供持久化"始终允许"按钮。
+- **自动审批**：所有已连接 Agent 共用同一策略，可以手动逐个确认、只自动通过低风险工具，或自动通过普通工具审批；DSH 与 ZCode 不提供持久化"始终允许"按钮，ZCode 的提问和计划始终需要人工决定。
 - **位置随心**：顶部可以左右拖动，也能一键置左、居中、置右。
 
 ## 运行环境

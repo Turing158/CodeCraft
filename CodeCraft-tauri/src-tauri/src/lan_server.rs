@@ -41,8 +41,9 @@ use crate::{
     lan_config::{self, LanBindMode, LanServerConfig},
     lan_net,
     pi::{PiApprovalDecision, PiQuestionAnswer},
+    zcode_hook::{ZCodeApprovalDecision, ZCodeQuestionAnswer},
     ApprovalIntegrationState, ClaudeIntegrationState, CodexIntegrationState, DshIntegrationState,
-    OpenCodeIntegrationState, PiIntegrationState,
+    OpenCodeIntegrationState, PiIntegrationState, ZCodeIntegrationState,
 };
 
 /// Custom header a write request must carry. Browsers cannot add it during a
@@ -237,6 +238,10 @@ fn snapshot_value(app: &tauri::AppHandle) -> Value {
         .ok()
         .and_then(|snapshot| serde_json::to_value(snapshot).ok())
         .unwrap_or(Value::Null);
+    let zcode = crate::zcode_snapshot(&app.state::<ZCodeIntegrationState>())
+        .ok()
+        .and_then(|snapshot| serde_json::to_value(snapshot).ok())
+        .unwrap_or(Value::Null);
     // Per-agent install state drives which agent cards the console shows. The
     // desktop panel already relies on this list for its hook settings, so the
     // LAN console reads the same source of truth.
@@ -244,6 +249,7 @@ fn snapshot_value(app: &tauri::AppHandle) -> Value {
         &app.state::<CodexIntegrationState>(),
         &app.state::<OpenCodeIntegrationState>(),
         &app.state::<DshIntegrationState>(),
+        &app.state::<ZCodeIntegrationState>(),
     )
     .ok()
     .and_then(|list| serde_json::to_value(list).ok())
@@ -270,6 +276,7 @@ fn snapshot_value(app: &tauri::AppHandle) -> Value {
         "opencode": opencode,
         "pi": pi,
         "dsh": dsh,
+        "zcode": zcode,
         "integrations": integrations,
     })
 }
@@ -575,6 +582,33 @@ struct DshPlanBody {
     feedback: Option<String>,
 }
 
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct ZCodePermissionBody {
+    session_id: String,
+    request_id: String,
+    decision: ZCodeApprovalDecision,
+    message: Option<String>,
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct ZCodeQuestionBody {
+    session_id: String,
+    request_id: String,
+    answers: Vec<ZCodeQuestionAnswer>,
+    annotations: Option<Value>,
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct ZCodePlanBody {
+    session_id: String,
+    request_id: String,
+    approved: bool,
+    feedback: Option<String>,
+}
+
 /// Runs a write handler after the shared access checks, then records the audit
 /// line when the config asks for it.
 fn with_write_access<F>(
@@ -860,6 +894,92 @@ async fn post_dsh_plan(
     )
 }
 
+async fn post_zcode_permission(
+    State(http_state): State<LanHttpState>,
+    ConnectInfo(client): ConnectInfo<SocketAddr>,
+    headers: HeaderMap,
+    Json(body): Json<ZCodePermissionBody>,
+) -> Response {
+    let app = http_state.app.clone();
+    let decision_label = match body.decision {
+        ZCodeApprovalDecision::AllowOnce => "allowOnce",
+        ZCodeApprovalDecision::Deny => "deny",
+    };
+    with_write_access(
+        &http_state,
+        &headers,
+        client,
+        "zcode-permission",
+        &body.request_id,
+        decision_label,
+        || {
+            crate::apply_zcode_approval(
+                &app.state::<ZCodeIntegrationState>(),
+                &body.session_id,
+                &body.request_id,
+                body.decision,
+                body.message,
+            )
+        },
+    )
+}
+
+async fn post_zcode_question(
+    State(http_state): State<LanHttpState>,
+    ConnectInfo(client): ConnectInfo<SocketAddr>,
+    headers: HeaderMap,
+    Json(body): Json<ZCodeQuestionBody>,
+) -> Response {
+    let app = http_state.app.clone();
+    with_write_access(
+        &http_state,
+        &headers,
+        client,
+        "zcode-question",
+        &body.request_id,
+        "answer",
+        || {
+            crate::apply_zcode_question(
+                &app.state::<ZCodeIntegrationState>(),
+                &body.session_id,
+                &body.request_id,
+                body.answers,
+                body.annotations,
+            )
+        },
+    )
+}
+
+async fn post_zcode_plan(
+    State(http_state): State<LanHttpState>,
+    ConnectInfo(client): ConnectInfo<SocketAddr>,
+    headers: HeaderMap,
+    Json(body): Json<ZCodePlanBody>,
+) -> Response {
+    let app = http_state.app.clone();
+    with_write_access(
+        &http_state,
+        &headers,
+        client,
+        "zcode-plan",
+        &body.request_id,
+        if body.approved {
+            "approve"
+        } else {
+            "keepPlanning"
+        },
+        || {
+            crate::apply_zcode_plan(
+                &app.state::<ZCodeIntegrationState>(),
+                &body.session_id,
+                &body.request_id,
+                body.approved,
+                body.feedback,
+            )
+        },
+    )
+}
+
 async fn post_opencode_question(
     State(http_state): State<LanHttpState>,
     ConnectInfo(client): ConnectInfo<SocketAddr>,
@@ -1011,6 +1131,9 @@ fn router(app: tauri::AppHandle) -> Router {
         .route("/api/dsh/permission", post(post_dsh_permission))
         .route("/api/dsh/question", post(post_dsh_question))
         .route("/api/dsh/plan", post(post_dsh_plan))
+        .route("/api/zcode/permission", post(post_zcode_permission))
+        .route("/api/zcode/question", post(post_zcode_question))
+        .route("/api/zcode/plan", post(post_zcode_plan))
         .route("/api/opencode/question", post(post_opencode_question))
         .route(
             "/api/opencode/question/reject",

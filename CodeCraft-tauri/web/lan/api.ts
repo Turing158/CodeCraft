@@ -213,3 +213,50 @@ export const submitDshPlan = (
     method: "POST",
     body: JSON.stringify({ ...target, requestId, approved, feedback }),
   });
+
+export interface ZCodeTarget {
+  sessionId: string;
+}
+
+export type ZCodePermissionDecision = "allowOnce" | "deny";
+
+export const submitZCodePermission = (
+  target: ZCodeTarget,
+  requestId: string,
+  decision: ZCodePermissionDecision,
+) =>
+  request<{ ok: boolean }>("/api/zcode/permission", {
+    method: "POST",
+    body: JSON.stringify({
+      ...target,
+      requestId,
+      decision,
+      message: null,
+    }),
+  });
+
+export const submitZCodeQuestion = (
+  target: ZCodeTarget,
+  requestId: string,
+  answers: LocalQuestionAnswer[],
+) =>
+  request<{ ok: boolean }>("/api/zcode/question", {
+    method: "POST",
+    body: JSON.stringify({
+      ...target,
+      requestId,
+      answers,
+      annotations: null,
+    }),
+  });
+
+export const submitZCodePlan = (
+  target: ZCodeTarget,
+  requestId: string,
+  approved: boolean,
+  feedback: string | null,
+) =>
+  request<{ ok: boolean }>("/api/zcode/plan", {
+    method: "POST",
+    body: JSON.stringify({ ...target, requestId, approved, feedback }),
+  });
