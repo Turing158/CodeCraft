@@ -11,6 +11,7 @@ pub(crate) struct HookInstallConfig {
     pub claude_code: bool,
     pub codex: bool,
     pub open_code: bool,
+    pub mimo: bool,
     pub pi: bool,
     pub deep_seek_harness: bool,
     pub z_code: bool,
@@ -22,6 +23,7 @@ impl Default for HookInstallConfig {
             claude_code: false,
             codex: false,
             open_code: false,
+            mimo: false,
             pi: false,
             deep_seek_harness: false,
             z_code: false,
@@ -69,6 +71,7 @@ mod tests {
         assert!(!config.claude_code);
         assert!(!config.codex);
         assert!(!config.open_code);
+        assert!(!config.mimo);
         assert!(!config.pi);
         assert!(!config.deep_seek_harness);
         assert!(!config.z_code);
@@ -80,6 +83,7 @@ mod tests {
         assert!(!config.claude_code);
         assert!(config.codex);
         assert!(!config.open_code);
+        assert!(!config.mimo);
         assert!(!config.pi);
         assert!(!config.deep_seek_harness);
         assert!(!config.z_code);

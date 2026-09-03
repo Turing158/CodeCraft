@@ -37,7 +37,7 @@ CodeCraft exists to fix that. Most of the time it's just an almost invisible sli
 
 | | Capability | Details |
 | :---: | --- | --- |
-| 📋 | **All sessions in one place** | Tasks from Claude Code, Codex, OpenCode, PI, DeepSeek Harness, and ZCode side by side, with status at a glance: working, waiting for input, needs attention, done, failed. |
+| 📋 | **All sessions in one place** | Tasks from Claude Code, Codex, OpenCode, PI, Mimo, DeepSeek Harness, and ZCode side by side, with status at a glance: working, waiting for input, needs attention, done, failed. |
 | ✅ | **One-click approval** | When an assistant wants to run a command or edit a file, the request pops up on the panel. Click "Allow once", "Always allow", or "Deny" — no need to switch back to the terminal. |
 | ❓ | **Answer on its behalf** | When an assistant asks a question, pick an option or type a note right in the panel, and the answer is sent back to it. |
 | 📝 | **Confirm plans** | Once an assistant lays out its plan, you decide: click "Run plan" to let it start, or write down what to change so it revises first. |
@@ -55,11 +55,12 @@ CodeCraft doesn't write code itself — it watches the AI coding assistants belo
 | <img src="docs/assets/agent-claude-code.svg" width="20" height="20" align="absmiddle" alt="" />&nbsp; **Claude Code**<br /><sub>Anthropic</sub> | The most complete support. Session status, tool calls, and live transcripts are all visible, and approvals, answering questions, and confirming plans can all be done right in the panel without returning to the terminal. |
 | <img src="docs/assets/agent-codex.svg" width="20" height="20" align="absmiddle" alt="" />&nbsp; **Codex**<br /><sub>OpenAI</sub> | Session status and tool-call approvals can be handled in the panel. Its questions and plan confirmations are read-only and must be completed back in the original Codex window; the panel offers a jump button to get you there. |
 | <img src="docs/assets/agent-opencode.svg" width="20" height="20" align="absmiddle" alt="" />&nbsp; **OpenCode**<br /><sub>opencode.ai</sub> | Session status, tool calls, native permission approvals, and questions can all be handled in the panel. Permission decisions support "Allow once", "Always allow", and "Deny", plus an optional all-tool gate mode that routes every tool call through you first. Plan confirmation isn't wired up yet and must be completed back in the OpenCode window. |
+| <img src="docs/assets/agent-mimo.svg" width="20" height="20" align="absmiddle" alt="" />&nbsp; **Mimo**<br /><sub>Xiaomi</sub> | A user-level Mimo plugin synchronizes sessions, tool activity, responses, questions, and plan review. Permissions support "Allow once", "Always allow", and "Deny", with an optional all-tool gate; plans can be approved or returned with feedback for further planning. |
 | **PI** | Sessions, tool activity, permissions, and questions are available in the panel and LAN console. It supports allow once, allow for the session, and deny; plan review is not connected yet. |
 | <img src="docs/assets/agent-deepseek.svg" width="20" height="20" align="absmiddle" alt="" />&nbsp; **DeepSeek Harness**<br /><sub>DeepSeek</sub> | A user-level native plugin synchronizes sessions, responses, tool activity, questions, and plan review. Permissions follow DSH's one-shot semantics, so only "Allow once" and "Deny" are offered. Plans can be approved or returned with feedback for further planning. |
 | **ZCode**<br /><sub>Z.ai</sub> | The official seven-event Hook synchronizes external Desktop/CLI sessions, tool results, final answers, questions, and plan review. Ordinary tools offer only "Allow once" and "Deny"; questions and plans always require a person, even in automatic mode. |
 
-All six agents can run at the same time. The filter buttons at the top of the panel let you look at just one of them, or "All" together.
+All seven agents can run at the same time. The filter buttons at the top of the panel let you look at just one of them, or "All" together.
 
 > DeepSeek Harness is currently a Developer Preview. CodeCraft primarily targets `@deepseek-ai/dsh@0.1.1-rc.2` and also supports `0.1.2-alpha.2`; the local bridge rejects interactions when the runtime version is unknown or outside this compatibility list.
 

@@ -43,7 +43,7 @@ use crate::{
     pi::{PiApprovalDecision, PiQuestionAnswer},
     zcode_hook::{ZCodeApprovalDecision, ZCodeQuestionAnswer},
     ApprovalIntegrationState, ClaudeIntegrationState, CodexIntegrationState, DshIntegrationState,
-    OpenCodeIntegrationState, PiIntegrationState, ZCodeIntegrationState,
+    OpenCodeIntegrationState, MimoIntegrationState, PiIntegrationState, ZCodeIntegrationState,
 };
 
 /// Custom header a write request must carry. Browsers cannot add it during a
@@ -230,6 +230,10 @@ fn snapshot_value(app: &tauri::AppHandle) -> Value {
         .ok()
         .and_then(|snapshot| serde_json::to_value(snapshot).ok())
         .unwrap_or(Value::Null);
+    let mimo = crate::mimo_snapshot(&app.state::<MimoIntegrationState>())
+        .ok()
+        .and_then(|snapshot| serde_json::to_value(snapshot).ok())
+        .unwrap_or(Value::Null);
     let pi = crate::pi_snapshot(&app.state::<PiIntegrationState>())
         .ok()
         .and_then(|snapshot| serde_json::to_value(snapshot).ok())
@@ -248,6 +252,7 @@ fn snapshot_value(app: &tauri::AppHandle) -> Value {
     let integrations = crate::hook_statuses(
         &app.state::<CodexIntegrationState>(),
         &app.state::<OpenCodeIntegrationState>(),
+        &app.state::<MimoIntegrationState>(),
         &app.state::<DshIntegrationState>(),
         &app.state::<ZCodeIntegrationState>(),
     )
@@ -274,6 +279,7 @@ fn snapshot_value(app: &tauri::AppHandle) -> Value {
         "claude": claude,
         "codex": codex,
         "opencode": opencode,
+        "mimo": mimo,
         "pi": pi,
         "dsh": dsh,
         "zcode": zcode,
@@ -531,6 +537,44 @@ struct OpenCodeGateBody {
     session_id: String,
     review_id: String,
     action: String,
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct MimoQuestionBody {
+    plugin_instance_id: String,
+    session_id: String,
+    request_id: String,
+    answers: Vec<Vec<String>>,
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct MimoPermissionBody {
+    plugin_instance_id: String,
+    session_id: String,
+    request_id: String,
+    action: String,
+    message: Option<String>,
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct MimoGateBody {
+    plugin_instance_id: String,
+    session_id: String,
+    review_id: String,
+    action: String,
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct MimoPlanBody {
+    plugin_instance_id: String,
+    session_id: String,
+    request_id: String,
+    approved: bool,
+    feedback: Option<String>,
 }
 
 #[derive(Deserialize)]
@@ -1088,6 +1132,121 @@ async fn post_opencode_gate(
     )
 }
 
+async fn post_mimo_question(
+    State(http_state): State<LanHttpState>,
+    ConnectInfo(client): ConnectInfo<SocketAddr>,
+    headers: HeaderMap,
+    Json(body): Json<MimoQuestionBody>,
+) -> Response {
+    let app = http_state.app.clone();
+    with_write_access(
+        &http_state,
+        &headers,
+        client,
+        "mimo-question",
+        &body.request_id,
+        "answer",
+        || {
+            let state = app.state::<MimoIntegrationState>();
+            let mut store = state.store.lock().map_err(|error| error.to_string())?;
+            store.drain_inbox()?;
+            store.submit_question(&body.plugin_instance_id, &body.session_id, &body.request_id, body.answers.clone())
+        },
+    )
+}
+
+async fn post_mimo_question_reject(
+    State(http_state): State<LanHttpState>,
+    ConnectInfo(client): ConnectInfo<SocketAddr>,
+    headers: HeaderMap,
+    Json(body): Json<MimoQuestionBody>,
+) -> Response {
+    let app = http_state.app.clone();
+    with_write_access(
+        &http_state,
+        &headers,
+        client,
+        "mimo-question",
+        &body.request_id,
+        "reject",
+        || {
+            let state = app.state::<MimoIntegrationState>();
+            let mut store = state.store.lock().map_err(|error| error.to_string())?;
+            store.drain_inbox()?;
+            store.reject_question(&body.plugin_instance_id, &body.session_id, &body.request_id)
+        },
+    )
+}
+
+async fn post_mimo_permission(
+    State(http_state): State<LanHttpState>,
+    ConnectInfo(client): ConnectInfo<SocketAddr>,
+    headers: HeaderMap,
+    Json(body): Json<MimoPermissionBody>,
+) -> Response {
+    let app = http_state.app.clone();
+    with_write_access(
+        &http_state,
+        &headers,
+        client,
+        "mimo-permission",
+        &body.request_id,
+        &body.action,
+        || {
+            let state = app.state::<MimoIntegrationState>();
+            let mut store = state.store.lock().map_err(|error| error.to_string())?;
+            store.drain_inbox()?;
+            store.submit_permission(&body.plugin_instance_id, &body.session_id, &body.request_id, &body.action, body.message.clone())
+        },
+    )
+}
+
+async fn post_mimo_gate(
+    State(http_state): State<LanHttpState>,
+    ConnectInfo(client): ConnectInfo<SocketAddr>,
+    headers: HeaderMap,
+    Json(body): Json<MimoGateBody>,
+) -> Response {
+    let app = http_state.app.clone();
+    with_write_access(
+        &http_state,
+        &headers,
+        client,
+        "mimo-gate",
+        &body.review_id,
+        &body.action,
+        || {
+            let state = app.state::<MimoIntegrationState>();
+            let mut store = state.store.lock().map_err(|error| error.to_string())?;
+            store.drain_inbox()?;
+            store.submit_gate(&body.plugin_instance_id, &body.session_id, &body.review_id, &body.action)
+        },
+    )
+}
+
+async fn post_mimo_plan(
+    State(http_state): State<LanHttpState>,
+    ConnectInfo(client): ConnectInfo<SocketAddr>,
+    headers: HeaderMap,
+    Json(body): Json<MimoPlanBody>,
+) -> Response {
+    let app = http_state.app.clone();
+    with_write_access(
+        &http_state,
+        &headers,
+        client,
+        "mimo-plan",
+        &body.request_id,
+        if body.approved { "approve" } else { "keepPlanning" },
+        || {
+            let state = app.state::<MimoIntegrationState>();
+            let mut store = state.store.lock().map_err(|error| error.to_string())?;
+            store.drain_inbox()?;
+            store.submit_plan(&body.plugin_instance_id, &body.session_id, &body.request_id, body.approved, body.feedback.clone())
+        },
+    )
+}
+
 /// Adds the headers that keep session data out of caches and stop the page from
 /// being framed or sniffed.
 async fn security_headers(
@@ -1141,6 +1300,11 @@ fn router(app: tauri::AppHandle) -> Router {
         )
         .route("/api/opencode/permission", post(post_opencode_permission))
         .route("/api/opencode/gate", post(post_opencode_gate))
+        .route("/api/mimo/question", post(post_mimo_question))
+        .route("/api/mimo/question/reject", post(post_mimo_question_reject))
+        .route("/api/mimo/permission", post(post_mimo_permission))
+        .route("/api/mimo/gate", post(post_mimo_gate))
+        .route("/api/mimo/plan", post(post_mimo_plan))
         .layer(DefaultBodyLimit::max(MAX_BODY_BYTES))
         .layer(axum::middleware::from_fn(security_headers))
         .with_state(LanHttpState { app })

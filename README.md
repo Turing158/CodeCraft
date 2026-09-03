@@ -37,7 +37,7 @@ CodeCraft 就是为了解决这件事。它平时只是屏幕最上方一条几�
 
 | | 能力 | 说明 |
 | :---: | --- | --- |
-| 📋 | **会话集中管理** | Claude Code、Codex、OpenCode、PI、DeepSeek Harness 和 ZCode 的任务并排显示，状态一目了然：工作中、等待输入、需要处理、已完成、失败。 |
+| 📋 | **会话集中管理** | Claude Code、Codex、OpenCode、PI、Mimo、DeepSeek Harness 和 ZCode 的任务并排显示，状态一目了然：工作中、等待输入、需要处理、已完成、失败。 |
 | ✅ | **一键批准** | 助手想执行某个命令、修改某个文件时，弹到面板上，你点"允许一次""始终允许"或"拒绝"，不用切回终端。 |
 | ❓ | **代它回答** | 助手提问时直接在面板里选选项或写补充说明，答案会回传给它。 |
 | 📝 | **确认计划** | 助手列出行动计划后，由你决定：点"实行计划"让它开始动手，或写下要改的地方让它先调整。 |
@@ -55,11 +55,12 @@ CodeCraft 自己不写代码，它负责盯着下面这些 AI 编程助手。装
 | <img src="docs/assets/agent-claude-code.svg" width="20" height="20" align="absmiddle" alt="" />&nbsp; **Claude Code**<br /><sub>Anthropic</sub> | 支持最完整。会话状态、工具调用、实时转录都能看，批准、回答提问、确认计划都可以直接在面板里完成，不用切回终端。 |
 | <img src="docs/assets/agent-codex.svg" width="20" height="20" align="absmiddle" alt="" />&nbsp; **Codex**<br /><sub>OpenAI</sub> | 会话状态与工具调用审批可以在面板里处理。它的提问和计划确认是只读的，只能回到原来的 Codex 窗口完成，面板会提供一个跳转按钮帮你切过去。 |
 | <img src="docs/assets/agent-opencode.svg" width="20" height="20" align="absmiddle" alt="" />&nbsp; **OpenCode**<br /><sub>opencode.ai</sub> | 会话状态、工具调用、原生权限审批和提问都能在面板里处理，权限决定支持"允许一次""始终允许""拒绝"，另有一个可选的全工具门禁模式，让每个工具调用都先经过你确认。计划确认暂未接入，需要回到 OpenCode 窗口完成。 |
+| <img src="docs/assets/agent-mimo.svg" width="20" height="20" align="absmiddle" alt="" />&nbsp; **Mimo**<br /><sub>Xiaomi</sub> | 通过用户级 Mimo 插件同步会话、工具活动、回答、提问和计划审阅。权限支持"允许一次""始终允许""拒绝"，也可开启全工具门禁；计划可以批准，或携带反馈继续规划。 |
 | **PI** | 会话、工具活动、权限审批和提问可在面板与局域网控制台处理；支持允许一次、会话内允许和拒绝，计划确认暂未接入。 |
 | <img src="docs/assets/agent-deepseek.svg" width="20" height="20" align="absmiddle" alt="" />&nbsp; **DeepSeek Harness**<br /><sub>DeepSeek</sub> | 通过用户级原生插件同步会话、回答、工具活动、提问和计划审阅。权限严格使用 DSH 的一次性语义，只提供"允许一次"和"拒绝"；计划可以批准，或携带反馈继续规划。 |
 | **ZCode**<br /><sub>Z.ai</sub> | 通过官方七事件 Hook 同步外部 Desktop/CLI 会话、工具结果、最终回答、提问和计划审阅。普通工具只提供"允许一次"和"拒绝"；提问与计划即使在全自动模式下也必须由人决定。 |
 
-六个 Agent 可以同时开着，面板顶部的筛选按钮能只看其中一家，或者"全部"一起看。
+七个 Agent 可以同时开着，面板顶部的筛选按钮能只看其中一家，或者"全部"一起看。
 
 > DeepSeek Harness 当前是 Developer Preview。CodeCraft 优先适配 `@deepseek-ai/dsh@0.1.1-rc.2`，并兼容 `0.1.2-alpha.2`；检测不到版本或版本不在兼容列表中时，本地桥会拒绝交互并显示兼容错误。
 

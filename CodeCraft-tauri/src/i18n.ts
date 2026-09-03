@@ -166,8 +166,8 @@ const ENGLISH: Record<string, string> = {
   左侧: "Left",
   右侧: "Right",
   自动审批: "Automatic approvals",
-  "Claude Code、Codex、OpenCode、PI、DeepSeek Harness 与 ZCode 共用此策略；风险审批只自动通过低风险工具，问题与计划始终需要人工决定。":
-    "Claude Code, Codex, OpenCode, PI, DeepSeek Harness, and ZCode share this policy. Risk-based approval only allows low-risk tools automatically; questions and plans always require a person.",
+  "风险审批只自动通过低风险工具，问题与计划始终需要人工决定。":
+    "Risk-based approval only allows low-risk tools automatically; questions and plans always require a person.",
   手动审批: "Manual",
   风险审批: "Risk-based",
   自动审批风险提示: "Automatic approval risk warning",
@@ -421,9 +421,23 @@ const ENGLISH: Record<string, string> = {
   "允许 ZCode 退出计划模式": "Allow ZCode to exit plan mode",
   "请为每个问题提供非空回答":
     "Provide a non-empty answer for every question",
-  "ZCode 支持工具、问题与计划审阅；进行中回答不可见，问题审批无音效，Hook 阻塞期间 ZCode 界面不显示提示。":
-    "ZCode supports tool, question, and plan review. In-progress assistant text is unavailable, question reviews have no sound, and ZCode shows no prompt while the Hook is blocking.",
   "ZCode 会话": "ZCode session",
+  "Mimo 会话": "Mimo session",
+  "Mimo 会话列表": "Mimo session list",
+  "Mimo 计划审批": "Mimo plan review",
+  "Mimo 请求确认计划": "Mimo requested plan confirmation",
+  "Mimo Hook 状态": "Mimo Hook status",
+  "Mimo Hook 未安装": "Mimo Hook not installed",
+  "Mimo Hook 正常": "Mimo Hook connected",
+  "Mimo Hook 异常": "Mimo Hook issue",
+  "允许 Mimo 退出计划模式": "Allow Mimo to exit plan mode",
+  "输入反馈，让 Mimo 继续规划": "Enter feedback for Mimo to continue planning",
+  "批准计划": "Approve plan",
+  "继续规划": "Continue planning",
+  "输入继续规划的反馈": "Enter feedback for continued planning",
+  "Mimo 请求": "Mimo requested",
+  "Mimo 原生权限": "Mimo native permission",
+  "CodeCraft 全工具门禁": "CodeCraft all-tool gate",
   等待回答: "Waiting for an answer",
   本轮已停止: "This turn stopped",
   "已交回 ZCode": "Returned to ZCode",
@@ -738,6 +752,42 @@ const translateFilterValue = (value: string, locale: AppLocale): string => {
 };
 
 const formattedTranslations: FormattedTranslation[] = [
+  {
+    patterns: {
+      "zh-CN": /^Mimo 原生权限 · (.+)$/,
+      "zh-TW": /^Mimo 原生權限 · (.+)$/,
+      en: /^Mimo native permission · (.+)$/,
+    },
+    format: {
+      "zh-CN": (permission) => `Mimo 原生权限 · ${permission}`,
+      "zh-TW": (permission) => `Mimo 原生權限 · ${permission}`,
+      en: (permission) => `Mimo native permission · ${permission}`,
+    },
+  },
+  {
+    patterns: {
+      "zh-CN": /^Mimo 请求 (.+) 权限$/,
+      "zh-TW": /^Mimo 請求 (.+) 權限$/,
+      en: /^Mimo requested (.+) permission$/,
+    },
+    format: {
+      "zh-CN": (permission) => `Mimo 请求 ${permission} 权限`,
+      "zh-TW": (permission) => `Mimo 請求 ${permission} 權限`,
+      en: (permission) => `Mimo requested ${permission} permission`,
+    },
+  },
+  {
+    patterns: {
+      "zh-CN": /^CodeCraft 全工具门禁 · (.+)$/,
+      "zh-TW": /^CodeCraft 全工具門禁 · (.+)$/,
+      en: /^CodeCraft all-tool gate · (.+)$/,
+    },
+    format: {
+      "zh-CN": (tool) => `CodeCraft 全工具门禁 · ${tool}`,
+      "zh-TW": (tool) => `CodeCraft 全工具門禁 · ${tool}`,
+      en: (tool) => `CodeCraft all-tool gate · ${tool}`,
+    },
+  },
   {
     patterns: {
       "zh-CN": /^(\d+) 个活跃$/,

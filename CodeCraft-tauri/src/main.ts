@@ -64,6 +64,17 @@ import {
   type OpenCodeSnapshot,
 } from "./opencode-sessions";
 import {
+  mimoPendingReview,
+  mimoPermissionRequest,
+  mimoPlanRequest,
+  mimoQuestionRequest,
+  mimoReviewKey,
+  mimoSessionKey,
+  type MimoReview,
+  type MimoSession,
+  type MimoSnapshot,
+} from "./mimo-sessions";
+import {
   piPendingReview,
   piSessionEntryView,
   piSessionKey,
@@ -101,6 +112,7 @@ import {
   isPiSession,
   isDshSession,
   isZCodeSession,
+  isMimoSession,
   primaryUnifiedLiveSession,
   unifiedSessionKey,
   unifiedSessionIsRunning,
@@ -434,6 +446,10 @@ const piIconUrl = new URL(
   "../src-tauri/icons/icon/pi.svg?no-inline",
   import.meta.url,
 ).href;
+const mimoIconUrl = new URL(
+  "../src-tauri/icons/icon/mimo.svg?no-inline",
+  import.meta.url,
+).href;
 const dshIconUrl = new URL(
   "../src-tauri/icons/icon/deepseek.svg?no-inline",
   import.meta.url,
@@ -442,6 +458,18 @@ const zcodeIconUrl = new URL(
   "../src-tauri/icons/icon/zcode.svg?no-inline",
   import.meta.url,
 ).href;
+
+const configureThemedAgentIcon = (
+  mark: HTMLElement | null | undefined,
+  image: HTMLImageElement | null | undefined,
+  url: string,
+) => {
+  if (!mark || !image) return;
+  mark.style.setProperty("--agent-icon-image", cssImageUrl(url));
+  mark.dataset.themedIcon = "true";
+  image.hidden = true;
+};
+
 // The pack artwork stays external for the same CSP reason as the logo above:
 // these files are small enough that Vite would otherwise inline them.
 const soundPackIconUrls: Record<Exclude<SoundPackId, "custom">, string> = {
@@ -505,6 +533,7 @@ const codexSessionCard = panel?.querySelector<HTMLElement>(
 const openCodeSessionCard = panel?.querySelector<HTMLElement>(
   "#opencode-session-card",
 );
+const mimoSessionCard = panel?.querySelector<HTMLElement>("#mimo-session-card");
 const piSessionCard = panel?.querySelector<HTMLElement>("#pi-session-card");
 const dshSessionCard = panel?.querySelector<HTMLElement>("#dsh-session-card");
 const zcodeSessionCard = panel?.querySelector<HTMLElement>("#zcode-session-card");
@@ -514,6 +543,7 @@ const codexSessionList = panel?.querySelector<HTMLUListElement>(
 const openCodeSessionList = panel?.querySelector<HTMLUListElement>(
   "#opencode-session-list",
 );
+const mimoSessionList = panel?.querySelector<HTMLUListElement>("#mimo-session-list");
 const piSessionList = panel?.querySelector<HTMLUListElement>(
   "#pi-session-list",
 );
@@ -529,6 +559,7 @@ const claudeConnectionStatus = panel?.querySelector<HTMLButtonElement>(
 const openCodeConnectionStatus = panel?.querySelector<HTMLElement>(
   "#opencode-connection-status",
 );
+const mimoConnectionStatus = panel?.querySelector<HTMLElement>("#mimo-connection-status");
 const piConnectionStatus = panel?.querySelector<HTMLElement>(
   "#pi-connection-status",
 );
@@ -547,6 +578,7 @@ const codexSessionCardIcon = panel?.querySelector<HTMLImageElement>(
 const openCodeSessionCardIcon = panel?.querySelector<HTMLImageElement>(
   "#opencode-session-card-icon",
 );
+const mimoSessionCardIcon = panel?.querySelector<HTMLImageElement>("#mimo-session-card-icon");
 const piSessionCardIcon = panel?.querySelector<HTMLImageElement>(
   "#pi-session-card-icon",
 );
@@ -1073,22 +1105,26 @@ if (
   !claudeSessionCard ||
   !codexSessionCard ||
   !openCodeSessionCard ||
+  !mimoSessionCard ||
   !piSessionCard ||
   !dshSessionCard ||
   !zcodeSessionCard ||
   !codexSessionList ||
   !openCodeSessionList ||
+  !mimoSessionList ||
   !piSessionList ||
   !dshSessionList ||
   !zcodeSessionList ||
   !claudeConnectionStatus ||
   !openCodeConnectionStatus ||
+  !mimoConnectionStatus ||
   !piConnectionStatus ||
   !dshConnectionStatus ||
   !zcodeConnectionStatus ||
   !claudeSessionCardIcon ||
   !codexSessionCardIcon ||
   !openCodeSessionCardIcon ||
+  !mimoSessionCardIcon ||
   !piSessionCardIcon ||
   !dshSessionCardIcon ||
   !zcodeSessionCardIcon ||
@@ -1389,9 +1425,11 @@ let panelShapeFrame: number | undefined;
 let sessionRefreshTimer: ReturnType<typeof setInterval> | undefined;
 let refreshingSessions = false;
 let refreshingOpenCodeSessions = false;
+let refreshingMimoSessions = false;
 let selectedSessionId: string | undefined;
 let selectedCodexSessionId: string | undefined;
 let selectedOpenCodeSessionKey: string | undefined;
+let selectedMimoSessionKey: string | undefined;
 let selectedPiSessionKey: string | undefined;
 let selectedDshSessionKey: string | undefined;
 let selectedZCodeSessionKey: string | undefined;
@@ -1399,18 +1437,21 @@ type ReviewSource =
   | "claude"
   | "codex"
   | "opencode"
+  | "mimo"
   | "pi"
   | "dsh"
   | "zcode";
 let selectedSessionSource: ReviewSource = "claude";
 let lastRefreshError: string | undefined;
 let lastOpenCodeRefreshError: string | undefined;
+let lastMimoRefreshError: string | undefined;
 let lastPiRefreshError: string | undefined;
 let lastDshRefreshError: string | undefined;
 let lastZCodeRefreshError: string | undefined;
 let sessionItems = new Map<string, HTMLLIElement>();
 let codexSessionItems = new Map<string, HTMLLIElement>();
 let openCodeSessionItems = new Map<string, HTMLLIElement>();
+let mimoSessionItems = new Map<string, HTMLLIElement>();
 let piSessionItems = new Map<string, HTMLLIElement>();
 let dshSessionItems = new Map<string, HTMLLIElement>();
 let zcodeSessionItems = new Map<string, HTMLLIElement>();
@@ -1434,12 +1475,14 @@ let lastAutoRevealedOpenCodeReviewId: string | undefined;
 let submittedOpenCodeReviewId: string | undefined;
 let followupOpenCodeReviewId: string | undefined;
 let activeOpenCodeReview: OpenCodeReview | undefined;
+let activeMimoReview: MimoReview | undefined;
 let latestPiSnapshot: PiSnapshot = {
   connected: false,
   integrationError: null,
   sessions: [],
   instances: [],
 };
+let latestMimoSnapshot: MimoSnapshot = { connected: false, integrationError: null, sessions: [], instances: [] };
 let latestDshSnapshot: DshSnapshot = {
   connected: false,
   integrationError: null,
@@ -1484,6 +1527,7 @@ const soundSourcePrimed: Record<
   claude: false,
   codex: false,
   opencode: false,
+  mimo: false,
   pi: false,
   dsh: false,
   zcode: false,
@@ -1616,6 +1660,33 @@ const observePiSounds = (sessions: PiSession[]) => {
     ),
   );
 };
+const observeMimoSounds = (sessions: MimoSession[]) => {
+  observeSoundFrames(
+    "mimo",
+    new Map(
+      sessions.map((session) => {
+        const review = mimoPendingReview([session])?.review;
+        return [
+          mimoSessionKey(session),
+          {
+            status: session.status,
+            activityIds: session.activities.map((activity) => activity.id),
+            failedActivityIds: session.activities
+              .filter((activity) => activity.status === "failed")
+              .map((activity) => activity.id),
+            permissionId:
+              review &&
+              (review.reviewType === "nativePermission" ||
+                review.reviewType === "strictToolGate")
+                ? mimoReviewKey(review)
+                : null,
+            planId: review?.reviewType === "plan" ? mimoReviewKey(review) : null,
+          } satisfies SoundSessionFrame,
+        ];
+      }),
+    ),
+  );
+};
 const observeDshSounds = (sessions: DshSession[]) => {
   observeSoundFrames(
     "dsh",
@@ -1666,6 +1737,7 @@ type SessionProductId =
   | "claude-code"
   | "codex"
   | "opencode"
+  | "mimo"
   | "pi"
   | "dsh"
   | "zcode";
@@ -1679,6 +1751,7 @@ type SessionProduct = {
     | "claude"
     | "codex"
     | "opencode"
+    | "mimo"
     | "pi"
     | "dsh"
     | "zcode";
@@ -1722,6 +1795,13 @@ const sessionProducts: SessionProduct[] = [
     iconUrl: piIconUrl,
   },
   {
+    id: "mimo",
+    triggerLabel: "Mimo",
+    optionLabel: "Mimo",
+    kind: "mimo",
+    iconUrl: mimoIconUrl,
+  },
+  {
     id: "dsh",
     triggerLabel: "DeepSeek Harness",
     optionLabel: "DeepSeek Harness",
@@ -1757,6 +1837,7 @@ let activeQuestionSource: ReviewSource = "claude";
 let activePiQuestion: PiQuestionRequest | undefined;
 let activeDshQuestion: DshQuestionRequest | undefined;
 let activeZCodeQuestion: ZCodeQuestionRequest | undefined;
+let activeMimoQuestion: ClaudeQuestionRequest | undefined;
 let activeCodexQuestionThreadId: string | undefined;
 let activeQuestionIndex = 0;
 let questionDrafts: QuestionDraft[] = [];
@@ -1772,6 +1853,7 @@ let activePermissionSource: ReviewSource = "claude";
 let activePiPermission: PiPermissionRequest | undefined;
 let activeDshPermission: DshPermissionRequest | undefined;
 let activeZCodePermission: ZCodePermissionRequest | undefined;
+let activeMimoPermission: ClaudePermissionRequest | undefined;
 let dismissedPiReviewId: string | undefined;
 let lastAutoRevealedPiReviewId: string | undefined;
 let locallySubmittedPermissionRequestId: string | undefined;
@@ -1784,10 +1866,13 @@ let activePlanSource: ReviewSource = "claude";
 let activeCodexPlanThreadId: string | undefined;
 let activeDshPlan: DshPlanRequest | undefined;
 let activeZCodePlan: ZCodePlanRequest | undefined;
+let activeMimoPlan: ClaudePlanRequest | undefined;
 let dismissedDshReviewId: string | undefined;
 let lastAutoRevealedDshReviewId: string | undefined;
 let dismissedZCodeReviewId: string | undefined;
 let lastAutoRevealedZCodeReviewId: string | undefined;
+let dismissedMimoReviewId: string | undefined;
+let lastAutoRevealedMimoReviewId: string | undefined;
 let locallySubmittedPlanRequestId: string | undefined;
 let settingsNavResizeObserver: ResizeObserver | undefined;
 let localeLayoutFrame: number | undefined;
@@ -2393,6 +2478,10 @@ const hasSelectedSessionDetail = () =>
           ? latestDshSnapshot.sessions.some(
               (session) => dshSessionKey(session) === selectedDshSessionKey,
             )
+          : selectedSessionSource === "mimo"
+            ? latestMimoSnapshot.sessions.some(
+                (session) => mimoSessionKey(session) === selectedMimoSessionKey,
+              )
           : latestSessions.some((session) => session.id === selectedSessionId);
 
 const returnViewForReview = (origin: ContentView | undefined) =>
@@ -2955,7 +3044,7 @@ const syncQuestionAnswerState = (
   );
   const showOpenCodex =
     activeQuestionSource === "codex" && state.question.readOnly === true;
-  const showReject = activeQuestionSource === "opencode";
+  const showReject = activeQuestionSource === "opencode" || activeQuestionSource === "mimo";
   setActionNavVisible(actions.size > 0 || showOpenCodex || showReject, animate);
   setActionButtonVisible(
     questionPreviousButton,
@@ -3254,6 +3343,7 @@ const clearActiveQuestionRequest = () => {
   renderedQuestionRequestId = undefined;
   activeQuestionRequest = undefined;
   activePiQuestion = undefined;
+  activeMimoQuestion = undefined;
   activeDshQuestion = undefined;
   activeZCodeQuestion = undefined;
   activeQuestionIndex = 0;
@@ -3312,6 +3402,8 @@ questionBackButton.addEventListener("click", () => {
     dismissedDshReviewId = activeQuestionRequest.id;
   } else if (activeQuestionSource === "zcode") {
     dismissedZCodeReviewId = activeQuestionRequest.id;
+  } else if (activeQuestionSource === "mimo") {
+    dismissedMimoReviewId = activeQuestionRequest.id;
   } else {
     manuallyHiddenQuestionRequestId = activeQuestionRequest.id;
   }
@@ -3415,9 +3507,9 @@ questionOpenCodexButton.addEventListener("click", () => {
 });
 
 questionRejectButton.addEventListener("click", async () => {
-  const review = activeOpenCodeReview;
+  const review = activeQuestionSource === "mimo" ? activeMimoReview : activeOpenCodeReview;
   if (
-    activeQuestionSource !== "opencode" ||
+    (activeQuestionSource !== "opencode" && activeQuestionSource !== "mimo") ||
     review?.reviewType !== "question"
   ) {
     return;
@@ -3426,13 +3518,13 @@ questionRejectButton.addEventListener("click", async () => {
   questionSubmitButton.disabled = true;
   let submittedToOpenCode = false;
   try {
-    await invoke("reject_opencode_question", {
+    await invoke(activeQuestionSource === "mimo" ? "mimo_reject_question" : "reject_opencode_question", {
       pluginInstanceId: review.pluginInstanceId,
       sessionId: review.sessionId,
       requestId: review.requestId,
     });
     dismissedOpenCodeReviewId = undefined;
-    submittedOpenCodeReviewId = openCodeReviewKey(review);
+    submittedOpenCodeReviewId = activeQuestionSource === "mimo" ? mimoReviewKey(review as MimoReview) : openCodeReviewKey(review);
     followupOpenCodeReviewId = undefined;
     setQuestionSubmitStatus(translate("正在回传回答…"));
     submittedToOpenCode = true;
@@ -3507,6 +3599,19 @@ questionSubmitButton.addEventListener("click", async () => {
       questionRejectButton.disabled = true;
       setQuestionSubmitStatus(translate("正在回传回答…"));
       submittedToOpenCode = true;
+    } else if (activeQuestionSource === "mimo") {
+      const review = activeMimoReview;
+      if (review?.reviewType !== "question") return;
+      await invoke("mimo_respond_question", {
+        pluginInstanceId: review.pluginInstanceId,
+        sessionId: review.sessionId,
+        requestId: review.requestId,
+        answers: submission.answers.map((answer) => [
+          ...answer.selectedOptionLabels.filter((label) => label !== "其他"),
+          ...(answer.extraText?.trim() ? [answer.extraText.trim()] : []),
+        ]),
+      });
+      dismissedMimoReviewId = mimoReviewKey(review);
     } else if (activeQuestionSource === "pi") {
       const request = activePiQuestion;
       if (!request) return;
@@ -3568,7 +3673,8 @@ questionSubmitButton.addEventListener("click", async () => {
       activeQuestionSource === "opencode" ||
       activeQuestionSource === "pi" ||
       activeQuestionSource === "dsh" ||
-      activeQuestionSource === "zcode"
+      activeQuestionSource === "zcode" ||
+      activeQuestionSource === "mimo"
     ) {
       const message = error instanceof Error ? error.message : String(error);
       setQuestionSubmitStatus(`${translate("回传失败：")}${message}`, "error");
@@ -3636,6 +3742,7 @@ const clearActivePermissionRequest = () => {
   renderedPermissionRequestId = undefined;
   activePermissionRequest = undefined;
   activePiPermission = undefined;
+  activeMimoPermission = undefined;
   activeDshPermission = undefined;
   activeZCodePermission = undefined;
   permissionSummaryText.textContent = "";
@@ -3752,6 +3859,27 @@ const submitPermissionDecision = async (decision: PermissionDecision) => {
       submittedOpenCodeReviewId = openCodeReviewKey(review);
       followupOpenCodeReviewId = undefined;
       submittedToOpenCode = true;
+    } else if (activePermissionSource === "mimo") {
+      const review = activeMimoReview;
+      if (review?.reviewType === "nativePermission") {
+        await invoke("mimo_respond_approval", {
+          pluginInstanceId: review.pluginInstanceId,
+          sessionId: review.sessionId,
+          requestId: review.requestId,
+          action: decision === "allowAlways" ? "always" : decision === "allow" ? "once" : "reject",
+          message: null,
+        });
+      } else if (review?.reviewType === "strictToolGate") {
+        await invoke("mimo_respond_gate", {
+          pluginInstanceId: review.pluginInstanceId,
+          sessionId: review.sessionId,
+          reviewId: review.reviewId,
+          action: decision === "allowAlways" ? "allowSession" : decision === "allow" ? "allowOnce" : "reject",
+        });
+      } else {
+        return;
+      }
+      dismissedMimoReviewId = review ? mimoReviewKey(review) : undefined;
     } else if (activePermissionSource === "pi") {
       const pending = activePiPermission;
       if (!pending) return;
@@ -3818,7 +3946,8 @@ const submitPermissionDecision = async (decision: PermissionDecision) => {
       activePermissionSource === "opencode" ||
       activePermissionSource === "pi" ||
       activePermissionSource === "dsh" ||
-      activePermissionSource === "zcode"
+      activePermissionSource === "zcode" ||
+      activePermissionSource === "mimo"
     ) {
       const message = error instanceof Error ? error.message : String(error);
       setPermissionSubmitStatus(
@@ -3844,6 +3973,8 @@ permissionBackButton.addEventListener("click", () => {
     dismissedDshReviewId = activePermissionRequest.id;
   } else if (activePermissionSource === "zcode") {
     dismissedZCodeReviewId = activePermissionRequest.id;
+  } else if (activePermissionSource === "mimo") {
+    dismissedMimoReviewId = activePermissionRequest.id;
   } else {
     manuallyHiddenPermissionRequestId = activePermissionRequest.id;
   }
@@ -3877,7 +4008,8 @@ const syncPlanSourceControls = () => {
   const isClaudePlan = activePlanSource === "claude";
   const isDshPlan = activePlanSource === "dsh";
   const isZCodePlan = activePlanSource === "zcode";
-  const isFeedbackPlan = isDshPlan;
+  const isMimoPlan = activePlanSource === "mimo";
+  const isFeedbackPlan = isDshPlan || isZCodePlan || isMimoPlan;
   planView.dataset.planSource = activePlanSource;
   planAutoButton.hidden = !isClaudePlan && !isFeedbackPlan;
   planAutoRememberButton.hidden = !isClaudePlan;
@@ -3909,7 +4041,9 @@ const syncPlanSourceControls = () => {
   }
   if (executeDescription) {
     executeDescription.textContent = isFeedbackPlan
-      ? "允许 DeepSeek Harness 退出计划模式"
+      ? isMimoPlan
+        ? "允许 Mimo 退出计划模式"
+        : "允许 DeepSeek Harness 退出计划模式"
       : "以自动模式执行此计划";
   }
   planActionBadge.textContent = isCodexPlan
@@ -3971,6 +4105,7 @@ const clearActivePlanRequest = () => {
   activeCodexPlanThreadId = undefined;
   activeDshPlan = undefined;
   activeZCodePlan = undefined;
+  activeMimoPlan = undefined;
   activePlanSource = "claude";
   syncPlanSourceControls();
   planSummaryText.innerHTML = "";
@@ -4035,6 +4170,17 @@ const submitPlanDecision = async (mode: PlanExecutionMode, note?: string) => {
         feedback: note?.trim() || null,
       });
       dismissedZCodeReviewId = pending.id;
+    } else if (activePlanSource === "mimo") {
+      const pending = activeMimoReview;
+      if (!pending || pending.reviewType !== "plan") return;
+      await invoke("mimo_respond_plan", {
+        pluginInstanceId: pending.pluginInstanceId,
+        sessionId: pending.sessionId,
+        requestId: pending.requestId,
+        approved: note === undefined,
+        feedback: note?.trim() || null,
+      });
+      dismissedMimoReviewId = mimoReviewKey(pending);
     } else {
       await invoke("submit_claude_plan_decision", {
         requestId: request.id,
@@ -4062,6 +4208,8 @@ planBackButton.addEventListener("click", () => {
     dismissedDshReviewId = activePlanRequest.id;
   } else if (activePlanSource === "zcode") {
     dismissedZCodeReviewId = activePlanRequest.id;
+  } else if (activePlanSource === "mimo") {
+    dismissedMimoReviewId = activePlanRequest.id;
   } else {
     manuallyHiddenPlanRequestId = activePlanRequest.id;
   }
@@ -4283,6 +4431,9 @@ const syncProductVisibility = () => {
     installedSessionProductIds.has("opencode") &&
     (selectedSessionProductId === "all" ||
       selectedSessionProductId === "opencode");
+  const showMimo =
+    installedSessionProductIds.has("mimo") &&
+    (selectedSessionProductId === "all" || selectedSessionProductId === "mimo");
   const showPi =
     installedSessionProductIds.has("pi") &&
     (selectedSessionProductId === "all" || selectedSessionProductId === "pi");
@@ -4295,6 +4446,7 @@ const syncProductVisibility = () => {
   claudeSessionCard.hidden = !showClaude;
   codexSessionCard.hidden = !showCodex;
   openCodeSessionCard.hidden = !showOpenCode;
+  mimoSessionCard.hidden = !showMimo;
   piSessionCard.hidden = !showPi;
   dshSessionCard.hidden = !showDsh;
   zcodeSessionCard.hidden = !showZCode;
@@ -4308,6 +4460,7 @@ const sessionProductIdForHookAgent = (
   if (id === "claudeCode") return "claude-code";
   if (id === "codex") return "codex";
   if (id === "openCode") return "opencode";
+  if (id === "mimo") return "mimo";
   if (id === "pi") return "pi";
   if (id === "deepSeekHarness") return "dsh";
   if (id === "zCode") return "zcode";
@@ -4469,11 +4622,47 @@ document.addEventListener("pointerdown", (event) => {
 updateSessionProductTrigger();
 syncSessionProductWidth();
 claudeSessionCardIcon.src = claudeCodeIconUrl;
+configureThemedAgentIcon(
+  claudeSessionCardIcon.closest<HTMLElement>(".session-source-card__mark"),
+  claudeSessionCardIcon,
+  claudeCodeIconUrl,
+);
 codexSessionCardIcon.src = codexIconUrl;
+configureThemedAgentIcon(
+  codexSessionCardIcon.closest<HTMLElement>(".session-source-card__mark"),
+  codexSessionCardIcon,
+  codexIconUrl,
+);
 openCodeSessionCardIcon.src = openCodeIconUrl;
+configureThemedAgentIcon(
+  openCodeSessionCardIcon.closest<HTMLElement>(".session-source-card__mark"),
+  openCodeSessionCardIcon,
+  openCodeIconUrl,
+);
+mimoSessionCardIcon.src = mimoIconUrl;
+configureThemedAgentIcon(
+  mimoSessionCardIcon.closest<HTMLElement>(".session-source-card__mark"),
+  mimoSessionCardIcon,
+  mimoIconUrl,
+);
 piSessionCardIcon.src = piIconUrl;
+configureThemedAgentIcon(
+  piSessionCardIcon.closest<HTMLElement>(".session-source-card__mark"),
+  piSessionCardIcon,
+  piIconUrl,
+);
 dshSessionCardIcon.src = dshIconUrl;
+configureThemedAgentIcon(
+  dshSessionCardIcon.closest<HTMLElement>(".session-source-card__mark"),
+  dshSessionCardIcon,
+  dshIconUrl,
+);
 zcodeSessionCardIcon.src = zcodeIconUrl;
+configureThemedAgentIcon(
+  zcodeSessionCardIcon.closest<HTMLElement>(".session-source-card__mark"),
+  zcodeSessionCardIcon,
+  zcodeIconUrl,
+);
 
 claudeConnectionStatus.addEventListener("click", () => {
   if (claudeConnectionStatus.dataset.connected === "true") return;
@@ -4542,6 +4731,7 @@ const latestUnifiedSessions = (): UnifiedSession[] => [
   ...latestSessions,
   ...latestCodexSnapshot.sessions,
   ...latestOpenCodeSnapshot.sessions,
+  ...latestMimoSnapshot.sessions,
   ...latestPiSnapshot.sessions,
   ...latestDshSnapshot.sessions,
   ...latestZCodeSnapshot.sessions,
@@ -4716,6 +4906,7 @@ const renderSessionDetail = (session: UnifiedSession) => {
     session.activities,
     session.outputs,
     isOpenCodeSession(session) ? session.pendingReviews : null,
+    isMimoSession(session) ? session.pendingReviews : null,
     isPiSession(session) ? [session.question, session.permission] : null,
     isDshSession(session)
       ? [session.question, session.permission, session.plan]
@@ -4823,6 +5014,7 @@ const setSelectedSession = (sessionId: string) => {
   selectedSessionSource = "claude";
   selectedCodexSessionId = undefined;
   selectedOpenCodeSessionKey = undefined;
+  selectedMimoSessionKey = undefined;
   selectedPiSessionKey = undefined;
   selectedDshSessionKey = undefined;
   selectedZCodeSessionKey = undefined;
@@ -4879,6 +5071,7 @@ const setSelectedCodexSession = (sessionId: string) => {
   selectedSessionSource = "codex";
   selectedSessionId = undefined;
   selectedOpenCodeSessionKey = undefined;
+  selectedMimoSessionKey = undefined;
   selectedPiSessionKey = undefined;
   selectedDshSessionKey = undefined;
   selectedZCodeSessionKey = undefined;
@@ -4944,6 +5137,7 @@ const setSelectedOpenCodeSession = (sessionKey: string) => {
   selectedSessionSource = "opencode";
   selectedSessionId = undefined;
   selectedCodexSessionId = undefined;
+  selectedMimoSessionKey = undefined;
   selectedPiSessionKey = undefined;
   selectedDshSessionKey = undefined;
   selectedZCodeSessionKey = undefined;
@@ -5006,6 +5200,7 @@ const setSelectedPiSession = (sessionKey: string) => {
   selectedSessionId = undefined;
   selectedCodexSessionId = undefined;
   selectedOpenCodeSessionKey = undefined;
+  selectedMimoSessionKey = undefined;
   selectedDshSessionKey = undefined;
   selectedZCodeSessionKey = undefined;
   for (const button of piSessionList.querySelectorAll<HTMLButtonElement>(
@@ -5023,6 +5218,55 @@ const setSelectedPiSession = (sessionKey: string) => {
   renderSessionDetail(session);
   switchContentView("detail");
   sessionDetailBack.focus({ preventScroll: true });
+};
+
+const showMimoReview = (session: MimoSession, review: MimoReview, shouldAutoReveal: boolean) => {
+  activeMimoReview = review;
+  const reveal = (view: ReviewContentView) => {
+    if (requestedContentView !== view) { rememberReviewOrigin(view); switchContentView(view); }
+    if (shouldAutoReveal && collapseExpandSettings.approvalAutoExpand) void revealPanelForAttention();
+  };
+  if (review.reviewType === "plan") {
+    clearActiveQuestionRequest();
+    clearActivePermissionRequest();
+    activeMimoPlan = mimoPlanRequest(review, session);
+    renderPlanRequest(activeMimoPlan, "mimo");
+    reveal("plan");
+  } else if (review.reviewType === "question") {
+    clearActivePermissionRequest();
+    clearActivePlanRequest();
+    activeQuestionSource = "mimo";
+    activeMimoQuestion = mimoQuestionRequest(review);
+    renderQuestionRequest(activeMimoQuestion);
+    questionSubmitButton.disabled = review.submitting;
+    questionRejectButton.disabled = review.submitting;
+    reveal("question");
+  } else {
+    clearActiveQuestionRequest();
+    clearActivePlanRequest();
+    activePermissionSource = "mimo";
+    activeMimoPermission = mimoPermissionRequest(review, session);
+    renderPermissionRequest(activeMimoPermission);
+    setPermissionButtonsDisabled(review.submitting);
+    reveal("permission");
+  }
+};
+
+const setSelectedMimoSession = (sessionKey: string) => {
+  const session = latestMimoSnapshot.sessions.find((item) => mimoSessionKey(item) === sessionKey);
+  if (!session) return;
+  selectedMimoSessionKey = sessionKey;
+  selectedSessionSource = "mimo";
+  selectedSessionId = undefined;
+  selectedCodexSessionId = undefined;
+  selectedOpenCodeSessionKey = undefined;
+  selectedPiSessionKey = undefined;
+  selectedDshSessionKey = undefined;
+  selectedZCodeSessionKey = undefined;
+  const review = mimoPendingReview([session]);
+  if (review) { showMimoReview(session, review.review, false); return; }
+  renderSessionDetail(session);
+  switchContentView("detail");
 };
 
 const showDshReview = (session: DshSession, shouldAutoReveal: boolean) => {
@@ -5080,6 +5324,7 @@ const setSelectedDshSession = (sessionKey: string) => {
   selectedSessionId = undefined;
   selectedCodexSessionId = undefined;
   selectedOpenCodeSessionKey = undefined;
+  selectedMimoSessionKey = undefined;
   selectedPiSessionKey = undefined;
   selectedZCodeSessionKey = undefined;
   for (const button of dshSessionList.querySelectorAll<HTMLButtonElement>(
@@ -5145,6 +5390,7 @@ const setSelectedZCodeSession = (sessionKey: string) => {
   selectedSessionId = undefined;
   selectedCodexSessionId = undefined;
   selectedOpenCodeSessionKey = undefined;
+  selectedMimoSessionKey = undefined;
   selectedPiSessionKey = undefined;
   selectedDshSessionKey = undefined;
   for (const button of zcodeSessionList.querySelectorAll<HTMLButtonElement>(
@@ -5183,6 +5429,7 @@ const renderSessionSummary = () => {
   const zcodeActiveCount = latestZCodeSnapshot.sessions.filter(
     (session) => session.status !== "idle",
   ).length;
+  const mimoActiveCount = latestMimoSnapshot.sessions.filter((session) => session.status !== "idle").length;
   const activeCounts: Record<SessionSourceProductId, number> = {
     "claude-code": claudeActiveCount,
     codex: codexActiveCount,
@@ -5190,6 +5437,7 @@ const renderSessionSummary = () => {
     pi: piActiveCount,
     dsh: dshActiveCount,
     zcode: zcodeActiveCount,
+    mimo: mimoActiveCount,
   };
   const connectionStates: Record<SessionSourceProductId, boolean> = {
     "claude-code": latestClaudeSnapshot.connected,
@@ -5198,6 +5446,7 @@ const renderSessionSummary = () => {
     pi: latestPiSnapshot.connected,
     dsh: latestDshSnapshot.connected,
     zcode: latestZCodeSnapshot.connected,
+    mimo: latestMimoSnapshot.connected,
   };
   const selectedSources =
     selectedSessionProductId === "all"
@@ -5455,6 +5704,60 @@ const renderOpenCodeSnapshot = (snapshot: OpenCodeSnapshot) => {
     shouldAutoReveal,
   );
   if (shouldAutoReveal) lastAutoRevealedOpenCodeReviewId = reviewId;
+};
+
+const renderMimoSnapshot = (snapshot: MimoSnapshot) => {
+  snapshot = {
+    ...snapshot,
+    sessions: filterAutoCleanedSessions(
+      filterDismissedSessions(snapshot.sessions, dismissedSessionKeys, mimoSessionKey, unifiedSessionIsRunning),
+      sessionCleanupSettings,
+    ),
+  };
+  observeMimoSounds(snapshot.sessions);
+  latestMimoSnapshot = snapshot;
+  if (mimoConnectionStatus) {
+    setSourceStatusLabel(mimoConnectionStatus, snapshot.connected ? "Hook 正常" : "Hook 异常");
+    mimoConnectionStatus.dataset.connected = String(snapshot.connected);
+    mimoConnectionStatus.title = snapshot.integrationError ?? "Mimo Hook 未安装";
+  }
+  if (!snapshot.sessions.some((session) => mimoSessionKey(session) === selectedMimoSessionKey)) {
+    selectedMimoSessionKey = undefined;
+    if (selectedSessionSource === "mimo") renderedDetailSignature = undefined;
+  }
+  renderUnifiedSessionList(mimoSessionList, snapshot.sessions, mimoSessionItems);
+  const selected = snapshot.sessions.find((session) => mimoSessionKey(session) === selectedMimoSessionKey);
+  if (selectedSessionSource === "mimo" && requestedContentView === "detail" && selected) renderSessionDetail(selected);
+  renderSessionSummary();
+  syncCollapsedSessionState();
+  const pending = mimoPendingReview(snapshot.sessions);
+  if (!pending) {
+    if ((requestedContentView === "permission" && activePermissionSource === "mimo") || (requestedContentView === "question" && activeQuestionSource === "mimo") || (requestedContentView === "plan" && activePlanSource === "mimo")) {
+      const origin = requestedContentView === "permission" ? permissionOriginView : requestedContentView === "question" ? questionOriginView : planOriginView;
+      clearActiveQuestionRequest(); clearActivePermissionRequest(); clearActivePlanRequest(); activeMimoReview = undefined; switchContentView(returnViewForReview(origin));
+    }
+    dismissedMimoReviewId = undefined;
+    lastAutoRevealedMimoReviewId = undefined;
+    return;
+  }
+  const id = mimoReviewKey(pending.review);
+  if (id === dismissedMimoReviewId) return;
+  const shouldAutoReveal = id !== lastAutoRevealedMimoReviewId;
+  showMimoReview(pending.session, pending.review, shouldAutoReveal);
+  if (shouldAutoReveal) lastAutoRevealedMimoReviewId = id;
+};
+
+const refreshMimoSessions = async () => {
+  if (refreshingMimoSessions || !isTauriRuntime) return;
+  refreshingMimoSessions = true;
+  try {
+    renderMimoSnapshot(await invoke<MimoSnapshot>("list_mimo_sessions"));
+    lastMimoRefreshError = undefined;
+  } catch (error: unknown) {
+    const message = error instanceof Error ? error.message : String(error);
+    renderMimoSnapshot({ ...latestMimoSnapshot, connected: false, integrationError: message, sessions: [] });
+    if (message !== lastMimoRefreshError) { console.error("Unable to refresh Mimo sessions", error); lastMimoRefreshError = message; }
+  } finally { refreshingMimoSessions = false; }
 };
 
 const renderPiSnapshot = (snapshot: PiSnapshot) => {
@@ -6530,6 +6833,7 @@ type HookAgentId =
   | "claudeCode"
   | "codex"
   | "openCode"
+  | "mimo"
   | "pi"
   | "deepSeekHarness"
   | "zCode";
@@ -6562,6 +6866,12 @@ let hookRefreshLabelTarget = hookRefreshLabel.textContent ?? "刷新";
 let hookRefreshLabelTransitionToken = 0;
 let hookRefreshLabelAnimation: Animation | undefined;
 
+// Hook refresh and install/uninstall share one mutation lane. The state is
+// intentionally consumed only by Hook controls so the rest of the panel stays
+// interactive while status detection runs.
+const hookMutationsBlocked = () =>
+  hookRefreshing || hookOperation !== undefined;
+
 const browserHookIntegrations: HookIntegrationStatus[] = [
   {
     id: "claudeCode",
@@ -6576,6 +6886,7 @@ const browserHookIntegrations: HookIntegrationStatus[] = [
     agentInstalled: true,
     hookInstalled: false,
   },
+  { id: "mimo", name: "Mimo", agentInstalled: true, hookInstalled: false },
   { id: "pi", name: "PI", agentInstalled: true, hookInstalled: false },
   {
     id: "deepSeekHarness",
@@ -6678,7 +6989,7 @@ const transitionHookRefreshLabel = (nextLabel: string) => {
 };
 
 const syncHookRefreshButton = () => {
-  const loading = hookRefreshing || hookOperation !== undefined;
+  const loading = hookMutationsBlocked();
   hookRefreshButton.disabled = loading;
   hookRefreshButton.dataset.loading = String(loading);
   transitionHookRefreshLabel(
@@ -6689,10 +7000,20 @@ const syncHookRefreshButton = () => {
 const hookIconUrl = (id: HookAgentId) => {
   if (id === "claudeCode") return claudeCodeIconUrl;
   if (id === "openCode") return openCodeIconUrl;
+  if (id === "mimo") return mimoIconUrl;
   if (id === "pi") return piIconUrl;
   if (id === "deepSeekHarness") return dshIconUrl;
   if (id === "zCode") return zcodeIconUrl;
   return codexIconUrl;
+};
+
+const syncMimoHookStatus = () => {
+  const status = hookIntegrations.find((item) => item.id === "mimo");
+  const healthy = Boolean(status?.hookInstalled && !status.error);
+  if (!mimoConnectionStatus) return;
+  setSourceStatusLabel(mimoConnectionStatus, healthy ? "Hook 正常" : "Hook 异常");
+  mimoConnectionStatus.dataset.connected = String(healthy);
+  mimoConnectionStatus.title = status?.error ?? "Mimo Hook 未安装";
 };
 
 const hookIntegrationDetail = (status: HookIntegrationStatus): string => {
@@ -6723,6 +7044,8 @@ const createHookAgentButton = (status: HookIntegrationStatus) => {
       ? "claude"
       : status.id === "openCode"
         ? "opencode"
+        : status.id === "mimo"
+          ? "mimo"
         : status.id === "pi"
           ? "pi"
           : status.id === "deepSeekHarness"
@@ -6731,10 +7054,12 @@ const createHookAgentButton = (status: HookIntegrationStatus) => {
               ? "zcode"
               : "codex";
   mark.setAttribute("aria-hidden", "true");
+  const iconUrl = hookIconUrl(status.id);
   const image = document.createElement("img");
   image.alt = "";
-  image.src = hookIconUrl(status.id);
+  image.src = iconUrl;
   mark.append(image);
+  configureThemedAgentIcon(mark, image, iconUrl);
 
   const copy = document.createElement("span");
   copy.className = "hook-agent-button__copy";
@@ -6770,8 +7095,7 @@ const syncHookAgentButton = (
   button.dataset.agentInstalled = String(status.agentInstalled);
   button.dataset.busy = String(activeOperation !== undefined);
   button.dataset.refreshing = String(hookRefreshing);
-  button.disabled =
-    hookRefreshing || hookOperation !== undefined || !status.agentInstalled;
+  button.disabled = hookMutationsBlocked() || !status.agentInstalled;
   button.setAttribute(
     "aria-label",
     !status.agentInstalled
@@ -6811,8 +7135,8 @@ const syncHookAgentButton = (
     !status.hookInstalled &&
     status.installState === "notInstalled"
   ) {
-    state.dataset.kind = "missing";
-    state.textContent = "未安装";
+    state.dataset.kind = "action";
+    state.textContent = "安装";
   } else if (status.error) {
     state.dataset.kind = "missing";
     state.textContent = "需处理";
@@ -6855,6 +7179,7 @@ const renderHookIntegrations = (
   hookIntegrations = nextStatuses;
   syncInstalledSessionProducts(nextStatuses);
   syncOpenCodeHookStatus();
+  syncMimoHookStatus();
   if (isTauriRuntime && isCodexHookKnownUninstalled()) {
     // Removing a Hook must clear any already-rendered Codex detail or pending
     // request immediately; waiting for the next session poll leaves stale
@@ -6931,7 +7256,7 @@ const fadeHookOperation = async (id: HookAgentId) => {
 
 async function toggleAgentHook(id: HookAgentId) {
   const status = hookIntegrations.find((item) => item.id === id);
-  if (!status || !status.agentInstalled || hookOperation || hookRefreshing)
+  if (!status || !status.agentInstalled || hookMutationsBlocked())
     return;
   hookOperation = { id, installing: !status.hookInstalled };
   setHookSettingsError();
@@ -8305,7 +8630,9 @@ const createSessionButton = (session: UnifiedSession): HTMLLIElement => {
               ? dshSessionKey(session) === selectedDshSessionKey
               : isZCodeSession(session)
                 ? zcodeSessionKey(session) === selectedZCodeSessionKey
-                : session.id === selectedSessionId,
+                : isMimoSession(session)
+                  ? mimoSessionKey(session) === selectedMimoSessionKey
+                  : session.id === selectedSessionId,
     ),
   );
   button.title = `${unifiedSessionStatusLabel(session)} · ${session.title}`;
@@ -8320,7 +8647,9 @@ const createSessionButton = (session: UnifiedSession): HTMLLIElement => {
             ? setSelectedDshSession(dshSessionKey(session))
             : isZCodeSession(session)
               ? setSelectedZCodeSession(zcodeSessionKey(session))
-              : setSelectedSession(session.id),
+              : isMimoSession(session)
+                ? setSelectedMimoSession(mimoSessionKey(session))
+                : setSelectedSession(session.id),
   );
 
   const statusIcon = createPixelStatusSvg(
@@ -8767,7 +9096,8 @@ const dismissSessionFromList = (data: CodeCraftContextData | undefined) => {
   dismissedSessionKeys.add(
     data.sessionSource === "pi" ||
       data.sessionSource === "dsh" ||
-      data.sessionSource === "zcode"
+      data.sessionSource === "zcode" ||
+      data.sessionSource === "mimo"
       ? sessionKey
       : `${data.sessionSource}:${sessionKey}`,
   );
@@ -8779,11 +9109,13 @@ const dismissSessionFromList = (data: CodeCraftContextData | undefined) => {
       selectedOpenCodeSessionKey === sessionKey) ||
     (data.sessionSource === "pi" && selectedPiSessionKey === sessionKey) ||
     (data.sessionSource === "dsh" && selectedDshSessionKey === sessionKey) ||
-    (data.sessionSource === "zcode" && selectedZCodeSessionKey === sessionKey)
+    (data.sessionSource === "zcode" && selectedZCodeSessionKey === sessionKey) ||
+    (data.sessionSource === "mimo" && selectedMimoSessionKey === sessionKey)
   ) {
     selectedSessionId = undefined;
     selectedCodexSessionId = undefined;
     selectedOpenCodeSessionKey = undefined;
+    selectedMimoSessionKey = undefined;
     selectedPiSessionKey = undefined;
     selectedDshSessionKey = undefined;
     selectedZCodeSessionKey = undefined;
@@ -8820,6 +9152,13 @@ const dismissSessionFromList = (data: CodeCraftContextData | undefined) => {
       ...latestPiSnapshot,
       sessions: latestPiSnapshot.sessions.filter(
         (session) => piSessionKey(session) !== sessionKey,
+      ),
+    });
+  } else if (data.sessionSource === "mimo") {
+    renderMimoSnapshot({
+      ...latestMimoSnapshot,
+      sessions: latestMimoSnapshot.sessions.filter(
+        (session) => mimoSessionKey(session) !== sessionKey,
       ),
     });
   } else if (data.sessionSource === "dsh") {
@@ -8889,6 +9228,7 @@ const contextMenu = new ContextMenuController<CodeCraftContextData>(
         (sessionSource === "claude" ||
           sessionSource === "codex" ||
           sessionSource === "opencode" ||
+          sessionSource === "mimo" ||
           sessionSource === "pi" ||
           sessionSource === "dsh" ||
           sessionSource === "zcode")
@@ -8965,6 +9305,7 @@ const contextMenu = new ContextMenuController<CodeCraftContextData>(
             void refreshClaudeSessions();
             void refreshCodexPanel();
             void refreshOpenCodeSessions();
+            void refreshMimoSessions();
             void refreshPiSessions();
             void refreshDshSessions();
             void refreshZCodeSessions();
@@ -9092,6 +9433,7 @@ if (isTauriRuntime) {
   void refreshClaudeSessions();
   void refreshCodexPanel();
   void refreshOpenCodeSessions();
+  void refreshMimoSessions();
   void refreshPiSessions();
   void refreshDshSessions();
   void refreshZCodeSessions();
@@ -9099,6 +9441,7 @@ if (isTauriRuntime) {
     void refreshClaudeSessions();
     void refreshCodexPanel();
     void refreshOpenCodeSessions();
+    void refreshMimoSessions();
     void refreshPiSessions();
     void refreshDshSessions();
     void refreshZCodeSessions();

@@ -730,10 +730,7 @@ fn append_tool_output(session: &mut ZCodeSession, payload: &Value, captured_at: 
     let Some(value) = value else {
         return;
     };
-    let text = value
-        .as_str()
-        .map(str::to_string)
-        .unwrap_or_else(|| value.to_string());
+    let text = readable_tool_output(value);
     if text.trim().is_empty() {
         return;
     }
@@ -744,6 +741,64 @@ fn append_tool_output(session: &mut ZCodeSession, payload: &Value, captured_at: 
             text: truncate(&text, MAX_OUTPUT_CHARS),
         },
     );
+}
+
+fn readable_tool_output(value: &Value) -> String {
+    match value {
+        Value::Null => String::new(),
+        Value::Bool(value) => value.to_string(),
+        Value::Number(value) => value.to_string(),
+        Value::String(text) => {
+            let trimmed = text.trim();
+            if trimmed.is_empty() {
+                return String::new();
+            }
+            if let Ok(parsed) = serde_json::from_str::<Value>(trimmed) {
+                if !parsed.is_string() {
+                    return readable_tool_output(&parsed);
+                }
+            }
+            text.to_string()
+        }
+        Value::Array(items) => items
+            .iter()
+            .map(readable_tool_output)
+            .filter(|text| !text.trim().is_empty())
+            .collect::<Vec<_>>()
+            .join("\n"),
+        Value::Object(object) => {
+            const TEXT_FIELDS: [&str; 9] = [
+                "text",
+                "content",
+                "output",
+                "stdout",
+                "stderr",
+                "message",
+                "error",
+                "result",
+                "value",
+            ];
+            let mut parts = Vec::new();
+            for field in TEXT_FIELDS {
+                let Some(value) = object.get(field) else {
+                    continue;
+                };
+                let text = readable_tool_output(value);
+                if text.trim().is_empty() {
+                    continue;
+                }
+                parts.push(if matches!(field, "stderr" | "error") {
+                    format!("{field}:\n{text}")
+                } else {
+                    text
+                });
+            }
+            if !parts.is_empty() {
+                return parts.join("\n\n");
+            }
+            serde_json::to_string_pretty(value).unwrap_or_else(|_| value.to_string())
+        }
+    }
 }
 
 fn clear_request(session: &mut ZCodeSession, request_id: &str) {

@@ -35,6 +35,12 @@ import {
   type ZCodeSession,
   type ZCodeSessionStatus,
 } from "./zcode-sessions";
+import {
+  mimoSessionKey,
+  mimoStatusLabel,
+  type MimoSession,
+  type MimoSessionStatus,
+} from "./mimo-sessions";
 
 export type UnifiedSession =
   | ClaudeSession
@@ -42,7 +48,8 @@ export type UnifiedSession =
   | OpenCodeSession
   | PiSession
   | DshSession
-  | ZCodeSession;
+  | ZCodeSession
+  | MimoSession;
 
 const CODEX_VISUAL_STATUS: Record<CodexSessionStatus, ClaudeSessionStatus> = {
   working: "working",
@@ -93,6 +100,15 @@ const ZCODE_VISUAL_STATUS: Record<ZCodeSessionStatus, ClaudeSessionStatus> = {
   stopped: "stopped",
   idle: "idle",
 };
+const MIMO_VISUAL_STATUS: Record<MimoSessionStatus, ClaudeSessionStatus> = {
+  working: "working",
+  waitingForInput: "waiting",
+  waitingForApproval: "attention",
+  toolRunning: "working",
+  toolFailed: "toolFailed",
+  stopped: "stopped",
+  idle: "idle",
+};
 
 const LIVE_STATUS_RANK: Record<ClaudeSessionStatus, number> = {
   working: 0,
@@ -109,7 +125,7 @@ export const isCodexSession = (
 
 export const isOpenCodeSession = (
   session: UnifiedSession,
-): session is OpenCodeSession => "pendingReviews" in session;
+): session is OpenCodeSession => "pendingReviews" in session && !("source" in session && session.source === "mimo");
 
 export const isPiSession = (
   session: UnifiedSession,
@@ -122,10 +138,12 @@ export const isDshSession = (
 export const isZCodeSession = (
   session: UnifiedSession,
 ): session is ZCodeSession => "reviewState" in session;
+export const isMimoSession = (session: UnifiedSession): session is MimoSession =>
+  "pendingReviews" in session && "source" in session && session.source === "mimo";
 
 export const unifiedSessionSource = (
   session: UnifiedSession,
-): "claude" | "codex" | "opencode" | "pi" | "dsh" | "zcode" =>
+): "claude" | "codex" | "opencode" | "pi" | "dsh" | "zcode" | "mimo" =>
   isCodexSession(session)
     ? "codex"
     : isOpenCodeSession(session)
@@ -136,7 +154,9 @@ export const unifiedSessionSource = (
           ? "dsh"
           : isZCodeSession(session)
             ? "zcode"
-            : "claude";
+            : isMimoSession(session)
+              ? "mimo"
+              : "claude";
 
 export const unifiedSessionKey = (session: UnifiedSession): string =>
   isOpenCodeSession(session)
@@ -147,7 +167,9 @@ export const unifiedSessionKey = (session: UnifiedSession): string =>
         ? dshSessionKey(session)
         : isZCodeSession(session)
           ? zcodeSessionKey(session)
-          : session.id;
+          : isMimoSession(session)
+            ? mimoSessionKey(session)
+            : session.id;
 
 export const unifiedSessionStatusLabel = (session: UnifiedSession): string =>
   isCodexSession(session)
@@ -160,7 +182,9 @@ export const unifiedSessionStatusLabel = (session: UnifiedSession): string =>
           ? dshStatusLabel(session.status)
           : isZCodeSession(session)
             ? zcodeSessionStatusLabel(session)
-            : sessionStatusLabel(session.status);
+            : isMimoSession(session)
+              ? mimoStatusLabel(session.status)
+              : sessionStatusLabel(session.status);
 
 export const unifiedSessionVisualStatus = (
   session: UnifiedSession,
@@ -175,7 +199,9 @@ export const unifiedSessionVisualStatus = (
           ? DSH_VISUAL_STATUS[session.status]
           : isZCodeSession(session)
             ? ZCODE_VISUAL_STATUS[session.status]
-            : session.status;
+            : isMimoSession(session)
+              ? MIMO_VISUAL_STATUS[session.status]
+              : session.status;
 
 export const unifiedSessionIsRunning = (session: UnifiedSession): boolean => {
   const status = unifiedSessionVisualStatus(session);
@@ -190,7 +216,8 @@ export const unifiedSessionLiveContent = (
     !isOpenCodeSession(session) &&
     !isPiSession(session) &&
     !isDshSession(session) &&
-    !isZCodeSession(session)
+    !isZCodeSession(session) &&
+    !isMimoSession(session)
   ) {
     return sessionLiveContent(session);
   }
@@ -215,7 +242,9 @@ export const unifiedSessionLiveContent = (
                 ? piStatusLabel(session.status)
                 : isDshSession(session)
                 ? dshStatusLabel(session.status)
-                  : zcodeSessionStatusLabel(session),
+                  : isZCodeSession(session)
+                    ? zcodeSessionStatusLabel(session)
+                    : mimoStatusLabel(session.status),
         };
 };
 
@@ -227,7 +256,8 @@ export const unifiedSessionLiveStatusText = (
     !isOpenCodeSession(session) &&
     !isPiSession(session) &&
     !isDshSession(session) &&
-    !isZCodeSession(session)
+    !isZCodeSession(session) &&
+    !isMimoSession(session)
   ) {
     return sessionLiveStatusText(session);
   }
@@ -239,13 +269,15 @@ export const unifiedSessionLiveStatusText = (
   }
   return isCodexSession(session)
     ? codexStatusLabel(session.status)
-      : isOpenCodeSession(session)
-        ? openCodeStatusLabel(session.status)
-        : isPiSession(session)
-          ? piStatusLabel(session.status)
-          : isDshSession(session)
-            ? dshStatusLabel(session.status)
-            : zcodeSessionStatusLabel(session);
+    : isOpenCodeSession(session)
+      ? openCodeStatusLabel(session.status)
+      : isPiSession(session)
+        ? piStatusLabel(session.status)
+        : isDshSession(session)
+          ? dshStatusLabel(session.status)
+          : isZCodeSession(session)
+            ? zcodeSessionStatusLabel(session)
+            : mimoStatusLabel(session.status);
 };
 
 export const hasUnifiedWorkingSession = (

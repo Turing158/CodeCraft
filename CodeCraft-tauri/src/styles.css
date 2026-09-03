@@ -810,6 +810,12 @@ button {
   opacity: 0.92;
 }
 
+.session-product__mark[data-product-kind="mimo"],
+.session-product__option-mark[data-product-kind="mimo"] {
+  border-color: rgba(249, 115, 22, 0.36);
+  background: rgba(17, 24, 39, 0.9);
+}
+
 .session-product__mark[data-product-kind="dsh"],
 .session-product__option-mark[data-product-kind="dsh"],
 .session-product__mark[data-product-kind="zcode"],
@@ -934,49 +940,32 @@ button {
   height: 26px;
   flex: none;
   place-items: center;
-  border: 1px solid var(--surface-border);
-  border-radius: 6px;
-  background: var(--field-background);
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  color: var(--text-primary);
 }
 
 .session-source-card__mark img {
-  display: block;
+  display: none;
   width: 18px;
   height: 18px;
 }
 
-.session-source-card__mark--codex img {
-  filter: invert(1);
-  opacity: 0.9;
-}
-
-.session-source-card__mark--opencode img {
-  filter: invert(1);
-  opacity: 0.95;
-}
-
-.session-source-card__mark--pi img {
-  filter: invert(1);
-  opacity: 0.92;
-}
-
-.session-source-card__mark--dsh,
-.session-source-card__mark--zcode {
-  background: transparent;
-}
-
-.session-source-card__mark--dsh img,
-.session-source-card__mark--zcode img {
-  filter: invert(1);
-}
-
-.session-source-card__mark--zcode {
-  border-color: rgba(34, 197, 94, 0.35);
-}
-
-.session-source-card__mark--zcode img {
-  width: 19px;
-  height: 19px;
+.session-source-card__mark[data-themed-icon="true"]::before,
+.hook-agent-button__mark[data-themed-icon="true"]::before {
+  width: 18px;
+  height: 18px;
+  background: currentColor;
+  content: "";
+  -webkit-mask-image: var(--agent-icon-image);
+  -webkit-mask-position: center;
+  -webkit-mask-repeat: no-repeat;
+  -webkit-mask-size: contain;
+  mask-image: var(--agent-icon-image);
+  mask-position: center;
+  mask-repeat: no-repeat;
+  mask-size: contain;
 }
 
 .session-source-card__status {
@@ -2461,34 +2450,14 @@ button {
   width: 30px;
   height: 30px;
   place-items: center;
-  border: 1px solid var(--surface-border);
-  border-radius: 7px;
-  background: var(--surface-background);
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  color: var(--text-primary);
 }
 
 .hook-agent-button__mark img {
-  width: 17px;
-  height: 17px;
-  object-fit: contain;
-}
-
-.hook-agent-button__mark[data-agent="codex"] img {
-  filter: invert(1);
-}
-
-.hook-agent-button__mark[data-agent="opencode"] img,
-.hook-agent-button__mark[data-agent="pi"] img {
-  filter: invert(1);
-}
-
-.hook-agent-button__mark[data-agent="dsh"],
-.hook-agent-button__mark[data-agent="zcode"] {
-  background: transparent;
-}
-
-.hook-agent-button__mark[data-agent="dsh"] img,
-.hook-agent-button__mark[data-agent="zcode"] img {
-  filter: invert(1);
+  display: none;
 }
 
 .hook-agent-button__copy {

@@ -27,6 +27,16 @@ import {
   type OpenCodeSnapshot,
 } from "../../src/opencode-sessions";
 import {
+  mimoPermissionRequest,
+  mimoPlanRequest,
+  mimoQuestionRequest,
+  mimoReviewKey,
+  mimoStatusLabel,
+  type MimoReview,
+  type MimoSession,
+  type MimoSnapshot,
+} from "../../src/mimo-sessions";
+import {
   piSessionEntryView,
   piSessionKey,
   piStatusLabel,
@@ -52,6 +62,7 @@ export type ConsoleSource =
   | "claude"
   | "codex"
   | "opencode"
+  | "mimo"
   | "pi"
   | "dsh"
   | "zcode";
@@ -89,6 +100,13 @@ export interface ConsolePending {
   pi?: {
     extensionInstanceId: string;
     sessionId: string;
+  };
+  mimo?: {
+    pluginInstanceId: string;
+    sessionId: string;
+    reviewId: string;
+    requestId?: string;
+    reviewType: MimoReview["reviewType"];
   };
   dsh?: {
     bridgeInstanceId: string;
@@ -139,6 +157,7 @@ export interface RawSnapshot {
   claude?: ClaudeSessionSnapshot | null;
   codex?: CodexSnapshot | null;
   opencode?: OpenCodeSnapshot | null;
+  mimo?: MimoSnapshot | null;
   pi?: PiSnapshot | null;
   dsh?: DshSnapshot | null;
   zcode?: ZCodeSnapshot | null;
@@ -178,6 +197,13 @@ const emptyOpenCode: OpenCodeSnapshot = {
 };
 
 const emptyPi: PiSnapshot = {
+  connected: false,
+  integrationError: null,
+  sessions: [],
+  instances: [],
+};
+
+const emptyMimo: MimoSnapshot = {
   connected: false,
   integrationError: null,
   sessions: [],
@@ -375,6 +401,25 @@ const piPending = (session: PiSession): ConsolePending | null => {
   }
 };
 
+const mimoPending = (session: MimoSession): ConsolePending | null => {
+  const review = [...session.pendingReviews].sort((left, right) => left.capturedAt - right.capturedAt)[0];
+  if (!review) return null;
+  const target = {
+    pluginInstanceId: review.pluginInstanceId,
+    sessionId: review.sessionId,
+    reviewId: review.reviewId,
+    requestId: "requestId" in review ? review.requestId : undefined,
+    reviewType: review.reviewType,
+  };
+  if (review.reviewType === "plan") {
+    return { kind: "plan", requestId: mimoReviewKey(review), readOnly: false, plan: mimoPlanRequest(review, session), mimo: target };
+  }
+  if (review.reviewType === "question") {
+    return { kind: "question", requestId: mimoReviewKey(review), readOnly: false, question: mimoQuestionRequest(review), mimo: target };
+  }
+  return { kind: "permission", requestId: mimoReviewKey(review), readOnly: false, permission: mimoPermissionRequest(review, session), mimo: target };
+};
+
 const dshPending = (session: DshSession): ConsolePending | null => {
   const target = {
     bridgeInstanceId: session.bridgeInstanceId,
@@ -447,6 +492,7 @@ const sourceFromHookId = (id: string | undefined): ConsoleSource | undefined => 
   if (id === "claudeCode") return "claude";
   if (id === "codex") return "codex";
   if (id === "openCode") return "opencode";
+  if (id === "mimo") return "mimo";
   if (id === "pi") return "pi";
   if (id === "deepSeekHarness") return "dsh";
   if (id === "zCode") return "zcode";
@@ -460,6 +506,8 @@ const integrationName = (source: ConsoleSource): string =>
       ? "Codex"
       : source === "opencode"
         ? "OpenCode"
+        : source === "mimo"
+          ? "Mimo"
         : source === "pi"
           ? "PI"
           : source === "dsh"
@@ -511,6 +559,20 @@ const piEntry = (session: PiSession): ConsoleEntry => ({
   })),
   outputs: session.outputs.map((output) => ({ id: output.id, text: output.text })),
   pending: piPending(session),
+});
+
+const mimoEntry = (session: MimoSession): ConsoleEntry => ({
+  key: `mimo:${session.pluginInstanceId}:${session.id}`,
+  source: "mimo",
+  sessionId: session.id,
+  title: session.title,
+  status: session.status,
+  statusLabel: mimoStatusLabel(session.status),
+  cwd: session.cwd,
+  updatedAt: session.updatedAt,
+  activities: session.activities.map((activity) => ({ id: activity.id, tool: activity.tool, summary: activity.summary, status: activity.status, updatedAt: activity.updatedAt })),
+  outputs: session.outputs.map((output) => ({ id: output.id, text: output.text })),
+  pending: mimoPending(session),
 });
 
 const dshEntry = (session: DshSession): ConsoleEntry => ({
@@ -601,6 +663,9 @@ export const mergeSnapshot = (raw: RawSnapshot): ConsoleSnapshot => {
   const opencode = isRecord(raw.opencode)
     ? { ...emptyOpenCode, ...(raw.opencode as OpenCodeSnapshot) }
     : emptyOpenCode;
+  const mimo = isRecord(raw.mimo)
+    ? { ...emptyMimo, ...(raw.mimo as MimoSnapshot) }
+    : emptyMimo;
   const pi = isRecord(raw.pi)
     ? { ...emptyPi, ...(raw.pi as PiSnapshot) }
     : emptyPi;
@@ -615,6 +680,7 @@ export const mergeSnapshot = (raw: RawSnapshot): ConsoleSnapshot => {
     ...claude.sessions.map(claudeEntry),
     ...codex.sessions.map((session) => codexEntry(session, codex.interactions)),
     ...opencode.sessions.map(openCodeEntry),
+    ...mimo.sessions.map(mimoEntry),
     ...pi.sessions.map(piEntry),
     ...dsh.sessions.map(dshEntry),
     ...zcode.sessions.map(zcodeEntry),
@@ -624,6 +690,7 @@ export const mergeSnapshot = (raw: RawSnapshot): ConsoleSnapshot => {
     claude: claude.sessions.length,
     codex: codex.sessions.length,
     opencode: opencode.sessions.length,
+    mimo: mimo.sessions.length,
     pi: pi.sessions.length,
     dsh: dsh.sessions.length,
     zcode: zcode.sessions.length,
@@ -675,6 +742,15 @@ const buildIntegrations = (
         hookInstalled: true,
       },
       {
+        source: "mimo",
+        name: integrationName("mimo"),
+        connected: mimoConnected(raw),
+        error: integrationError(raw, "mimo"),
+        sessionCount: counts.mimo,
+        agentInstalled: true,
+        hookInstalled: true,
+      },
+      {
         source: "pi",
         name: integrationName("pi"),
         connected: piConnected(raw),
@@ -714,6 +790,8 @@ const buildIntegrations = (
           ? codexConnected(raw)
           : source === "opencode"
             ? opencodeConnected(raw)
+            : source === "mimo"
+              ? mimoConnected(raw)
             : source === "pi"
               ? piConnected(raw)
               : source === "dsh"
@@ -739,6 +817,8 @@ const codexConnected = (raw: RawSnapshot): boolean =>
   isRecord(raw.codex) ? raw.codex.connected === true : false;
 const opencodeConnected = (raw: RawSnapshot): boolean =>
   isRecord(raw.opencode) ? raw.opencode.connected === true : false;
+const mimoConnected = (raw: RawSnapshot): boolean =>
+  isRecord(raw.mimo) ? raw.mimo.connected === true : false;
 const piConnected = (raw: RawSnapshot): boolean =>
   isRecord(raw.pi) ? raw.pi.connected === true : false;
 const dshConnected = (raw: RawSnapshot): boolean =>
@@ -760,6 +840,10 @@ const integrationError = (raw: RawSnapshot, source: ConsoleSource): string | nul
           ? isRecord(raw.opencode)
             ? raw.opencode.integrationError
             : null
+          : source === "mimo"
+            ? isRecord(raw.mimo)
+              ? raw.mimo.integrationError
+              : null
           : source === "pi"
             ? isRecord(raw.pi)
               ? raw.pi.integrationError

@@ -4,7 +4,7 @@ use std::{
     path::Path,
     sync::{
         atomic::{AtomicBool, AtomicU64, AtomicUsize, Ordering},
-        Mutex,
+        Mutex, OnceLock,
     },
     thread,
     time::{Duration, Instant},
@@ -32,6 +32,8 @@ mod lan_server;
 mod native_sound;
 mod opencode;
 mod opencode_hook;
+mod mimo;
+mod mimo_hook;
 mod pi;
 mod pi_hook;
 mod zcode;
@@ -65,6 +67,17 @@ static REOPEN_REQUESTED: AtomicBool = AtomicBool::new(false);
 static OPEN_SETTINGS_REQUESTED: AtomicBool = AtomicBool::new(false);
 static PANEL_RESIZE_LOCK: Mutex<()> = Mutex::new(());
 static PANEL_POSITION_LOCK: Mutex<()> = Mutex::new(());
+// Hook status reads can repair managed files, so they must not race with an
+// install or uninstall. Keep this lock separate from the panel locks so the
+// slow refresh cannot stall unrelated window and settings commands.
+static HOOK_CONFIGURATION_LOCK: OnceLock<Mutex<()>> = OnceLock::new();
+
+fn hook_configuration_lock() -> Result<std::sync::MutexGuard<'static, ()>, String> {
+    HOOK_CONFIGURATION_LOCK
+        .get_or_init(|| Mutex::new(()))
+        .lock()
+        .map_err(|error| error.to_string())
+}
 
 #[derive(Default)]
 struct ClaudeIntegrationState {
@@ -97,6 +110,12 @@ struct CodexIntegrationState {
 #[derive(Default)]
 struct OpenCodeIntegrationState {
     store: Mutex<opencode::OpenCodeStore>,
+    hook_error: Mutex<Option<String>>,
+}
+
+#[derive(Default)]
+struct MimoIntegrationState {
+    store: Mutex<mimo::MimoStore>,
     hook_error: Mutex<Option<String>>,
 }
 
@@ -160,6 +179,7 @@ enum HookAgentId {
     ClaudeCode,
     Codex,
     OpenCode,
+    Mimo,
     Pi,
     DeepSeekHarness,
     ZCode,
@@ -171,6 +191,7 @@ impl hook_config::HookInstallConfig {
             HookAgentId::ClaudeCode => self.claude_code,
             HookAgentId::Codex => self.codex,
             HookAgentId::OpenCode => self.open_code,
+            HookAgentId::Mimo => self.mimo,
             HookAgentId::Pi => self.pi,
             HookAgentId::DeepSeekHarness => self.deep_seek_harness,
             HookAgentId::ZCode => self.z_code,
@@ -182,6 +203,7 @@ impl hook_config::HookInstallConfig {
             HookAgentId::ClaudeCode => self.claude_code = enabled,
             HookAgentId::Codex => self.codex = enabled,
             HookAgentId::OpenCode => self.open_code = enabled,
+            HookAgentId::Mimo => self.mimo = enabled,
             HookAgentId::Pi => self.pi = enabled,
             HookAgentId::DeepSeekHarness => self.deep_seek_harness = enabled,
             HookAgentId::ZCode => self.z_code = enabled,
@@ -195,6 +217,7 @@ impl HookAgentId {
             Self::ClaudeCode => "claude",
             Self::Codex => "codex",
             Self::OpenCode => "opencode",
+            Self::Mimo => "mimo",
             Self::Pi => "pi",
             Self::DeepSeekHarness => "dsh",
             Self::ZCode => "zcode",
@@ -206,6 +229,7 @@ impl HookAgentId {
             Self::ClaudeCode => "Claude Code",
             Self::Codex => "Codex",
             Self::OpenCode => "OpenCode",
+            Self::Mimo => "Mimo",
             Self::Pi => "PI",
             Self::DeepSeekHarness => "DeepSeek Harness",
             Self::ZCode => "ZCode",
@@ -289,6 +313,19 @@ fn opencode_install_state_label(state: opencode_hook::OpenCodeHookInstallState) 
     .to_string()
 }
 
+fn mimo_install_state_label(state: mimo_hook::MimoHookInstallState) -> String {
+    match state {
+        mimo_hook::MimoHookInstallState::NotInstalled => "notInstalled",
+        mimo_hook::MimoHookInstallState::Installed => "installed",
+        mimo_hook::MimoHookInstallState::SyncedRestartRequired => "syncedRestartRequired",
+        mimo_hook::MimoHookInstallState::Modified => "modified",
+        mimo_hook::MimoHookInstallState::Conflict => "conflict",
+        mimo_hook::MimoHookInstallState::Incompatible => "incompatible",
+        mimo_hook::MimoHookInstallState::Error => "error",
+    }
+    .to_string()
+}
+
 fn pi_install_state_label(state: pi_hook::PiHookInstallState) -> String {
     match state {
         pi_hook::PiHookInstallState::NotInstalled => "notInstalled",
@@ -346,6 +383,18 @@ fn save_hook_installation_state(agent: HookAgentId, enabled: bool) -> Result<(),
 pub(crate) fn hook_statuses(
     state: &CodexIntegrationState,
     opencode_state: &OpenCodeIntegrationState,
+    mimo_state: &MimoIntegrationState,
+    dsh_state: &DshIntegrationState,
+    zcode_state: &ZCodeIntegrationState,
+) -> Result<Vec<HookIntegrationStatus>, String> {
+    let _lock = hook_configuration_lock()?;
+    hook_statuses_unlocked(state, opencode_state, mimo_state, dsh_state, zcode_state)
+}
+
+fn hook_statuses_unlocked(
+    state: &CodexIntegrationState,
+    opencode_state: &OpenCodeIntegrationState,
+    mimo_state: &MimoIntegrationState,
     dsh_state: &DshIntegrationState,
     zcode_state: &ZCodeIntegrationState,
 ) -> Result<Vec<HookIntegrationStatus>, String> {
@@ -393,6 +442,26 @@ pub(crate) fn hook_statuses(
             installed_version: opencode.installed_version,
             running_versions: opencode.running_versions,
             error: opencode.error,
+        },
+        {
+            let status = mimo_hook::status()?;
+            let runtime_error = mimo_state
+                .hook_error
+                .lock()
+                .map_err(|error| error.to_string())?
+                .clone();
+            HookIntegrationStatus {
+                id: HookAgentId::Mimo,
+                name: HookAgentId::Mimo.display_name(),
+                agent_installed: agent_is_installed(HookAgentId::Mimo, state)?,
+                hook_installed: status.installed(),
+                install_state: Some(mimo_install_state_label(status.state)),
+                install_path: Some(status.install_path),
+                bundled_version: Some(status.bundled_version.to_string()),
+                installed_version: status.installed_version,
+                running_versions: status.running_versions,
+                error: status.error.or(runtime_error),
+            }
         },
         {
             let status = pi_hook::status()?;
@@ -1746,6 +1815,7 @@ fn claude_snapshot(state: &ClaudeIntegrationState) -> Result<ClaudeSessionSnapsh
 
 #[tauri::command]
 fn claude_hook_install(state: tauri::State<'_, ClaudeIntegrationState>) -> Result<(), String> {
+    let _lock = hook_configuration_lock()?;
     let executable = std::env::current_exe().map_err(|error| error.to_string())?;
     claude_hook::install_claude_hooks(&executable)?;
     save_hook_installation_state(HookAgentId::ClaudeCode, true)?;
@@ -1754,13 +1824,25 @@ fn claude_hook_install(state: tauri::State<'_, ClaudeIntegrationState>) -> Resul
 }
 
 #[tauri::command]
-fn list_hook_integrations(
-    state: tauri::State<'_, CodexIntegrationState>,
-    opencode_state: tauri::State<'_, OpenCodeIntegrationState>,
-    dsh_state: tauri::State<'_, DshIntegrationState>,
-    zcode_state: tauri::State<'_, ZCodeIntegrationState>,
+async fn list_hook_integrations(
+    app: tauri::AppHandle,
 ) -> Result<Vec<HookIntegrationStatus>, String> {
-    hook_statuses(&state, &opencode_state, &dsh_state, &zcode_state)
+    tauri::async_runtime::spawn_blocking(move || {
+        let state = app.state::<CodexIntegrationState>();
+        let opencode_state = app.state::<OpenCodeIntegrationState>();
+        let mimo_state = app.state::<MimoIntegrationState>();
+        let dsh_state = app.state::<DshIntegrationState>();
+        let zcode_state = app.state::<ZCodeIntegrationState>();
+        hook_statuses(
+            &state,
+            &opencode_state,
+            &mimo_state,
+            &dsh_state,
+            &zcode_state,
+        )
+    })
+    .await
+    .map_err(|error| error.to_string())?
 }
 
 #[tauri::command]
@@ -1770,11 +1852,13 @@ fn pi_hook_status() -> Result<pi_hook::PiHookStatus, String> {
 
 #[tauri::command]
 fn pi_hook_install() -> Result<pi_hook::PiHookStatus, String> {
+    let _lock = hook_configuration_lock()?;
     pi_hook::install()
 }
 
 #[tauri::command]
 fn pi_hook_uninstall() -> Result<(), String> {
+    let _lock = hook_configuration_lock()?;
     pi_hook::uninstall()
 }
 
@@ -2246,6 +2330,94 @@ fn submit_opencode_tool_gate(
     store.submit_gate(&plugin_instance_id, &session_id, &review_id, &action)
 }
 
+#[tauri::command]
+fn list_mimo_sessions(
+    state: tauri::State<'_, MimoIntegrationState>,
+) -> Result<mimo::MimoSnapshot, String> {
+    mimo_snapshot(&state)
+}
+
+pub(crate) fn mimo_snapshot(
+    state: &MimoIntegrationState,
+) -> Result<mimo::MimoSnapshot, String> {
+    let hook_error = state
+        .hook_error
+        .lock()
+        .map_err(|error| error.to_string())?
+        .clone();
+    state
+        .store
+        .lock()
+        .map_err(|error| error.to_string())?
+        .snapshot(hook_error)
+}
+
+#[tauri::command]
+fn mimo_respond_question(
+    plugin_instance_id: String,
+    session_id: String,
+    request_id: String,
+    answers: Vec<Vec<String>>,
+    state: tauri::State<'_, MimoIntegrationState>,
+) -> Result<(), String> {
+    let mut store = state.store.lock().map_err(|error| error.to_string())?;
+    store.drain_inbox()?;
+    store.submit_question(&plugin_instance_id, &session_id, &request_id, answers)
+}
+
+#[tauri::command]
+fn mimo_reject_question(
+    plugin_instance_id: String,
+    session_id: String,
+    request_id: String,
+    state: tauri::State<'_, MimoIntegrationState>,
+) -> Result<(), String> {
+    let mut store = state.store.lock().map_err(|error| error.to_string())?;
+    store.drain_inbox()?;
+    store.reject_question(&plugin_instance_id, &session_id, &request_id)
+}
+
+#[tauri::command]
+fn mimo_respond_approval(
+    plugin_instance_id: String,
+    session_id: String,
+    request_id: String,
+    action: String,
+    message: Option<String>,
+    state: tauri::State<'_, MimoIntegrationState>,
+) -> Result<(), String> {
+    let mut store = state.store.lock().map_err(|error| error.to_string())?;
+    store.drain_inbox()?;
+    store.submit_permission(&plugin_instance_id, &session_id, &request_id, &action, message)
+}
+
+#[tauri::command]
+fn mimo_respond_gate(
+    plugin_instance_id: String,
+    session_id: String,
+    review_id: String,
+    action: String,
+    state: tauri::State<'_, MimoIntegrationState>,
+) -> Result<(), String> {
+    let mut store = state.store.lock().map_err(|error| error.to_string())?;
+    store.drain_inbox()?;
+    store.submit_gate(&plugin_instance_id, &session_id, &review_id, &action)
+}
+
+#[tauri::command]
+fn mimo_respond_plan(
+    plugin_instance_id: String,
+    session_id: String,
+    request_id: String,
+    approved: bool,
+    feedback: Option<String>,
+    state: tauri::State<'_, MimoIntegrationState>,
+) -> Result<(), String> {
+    let mut store = state.store.lock().map_err(|error| error.to_string())?;
+    store.drain_inbox()?;
+    store.submit_plan(&plugin_instance_id, &session_id, &request_id, approved, feedback)
+}
+
 async fn wait_for_opencode_decision(
     state: &OpenCodeIntegrationState,
     decision_id: &str,
@@ -2305,9 +2477,11 @@ async fn send_opencode_session_message(
 #[tauri::command]
 async fn install_agent_hook(agent: HookAgentId, app: tauri::AppHandle) -> Result<(), String> {
     tauri::async_runtime::spawn_blocking(move || {
+        let _lock = hook_configuration_lock()?;
         let claude_state = app.state::<ClaudeIntegrationState>();
         let codex_state = app.state::<CodexIntegrationState>();
         let opencode_state = app.state::<OpenCodeIntegrationState>();
+        let mimo_state = app.state::<MimoIntegrationState>();
         let pi_state = app.state::<PiIntegrationState>();
         let dsh_state = app.state::<DshIntegrationState>();
         let zcode_state = app.state::<ZCodeIntegrationState>();
@@ -2347,6 +2521,14 @@ async fn install_agent_hook(agent: HookAgentId, app: tauri::AppHandle) -> Result
                     .lock()
                     .map_err(|error| error.to_string())? = status.error;
             }
+            HookAgentId::Mimo => {
+                let status = mimo_hook::install()?;
+                save_hook_installation_state(agent, true)?;
+                *mimo_state
+                    .hook_error
+                    .lock()
+                    .map_err(|error| error.to_string())? = status.error;
+            }
             HookAgentId::Pi => {
                 let status = pi_hook::install()?;
                 save_hook_installation_state(agent, true)?;
@@ -2381,9 +2563,11 @@ async fn install_agent_hook(agent: HookAgentId, app: tauri::AppHandle) -> Result
 #[tauri::command]
 async fn uninstall_agent_hook(agent: HookAgentId, app: tauri::AppHandle) -> Result<(), String> {
     tauri::async_runtime::spawn_blocking(move || {
+        let _lock = hook_configuration_lock()?;
         let claude_state = app.state::<ClaudeIntegrationState>();
         let codex_state = app.state::<CodexIntegrationState>();
         let opencode_state = app.state::<OpenCodeIntegrationState>();
+        let mimo_state = app.state::<MimoIntegrationState>();
         let pi_state = app.state::<PiIntegrationState>();
         let dsh_state = app.state::<DshIntegrationState>();
         let zcode_state = app.state::<ZCodeIntegrationState>();
@@ -2424,6 +2608,14 @@ async fn uninstall_agent_hook(agent: HookAgentId, app: tauri::AppHandle) -> Resu
                     .hook_error
                     .lock()
                     .map_err(|error| error.to_string())? = Some("OpenCode Hook 未安装".to_string());
+            }
+            HookAgentId::Mimo => {
+                mimo_hook::uninstall()?;
+                save_hook_installation_state(agent, false)?;
+                *mimo_state
+                    .hook_error
+                    .lock()
+                    .map_err(|error| error.to_string())? = Some("Mimo Hook 未安装".to_string());
             }
             HookAgentId::Pi => {
                 pi_hook::uninstall()?;
@@ -2716,6 +2908,7 @@ async fn codex_hook_install(
     project_dir: Option<String>,
 ) -> Result<String, String> {
     tauri::async_runtime::spawn_blocking(move || {
+        let _lock = hook_configuration_lock()?;
         let state = app.state::<CodexIntegrationState>();
         let executable = std::env::current_exe().map_err(|error| error.to_string())?;
         let selected_project = project_dir.or_else(|| {
@@ -2990,6 +3183,8 @@ fn watch_tray_and_minimal_mode_sounds(app: tauri::AppHandle) {
             let codex_snapshot = codex_snapshot(&codex_state);
             let opencode_state = app.state::<OpenCodeIntegrationState>();
             let opencode_snapshot = opencode_snapshot(&opencode_state);
+            let mimo_state = app.state::<MimoIntegrationState>();
+            let mimo_snapshot = mimo_snapshot(&mimo_state);
             let pi_state = app.state::<PiIntegrationState>();
             let pi_snapshot = pi_snapshot(&pi_state);
             let dsh_state = app.state::<DshIntegrationState>();
@@ -2997,10 +3192,11 @@ fn watch_tray_and_minimal_mode_sounds(app: tauri::AppHandle) {
             let zcode_state = app.state::<ZCodeIntegrationState>();
             let zcode_snapshot = zcode_snapshot(&zcode_state);
 
-            if let (Ok(claude), Ok(codex), Ok(opencode), Ok(pi), Ok(dsh), Ok(zcode)) = (
+            if let (Ok(claude), Ok(codex), Ok(opencode), Ok(mimo), Ok(pi), Ok(dsh), Ok(zcode)) = (
                 &claude_snapshot,
                 &codex_snapshot,
                 &opencode_snapshot,
+                &mimo_snapshot,
                 &pi_snapshot,
                 &dsh_snapshot,
                 &zcode_snapshot,
@@ -3016,6 +3212,11 @@ fn watch_tray_and_minimal_mode_sounds(app: tauri::AppHandle) {
                         .filter(|session| session.is_active())
                         .count()
                     + opencode
+                        .sessions
+                        .iter()
+                        .filter(|session| session.is_active())
+                        .count()
+                    + mimo
                         .sessions
                         .iter()
                         .filter(|session| session.is_active())
@@ -3087,6 +3288,11 @@ fn watch_tray_and_minimal_mode_sounds(app: tauri::AppHandle) {
                             observer.observe("opencode", &value);
                         }
                     }
+                    if let Ok(snapshot) = &mimo_snapshot {
+                        if let Ok(value) = serde_json::to_value(snapshot) {
+                            observer.observe("mimo", &value);
+                        }
+                    }
                     if let Ok(snapshot) = &pi_snapshot {
                         if let Ok(value) = serde_json::to_value(snapshot) {
                             observer.observe("pi", &value);
@@ -3126,6 +3332,7 @@ pub fn run() {
         .manage(ClaudeIntegrationState::default())
         .manage(CodexIntegrationState::default())
         .manage(OpenCodeIntegrationState::default())
+        .manage(MimoIntegrationState::default())
         .manage(PiIntegrationState::default())
         .manage(DshIntegrationState::default())
         .manage(ZCodeIntegrationState::default())
@@ -3349,6 +3556,41 @@ pub fn run() {
                 .lock()
                 .map_err(|error| error.to_string())? = opencode_error.or(opencode_sync_error);
 
+            let mimo_state = app.state::<MimoIntegrationState>();
+            let mimo_configured = hook_install_config.is_enabled(HookAgentId::Mimo);
+            let mimo_status = if mimo_configured {
+                mimo_hook::status_and_sync()
+            } else {
+                mimo_hook::status()
+            };
+            let mimo_error = match mimo_status {
+                Ok(status) if status.installed() => {
+                    if !mimo_configured {
+                        hook_install_config.set_enabled(HookAgentId::Mimo, true);
+                        hook_config_changed = true;
+                    }
+                    status.error
+                }
+                Ok(status)
+                    if mimo_configured
+                        && status.state == mimo_hook::MimoHookInstallState::NotInstalled =>
+                {
+                    match mimo_hook::install() {
+                        Ok(installed) => installed.error,
+                        Err(error) => Some(error),
+                    }
+                }
+                Ok(status) => status
+                    .error
+                    .or_else(|| Some("Mimo Hook 未安装".to_string())),
+                Err(error) => Some(error),
+            };
+            let mimo_sync_error = mimo_hook::sync_approval_mode(approval_settings.mode).err();
+            *mimo_state
+                .hook_error
+                .lock()
+                .map_err(|error| error.to_string())? = mimo_error.or(mimo_sync_error);
+
             if hook_config_changed {
                 if let Err(error) = hook_config::save(&hook_install_config) {
                     eprintln!("Unable to persist hook installation config: {error}");
@@ -3497,6 +3739,12 @@ pub fn run() {
             submit_opencode_tool_gate,
             switch_opencode_agent,
             send_opencode_session_message,
+            list_mimo_sessions,
+            mimo_respond_question,
+            mimo_reject_question,
+            mimo_respond_approval,
+            mimo_respond_gate,
+            mimo_respond_plan,
             submit_claude_question_answer,
             submit_claude_permission_decision,
             submit_claude_plan_decision,

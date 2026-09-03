@@ -252,7 +252,7 @@ fn frame_for(source: &str, session: &Value, interactions: &[Value]) -> SoundFram
             .and_then(|value| value.get("requestId"))
             .and_then(Value::as_str)
             .map(str::to_owned),
-        "opencode" => review
+        "opencode" | "mimo" => review
             .filter(|value| {
                 matches!(
                     value.get("reviewType").and_then(Value::as_str),
@@ -273,6 +273,11 @@ fn frame_for(source: &str, session: &Value, interactions: &[Value]) -> SoundFram
         "codex" => interaction
             .filter(|value| value.get("kind").and_then(Value::as_str) == Some("plan"))
             .and_then(|value| value.get("requestId"))
+            .and_then(Value::as_str)
+            .map(str::to_owned),
+        "mimo" => review
+            .filter(|value| value.get("reviewType").and_then(Value::as_str) == Some("plan"))
+            .and_then(|value| value.get("reviewId"))
             .and_then(Value::as_str)
             .map(str::to_owned),
         _ => None,

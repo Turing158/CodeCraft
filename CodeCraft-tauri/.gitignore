@@ -47,3 +47,4 @@ src-tauri/icons/icon/*
 !src-tauri/icons/icon/sea-lantern.svg
 !src-tauri/icons/icon/deepseek.svg
 !src-tauri/icons/icon/zcode.svg
+!src-tauri/icons/icon/mimo.svg

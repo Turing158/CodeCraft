@@ -175,6 +175,26 @@ export const submitPiQuestion = (
     body: JSON.stringify({ ...target, requestId, answers }),
   });
 
+export interface MimoTarget {
+  pluginInstanceId: string;
+  sessionId: string;
+  reviewId: string;
+  requestId?: string;
+}
+
+export const submitMimoQuestion = (target: MimoTarget, answers: string[][]) =>
+  request<{ ok: boolean }>("/api/mimo/question", { method: "POST", body: JSON.stringify({ ...target, requestId: target.requestId ?? target.reviewId, answers }) });
+export const rejectMimoQuestion = (target: MimoTarget) =>
+  request<{ ok: boolean }>("/api/mimo/question/reject", { method: "POST", body: JSON.stringify({ ...target, requestId: target.requestId ?? target.reviewId, answers: [] }) });
+export type MimoPermissionDecision = "once" | "always" | "reject";
+export const submitMimoPermission = (target: MimoTarget, action: MimoPermissionDecision) =>
+  request<{ ok: boolean }>("/api/mimo/permission", { method: "POST", body: JSON.stringify({ ...target, requestId: target.requestId ?? target.reviewId, action, message: null }) });
+export type MimoGateDecision = "allowOnce" | "allowSession" | "reject";
+export const submitMimoGate = (target: MimoTarget, action: MimoGateDecision) =>
+  request<{ ok: boolean }>("/api/mimo/gate", { method: "POST", body: JSON.stringify({ ...target, action }) });
+export const submitMimoPlan = (target: MimoTarget, approved: boolean, feedback: string | null) =>
+  request<{ ok: boolean }>("/api/mimo/plan", { method: "POST", body: JSON.stringify({ ...target, requestId: target.requestId ?? target.reviewId, approved, feedback }) });
+
 export interface DshTarget {
   bridgeInstanceId: string;
   pluginInstanceId: string;

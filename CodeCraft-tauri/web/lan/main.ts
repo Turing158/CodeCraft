@@ -759,10 +759,12 @@ const renderReview = (entry: ConsoleEntry | undefined) => {
       const isCodex = entry.source === "codex";
       const isOpenCode = entry.source === "opencode";
       const isPi = entry.source === "pi";
+      const isMimo = entry.source === "mimo";
       const isDsh = entry.source === "dsh";
       const isZCode = entry.source === "zcode";
       const openCodeTarget = pending.openCode;
       const piTarget = pending.pi;
+      const mimoTarget = pending.mimo;
       const dshTarget = pending.dsh;
       const zcodeTarget = pending.zcode;
       const openCodePermission = (action: "once" | "always" | "reject") =>
@@ -781,6 +783,10 @@ const renderReview = (entry: ConsoleEntry | undefined) => {
                     : openCodePermission("once")
                   : isPi && piTarget
                     ? api.submitPiPermission(piTarget, pending.requestId, "allowOnce")
+                    : isMimo && mimoTarget
+                      ? mimoTarget.reviewType === "strictToolGate"
+                        ? api.submitMimoGate(mimoTarget, "allowOnce")
+                        : api.submitMimoPermission(mimoTarget, "once")
                     : isDsh && dshTarget
                       ? api.submitDshPermission(
                           dshTarget,
@@ -811,6 +817,10 @@ const renderReview = (entry: ConsoleEntry | undefined) => {
                         : openCodePermission("always")
                       : isPi && piTarget
                         ? api.submitPiPermission(piTarget, pending.requestId, "allowSession")
+                        : isMimo && mimoTarget
+                          ? mimoTarget.reviewType === "strictToolGate"
+                            ? api.submitMimoGate(mimoTarget, "allowSession")
+                            : api.submitMimoPermission(mimoTarget, "always")
                         : api.submitPermission(pending.requestId, "allowAlways"),
               isPi ? "已保存本会话允许规则" : "已在本会话中始终允许",
             );
@@ -829,6 +839,10 @@ const renderReview = (entry: ConsoleEntry | undefined) => {
                     : openCodePermission("reject")
                   : isPi && piTarget
                     ? api.submitPiPermission(piTarget, pending.requestId, "deny")
+                    : isMimo && mimoTarget
+                      ? mimoTarget.reviewType === "strictToolGate"
+                        ? api.submitMimoGate(mimoTarget, "reject")
+                        : api.submitMimoPermission(mimoTarget, "reject")
                     : isDsh && dshTarget
                       ? api.submitDshPermission(
                           dshTarget,
@@ -855,7 +869,8 @@ const renderReview = (entry: ConsoleEntry | undefined) => {
     if (actionable) {
       const isDsh = entry.source === "dsh" && pending.dsh;
       const isZCode = entry.source === "zcode" && pending.zcode;
-      const isFeedbackPlan = isDsh || isZCode;
+      const isMimo = entry.source === "mimo" && pending.mimo;
+      const isFeedbackPlan = isDsh || isZCode || isMimo;
       reviewActions.append(
         actionButton(isFeedbackPlan ? "批准计划" : "按计划执行", "primary", () => {
           void guardedSubmit(
@@ -874,6 +889,8 @@ const renderReview = (entry: ConsoleEntry | undefined) => {
                       true,
                       null,
                     )
+                : isMimo
+                  ? api.submitMimoPlan(pending.mimo!, true, null)
                 : api.submitPlan(pending.requestId, null),
             isFeedbackPlan ? "已批准计划" : "已开始按计划执行",
           );
@@ -885,7 +902,9 @@ const renderReview = (entry: ConsoleEntry | undefined) => {
         const feedback = document.createElement("textarea");
         feedback.placeholder = isZCode
           ? "输入反馈，让 ZCode 继续规划"
-          : "输入反馈，让 DeepSeek Harness 继续规划";
+          : isMimo
+            ? "输入反馈，让 Mimo 继续规划"
+            : "输入反馈，让 DeepSeek Harness 继续规划";
         feedback.disabled = submitting;
         feedbackBlock.append(feedback);
         reviewQuestions.append(feedbackBlock);
@@ -904,12 +923,14 @@ const renderReview = (entry: ConsoleEntry | undefined) => {
                     false,
                     note,
                   )
-                : api.submitDshPlan(
-                    pending.dsh!,
-                    pending.requestId,
-                    false,
-                    note,
-                  ),
+                : isMimo
+                  ? api.submitMimoPlan(pending.mimo!, false, note)
+                  : api.submitDshPlan(
+                      pending.dsh!,
+                      pending.requestId,
+                      false,
+                      note,
+                    ),
               "已提交计划反馈",
             );
           }),
@@ -940,6 +961,14 @@ const renderReview = (entry: ConsoleEntry | undefined) => {
                   ...(answer.extraText?.trim() ? [answer.extraText.trim()] : []),
                 ]),
               )
+            : entry.source === "mimo" && pending.mimo
+              ? api.submitMimoQuestion(
+                  pending.mimo,
+                  submission.answers.map((answer) => [
+                    ...answer.selectedOptionLabels.filter((label) => label !== "其他"),
+                    ...(answer.extraText?.trim() ? [answer.extraText.trim()] : []),
+                  ]),
+                )
             : entry.source === "dsh" && pending.dsh
               ? api.submitDshQuestion(
                   pending.dsh,
@@ -957,11 +986,17 @@ const renderReview = (entry: ConsoleEntry | undefined) => {
       });
       submit.disabled = submit.disabled || !answered;
       reviewActions.append(submit);
-      if (entry.source === "opencode" && pending.openCode) {
+      if (
+        (entry.source === "opencode" && pending.openCode) ||
+        (entry.source === "mimo" && pending.mimo)
+      ) {
         reviewActions.append(
           actionButton("拒绝回答", "danger", () => {
             void guardedSubmit(
-              () => api.rejectOpenCodeQuestion(pending.openCode!),
+              () =>
+                entry.source === "mimo"
+                  ? api.rejectMimoQuestion(pending.mimo!)
+                  : api.rejectOpenCodeQuestion(pending.openCode!),
               "已拒绝回答",
             );
           }),
