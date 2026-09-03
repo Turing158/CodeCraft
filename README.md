@@ -56,9 +56,9 @@ CodeCraft 自己不写代码，它负责盯着下面这些 AI 编程助手。装
 | <img src="docs/assets/agent-codex.svg" width="20" height="20" align="absmiddle" alt="" />&nbsp; **Codex**<br /><sub>OpenAI</sub> | 会话状态与工具调用审批可以在面板里处理。它的提问和计划确认是只读的，只能回到原来的 Codex 窗口完成，面板会提供一个跳转按钮帮你切过去。 |
 | <img src="docs/assets/agent-opencode.svg" width="20" height="20" align="absmiddle" alt="" />&nbsp; **OpenCode**<br /><sub>opencode.ai</sub> | 会话状态、工具调用、原生权限审批和提问都能在面板里处理，权限决定支持"允许一次""始终允许""拒绝"，另有一个可选的全工具门禁模式，让每个工具调用都先经过你确认。计划确认暂未接入，需要回到 OpenCode 窗口完成。 |
 | <img src="docs/assets/agent-mimo.svg" width="20" height="20" align="absmiddle" alt="" />&nbsp; **Mimo**<br /><sub>Xiaomi</sub> | 通过用户级 Mimo 插件同步会话、工具活动、回答、提问和计划审阅。权限支持"允许一次""始终允许""拒绝"，也可开启全工具门禁；计划可以批准，或携带反馈继续规划。 |
-| **PI** | 会话、工具活动、权限审批和提问可在面板与局域网控制台处理；支持允许一次、会话内允许和拒绝，计划确认暂未接入。 |
+| <img src="docs/assets/agent-pi.svg" width="20" height="20" align="absmiddle" alt="" />&nbsp; **PI** | 会话、工具活动、权限审批和提问可在面板与局域网控制台处理；支持允许一次、会话内允许和拒绝，计划确认暂未接入。 |
 | <img src="docs/assets/agent-deepseek.svg" width="20" height="20" align="absmiddle" alt="" />&nbsp; **DeepSeek Harness**<br /><sub>DeepSeek</sub> | 通过用户级原生插件同步会话、回答、工具活动、提问和计划审阅。权限严格使用 DSH 的一次性语义，只提供"允许一次"和"拒绝"；计划可以批准，或携带反馈继续规划。 |
-| **ZCode**<br /><sub>Z.ai</sub> | 通过官方七事件 Hook 同步外部 Desktop/CLI 会话、工具结果、最终回答、提问和计划审阅。普通工具只提供"允许一次"和"拒绝"；提问与计划即使在全自动模式下也必须由人决定。 |
+| <img src="docs/assets/agent-zcode.svg" width="20" height="20" align="absmiddle" alt="" />&nbsp; **ZCode**<br /><sub>Z.ai</sub> | 通过官方七事件 Hook 同步外部 Desktop/CLI 会话、工具结果、最终回答、提问和计划审阅。普通工具只提供"允许一次"和"拒绝"；提问与计划即使在全自动模式下也必须由人决定。 |
 
 七个 Agent 可以同时开着，面板顶部的筛选按钮能只看其中一家，或者"全部"一起看。
 

@@ -56,9 +56,9 @@ CodeCraft 自己不寫程式碼，它負責盯著下面這些 AI 程式設計助
 | <img src="docs/assets/agent-codex.svg" width="20" height="20" align="absmiddle" alt="" />&nbsp; **Codex**<br /><sub>OpenAI</sub> | 工作階段狀態與工具呼叫審批可以在面板裡處理。它的提問和計畫確認是唯讀的，只能回到原來的 Codex 視窗完成，面板會提供一個跳轉按鈕幫你切過去。 |
 | <img src="docs/assets/agent-opencode.svg" width="20" height="20" align="absmiddle" alt="" />&nbsp; **OpenCode**<br /><sub>opencode.ai</sub> | 工作階段狀態、工具呼叫、原生權限審批和提問都能在面板裡處理，權限決定支援「允許一次」「一律允許」「拒絕」，另有一個可選的全工具門禁模式，讓每個工具呼叫都先經過你確認。計畫確認暫未接入，需要回到 OpenCode 視窗完成。 |
 | <img src="docs/assets/agent-mimo.svg" width="20" height="20" align="absmiddle" alt="" />&nbsp; **Mimo**<br /><sub>Xiaomi</sub> | 透過使用者層級 Mimo 外掛同步工作階段、工具活動、回答、提問和計畫審閱。權限支援「允許一次」「一律允許」「拒絕」，也可開啟全工具門禁；計畫可以批准，或帶著回饋繼續規劃。 |
-| **PI** | 工作階段、工具活動、權限審批和提問可在面板與區域網路控制台處理；支援允許一次、工作階段內允許和拒絕，計畫確認暫未接入。 |
+| <img src="docs/assets/agent-pi.svg" width="20" height="20" align="absmiddle" alt="" />&nbsp; **PI** | 工作階段、工具活動、權限審批和提問可在面板與區域網路控制台處理；支援允許一次、工作階段內允許和拒絕，計畫確認暫未接入。 |
 | <img src="docs/assets/agent-deepseek.svg" width="20" height="20" align="absmiddle" alt="" />&nbsp; **DeepSeek Harness**<br /><sub>DeepSeek</sub> | 透過使用者層級原生外掛同步工作階段、回答、工具活動、提問和計畫審閱。權限嚴格使用 DSH 的一次性語意，只提供「允許一次」和「拒絕」；計畫可以批准，或帶著回饋繼續規劃。 |
-| **ZCode**<br /><sub>Z.ai</sub> | 透過官方七事件 Hook 同步外部 Desktop/CLI 工作階段、工具結果、最終回答、提問和計畫審閱。一般工具只提供「允許一次」和「拒絕」；提問與計畫即使在自動審批模式下也必須由人決定。 |
+| <img src="docs/assets/agent-zcode.svg" width="20" height="20" align="absmiddle" alt="" />&nbsp; **ZCode**<br /><sub>Z.ai</sub> | 透過官方七事件 Hook 同步外部 Desktop/CLI 工作階段、工具結果、最終回答、提問和計畫審閱。一般工具只提供「允許一次」和「拒絕」；提問與計畫即使在自動審批模式下也必須由人決定。 |
 
 七個 Agent 可以同時開著，面板頂部的篩選按鈕能只看其中一家，或者「全部」一起看。
 
