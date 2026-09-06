@@ -88,6 +88,7 @@ export interface ZCodeCapabilities {
 export interface ZCodeSnapshot {
   connected: boolean;
   integrationError: string | null;
+  version?: number;
   detectedPath: string | null;
   detectedVersion: string | null;
   capabilities: ZCodeCapabilities;

@@ -23,7 +23,7 @@
 
 ## 这是什么？
 
-如果你在用 **Claude Code**、**Codex**、**OpenCode**、**PI**、**DeepSeek Harness** 或 **ZCode** 这类"AI 编程助手"，你大概遇到过这些情况：
+如果你在用 **Claude Code**、**Codex**、**OpenCode**、**PI**、**DeepSeek Harness**、**ZCode** 或 **Gemini CLI** 这类"AI 编程助手"，你大概遇到过这些情况：
 
 - 让它干活之后，只能一直盯着黑色的命令行窗口，不知道它到底做完了没有；
 - 它中途要问你一句"这个命令能执行吗"，你没看见，它就一直卡在那里等；
@@ -37,7 +37,7 @@ CodeCraft 就是为了解决这件事。它平时只是屏幕最上方一条几�
 
 | | 能力 | 说明 |
 | :---: | --- | --- |
-| 📋 | **会话集中管理** | Claude Code、Codex、OpenCode、PI、Mimo、DeepSeek Harness 和 ZCode 的任务并排显示，状态一目了然：工作中、等待输入、需要处理、已完成、失败。 |
+| 📋 | **会话集中管理** | Claude Code、Codex、OpenCode、PI、Mimo、DeepSeek Harness、ZCode 和 Gemini CLI 的任务并排显示，状态一目了然：工作中、等待输入、需要处理、已完成、失败。 |
 | ✅ | **一键批准** | 助手想执行某个命令、修改某个文件时，弹到面板上，你点"允许一次""始终允许"或"拒绝"，不用切回终端。 |
 | ❓ | **代它回答** | 助手提问时直接在面板里选选项或写补充说明，答案会回传给它。 |
 | 📝 | **确认计划** | 助手列出行动计划后，由你决定：点"实行计划"让它开始动手，或写下要改的地方让它先调整。 |
@@ -59,8 +59,9 @@ CodeCraft 自己不写代码，它负责盯着下面这些 AI 编程助手。装
 | <img src="docs/assets/agent-pi.svg" width="20" height="20" align="absmiddle" alt="" />&nbsp; **PI** | 会话、工具活动、权限审批和提问可在面板与局域网控制台处理；支持允许一次、会话内允许和拒绝，计划确认暂未接入。 |
 | <img src="docs/assets/agent-deepseek.svg" width="20" height="20" align="absmiddle" alt="" />&nbsp; **DeepSeek Harness**<br /><sub>DeepSeek</sub> | 通过用户级原生插件同步会话、回答、工具活动、提问和计划审阅。权限严格使用 DSH 的一次性语义，只提供"允许一次"和"拒绝"；计划可以批准，或携带反馈继续规划。 |
 | <img src="docs/assets/agent-zcode.svg" width="20" height="20" align="absmiddle" alt="" />&nbsp; **ZCode**<br /><sub>Z.ai</sub> | 通过官方七事件 Hook 同步外部 Desktop/CLI 会话、工具结果、最终回答、提问和计划审阅。普通工具只提供"允许一次"和"拒绝"；提问与计划即使在全自动模式下也必须由人决定。 |
+| **Gemini CLI**<br /><sub>Google</sub> | 通过用户级 Hook 观察普通终端中的会话、提示、工具活动、结果、通知和计划路径。所有交互均为只读；桌面端只能尽力定位原 Gemini 终端，LAN 页面只能提示你回到运行 Gemini 的设备处理。 |
 
-七个 Agent 可以同时开着，面板顶部的筛选按钮能只看其中一家，或者"全部"一起看。
+八个 Agent 可以同时开着，面板顶部的筛选按钮能只看其中一家，或者"全部"一起看。
 
 > DeepSeek Harness 当前是 Developer Preview。CodeCraft 优先适配 `@deepseek-ai/dsh@0.1.1-rc.2`，并兼容 `0.1.2-alpha.2`；检测不到版本或版本不在兼容列表中时，本地桥会拒绝交互并显示兼容错误。
 
@@ -78,7 +79,21 @@ CodeCraft 自己不写代码，它负责盯着下面这些 AI 编程助手。装
 
 DeepSeek Harness 使用 `$DSH_HOME`（默认 `~/.dsh`）下的 `cordis.patch.yml` 和本地 ESM 插件。CodeCraft 只维护带自身 marker 的配置块，修改前会写入 `.bak`，卸载时保留其他插件和原有 overlay。
 
-ZCode 使用用户级 `~/.zcode/cli/config.json`。CodeCraft 会结构化合并七个官方 Hook 事件，修改前创建 `config.json.bak`，并保留已有 Hook、插件、MCP 和未知字段；在 Hook 管理中卸载时，只删除 CodeCraft 自己的条目。当前首发适配 Windows，验证基线为 ZCode Desktop `3.10.1`。
+ZCode 使用用户级 `~/.zcode/cli/config.json`。CodeCraft 会结构化合并七个官方 Hook 事件，修改前创建 `config.json.bak`，并保留已有 Hook、插件、MCP 和未知字段；在 Hook 管理中卸载时，只删除 CodeCraft 自己的条目。Hook 健康状态只校验这份配置；安装路径和版本仅在用户点击 Hook 管理的刷新按钮时按需检测。当前首发适配 Windows，验证基线为 ZCode Desktop `3.10.1`。
+
+Gemini CLI 使用用户级 `~/.gemini/settings.json`。CodeCraft 会结构化合并 `SessionStart`、`SessionEnd`、`BeforeAgent`、`AfterAgent`、`BeforeTool`、`AfterTool`、`Notification` 和 `PreCompress` 八个事件，修改前创建不覆盖已有文件的 `.bak`，并保留其他 Hook、matcher、未知字段和安全设置。安装、刷新、修复和卸载都可以重复执行；卸载只删除 CodeCraft 自己的 handler。Hook 只写入受限本地 inbox，标准输出永远是 `{}`，不会阻塞、批准、拒绝或修改 Gemini 的原生行为。
+
+### Gemini CLI Hook-only 支持矩阵
+
+| 能力 | Gemini CLI |
+| --- | --- |
+| 会话、提示、工具活动、结果和通知 | 只读观察 |
+| `ask_user`、工具权限、文件/Shell/MCP/sandbox 交互 | 只读展示，必须回到 Gemini 终端处理 |
+| `exit_plan_mode` | 只读展示；计划文件仅在安全路径校验通过时读取 |
+| 桌面端“前往 Gemini 处理” | 尽力激活已有窗口；共享终端或目标失效时提示手动处理 |
+| LAN “前往 Gemini 处理” | 仅显示设备限制，不远程激活窗口、不提供审批写接口 |
+
+CodeCraft 不回答问题、不提交批准或拒绝、不选择计划模式，也不通过键盘、鼠标、named pipe 或其他方式向 Gemini 终端注入输入。若 Hook 未安装、CodeCraft 未运行、设置损坏或会话已结束，Gemini 仍按自己的原生策略继续。
 
 **3. 正常使用你的助手**
 
@@ -92,7 +107,7 @@ ZCode 使用用户级 `~/.zcode/cli/config.json`。CodeCraft 会结构化合并�
 - CodeCraft 不可用或审批超时时，普通工具会退回 ZCode 原生权限流程；`AskUserQuestion` 与 `ExitPlanMode` 会放弃接管并保持 stdout 为空，避免返回缺少答案的无效决定。
 - Hook 是审批与观测边界，不是沙箱。Hook 进程失败后的最终行为仍由 ZCode 运行时决定。
 
-如果设置页显示版本不兼容、配置被修改或存在冲突，先确认 ZCode 版本和检测路径，再在 **Hook 管理** 中重新安装以修复 CodeCraft 自有条目。修复不会覆盖用户的其他配置。
+如果设置页显示配置被修改或存在冲突，可点击刷新按钮按需查看 ZCode 版本和检测路径，再在 **Hook 管理** 中重新安装以修复 CodeCraft 自有条目。路径和版本属于诊断信息，不参与 Hook 健康状态判定；修复不会覆盖用户的其他配置。
 
 ## 手机 / 平板远程查看
 

@@ -23,7 +23,7 @@ A lightweight desktop workbench focused on AI coding sessions · Built for Windo
 
 ## What is this?
 
-If you use AI coding assistants like **Claude Code**, **Codex**, **OpenCode**, **PI**, **DeepSeek Harness**, or **ZCode**, you have probably run into this:
+If you use AI coding assistants like **Claude Code**, **Codex**, **OpenCode**, **PI**, **DeepSeek Harness**, **ZCode**, or **Gemini CLI**, you have probably run into this:
 
 - You hand it a task, then sit there staring at a black terminal window with no idea whether it has finished;
 - Halfway through it asks "can I run this command?", you don't notice, and it just waits forever;
@@ -37,7 +37,7 @@ CodeCraft exists to fix that. Most of the time it's just an almost invisible sli
 
 | | Capability | Details |
 | :---: | --- | --- |
-| 📋 | **All sessions in one place** | Tasks from Claude Code, Codex, OpenCode, PI, Mimo, DeepSeek Harness, and ZCode side by side, with status at a glance: working, waiting for input, needs attention, done, failed. |
+| 📋 | **All sessions in one place** | Tasks from Claude Code, Codex, OpenCode, PI, Mimo, DeepSeek Harness, ZCode, and Gemini CLI side by side, with status at a glance: working, waiting for input, needs attention, done, failed. |
 | ✅ | **One-click approval** | When an assistant wants to run a command or edit a file, the request pops up on the panel. Click "Allow once", "Always allow", or "Deny" — no need to switch back to the terminal. |
 | ❓ | **Answer on its behalf** | When an assistant asks a question, pick an option or type a note right in the panel, and the answer is sent back to it. |
 | 📝 | **Confirm plans** | Once an assistant lays out its plan, you decide: click "Run plan" to let it start, or write down what to change so it revises first. |
@@ -59,8 +59,9 @@ CodeCraft doesn't write code itself — it watches the AI coding assistants belo
 | <img src="docs/assets/agent-pi.svg" width="20" height="20" align="absmiddle" alt="" />&nbsp; **PI** | Sessions, tool activity, permissions, and questions are available in the panel and LAN console. It supports allow once, allow for the session, and deny; plan review is not connected yet. |
 | <img src="docs/assets/agent-deepseek.svg" width="20" height="20" align="absmiddle" alt="" />&nbsp; **DeepSeek Harness**<br /><sub>DeepSeek</sub> | A user-level native plugin synchronizes sessions, responses, tool activity, questions, and plan review. Permissions follow DSH's one-shot semantics, so only "Allow once" and "Deny" are offered. Plans can be approved or returned with feedback for further planning. |
 | <img src="docs/assets/agent-zcode.svg" width="20" height="20" align="absmiddle" alt="" />&nbsp; **ZCode**<br /><sub>Z.ai</sub> | The official seven-event Hook synchronizes external Desktop/CLI sessions, tool results, final answers, questions, and plan review. Ordinary tools offer only "Allow once" and "Deny"; questions and plans always require a person, even in automatic mode. |
+| **Gemini CLI**<br /><sub>Google</sub> | A user-level Hook observes sessions, prompts, tool activity, results, notifications, and plan paths from ordinary Gemini terminals. Every interaction is read-only; Desktop can only attempt to focus the original Gemini terminal, while LAN can only explain how to handle it on the device running Gemini. |
 
-All seven agents can run at the same time. The filter buttons at the top of the panel let you look at just one of them, or "All" together.
+All eight agents can run at the same time. The filter buttons at the top of the panel let you look at just one of them, or "All" together.
 
 > DeepSeek Harness is currently a Developer Preview. CodeCraft primarily targets `@deepseek-ai/dsh@0.1.1-rc.2` and also supports `0.1.2-alpha.2`; the local bridge rejects interactions when the runtime version is unknown or outside this compatibility list.
 
@@ -78,7 +79,21 @@ What does this do? CodeCraft adds a "notification hook" to that assistant's conf
 
 DeepSeek Harness uses `cordis.patch.yml` and a local ESM plugin under `$DSH_HOME` (default `~/.dsh`). CodeCraft only manages its marked configuration block, writes `.bak` files before changes, and preserves other plugins and overlay entries during uninstall.
 
-ZCode uses the user-level `~/.zcode/cli/config.json`. CodeCraft structurally merges the seven official Hook events, creates `config.json.bak` before changes, and preserves existing Hooks, plugins, MCP configuration, and unknown fields. Uninstalling from Hook management removes only CodeCraft-owned entries. The first release targets Windows, with ZCode Desktop `3.10.1` as the validated baseline.
+ZCode uses the user-level `~/.zcode/cli/config.json`. CodeCraft structurally merges the seven official Hook events, creates `config.json.bak` before changes, and preserves existing Hooks, plugins, MCP configuration, and unknown fields. Uninstalling from Hook management removes only CodeCraft-owned entries. Hook health is determined exclusively from this configuration; the installation path and version are discovered on demand only when the user clicks Refresh in Hook management. The first release targets Windows, with ZCode Desktop `3.10.1` as the validated baseline.
+
+Gemini CLI uses the user-level `~/.gemini/settings.json`. CodeCraft structurally merges the eight `SessionStart`, `SessionEnd`, `BeforeAgent`, `AfterAgent`, `BeforeTool`, `AfterTool`, `Notification`, and `PreCompress` events, creates a non-overwriting `.bak` before changes, and preserves other Hooks, matchers, unknown fields, and security settings. Install, refresh, repair, and uninstall are idempotent; uninstall removes only CodeCraft-owned handlers. The Hook writes only to a restricted local inbox and always returns `{}` on stdout, so it never blocks, approves, denies, or changes Gemini's native behavior.
+
+### Gemini CLI Hook-only support matrix
+
+| Capability | Gemini CLI |
+| --- | --- |
+| Sessions, prompts, tool activity, results, and notifications | Read-only observation |
+| `ask_user`, tool permissions, file/Shell/MCP/sandbox interactions | Read-only display; handle them in the Gemini terminal |
+| `exit_plan_mode` | Read-only display; plan content is read only after safe path validation |
+| Desktop “Open Gemini to handle” | Best-effort focus of an existing window; shared or stale targets require manual handling |
+| LAN “Open Gemini to handle” | Device guidance only; no remote window activation or approval writes |
+
+CodeCraft never answers questions, submits approvals or denials, chooses a plan mode, or injects keyboard, mouse, named-pipe, or other terminal input. If the Hook is missing, CodeCraft is closed, settings are damaged, or a session has ended, Gemini continues under its own native policy.
 
 **3. Use your assistant as usual**
 
@@ -92,7 +107,7 @@ Use any connected agent as you normally would. Session cards then appear on the 
 - If CodeCraft is unavailable or a review times out, ordinary tools fall back to ZCode's native permission flow. `AskUserQuestion` and `ExitPlanMode` release control with empty stdout so CodeCraft never returns an invalid answerless decision.
 - The Hook is an approval and observation boundary, not a sandbox. ZCode still determines the final behavior when the Hook process fails.
 
-If Settings reports an incompatible version, modified configuration, or conflict, confirm the detected ZCode version and path, then reinstall from **Hook management** to repair CodeCraft-owned entries. Repair does not overwrite unrelated user configuration.
+If Settings reports a modified configuration or conflict, click Refresh to inspect the ZCode version and detected path on demand, then reinstall from **Hook management** to repair CodeCraft-owned entries. Path and version are diagnostic metadata and do not determine Hook health. Repair does not overwrite unrelated user configuration.
 
 ## Remote viewing from phone / tablet
 

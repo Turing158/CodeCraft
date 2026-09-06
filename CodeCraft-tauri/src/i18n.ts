@@ -51,6 +51,41 @@ const ENGLISH: Record<string, string> = {
   暂无会话: "No sessions",
   "Codex Hook 状态": "Codex Hook status",
   "ZCode Hook 状态": "ZCode Hook status",
+  "Gemini CLI 会话列表": "Gemini CLI session list",
+  "Gemini CLI Hook 状态": "Gemini CLI Hook status",
+  "Gemini CLI Hook 已连接": "Gemini CLI Hook connected",
+  "在设置中安装 Gemini CLI Hook": "Install the Gemini CLI Hook in Settings",
+  "等待 Gemini": "Waiting for Gemini",
+  "Gemini 会话": "Gemini session",
+  "Gemini 请求输入": "Gemini requested input",
+  "Gemini 计划": "Gemini plan",
+  "Gemini 文件变更": "Gemini file change",
+  "Gemini Shell 活动": "Gemini Shell activity",
+  "Gemini MCP 活动": "Gemini MCP activity",
+  "Gemini 沙箱权限请求": "Gemini sandbox permission request",
+  "Gemini 通知": "Gemini notification",
+  "Gemini 工具活动：": "Gemini tool activity: ",
+  "Gemini CLI 外部会话 · 请在原终端处理":
+    "Gemini CLI external session · handle this in the original terminal",
+  "在原 Gemini 中处理": "Handle in the original Gemini terminal",
+  "前往 Gemini 处理": "Open Gemini to handle",
+  "正在定位 Gemini": "Locating Gemini",
+  "已定位 Gemini 窗口": "Gemini window located",
+  "已定位共享终端，请手动选择会话":
+    "Shared terminal located; select the session manually",
+  "Gemini 会话已结束": "The Gemini session has ended",
+  "无法定位 Gemini，请在原终端处理":
+    "Could not locate Gemini; handle this in the original terminal",
+  "没有权限激活 Gemini 窗口，请在原终端处理":
+    "You do not have permission to activate the Gemini window; handle this in the original terminal",
+  "计划文件：": "Plan file: ",
+  "Gemini 交互只能在运行 Gemini 的设备上处理；网页仅供查看。请使用该设备的 CodeCraft 桌面端或原终端。":
+    "Gemini interactions must be handled on the device running Gemini. This page is view-only; use CodeCraft Desktop or the original terminal on that device.",
+  "Gemini Hook 只读观察，不提供审批、回答或输入注入。":
+    "The Gemini Hook is read-only observation; it cannot approve, answer, or inject terminal input.",
+  "计划文件不可读取": "The plan file cannot be read",
+  "本地预览，可能与 Gemini 实际变更不同":
+    "Local preview; it may differ from Gemini's actual change",
   连接异常: "Connection issue",
   返回会话列表: "Back to sessions",
   返回: "Back",

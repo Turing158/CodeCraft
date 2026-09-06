@@ -105,6 +105,7 @@ export interface OpenCodeInstance {
 export interface OpenCodeSnapshot {
   connected: boolean;
   integrationError: string | null;
+  version?: number;
   sessions: OpenCodeSession[];
   instances: OpenCodeInstance[];
 }

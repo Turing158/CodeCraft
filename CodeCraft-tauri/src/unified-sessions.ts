@@ -41,6 +41,12 @@ import {
   type MimoSession,
   type MimoSessionStatus,
 } from "./mimo-sessions";
+import {
+  geminiSessionKey,
+  geminiStatusLabel,
+  type GeminiSession,
+  type GeminiSessionStatus,
+} from "./gemini-sessions";
 
 export type UnifiedSession =
   | ClaudeSession
@@ -49,7 +55,8 @@ export type UnifiedSession =
   | PiSession
   | DshSession
   | ZCodeSession
-  | MimoSession;
+  | MimoSession
+  | GeminiSession;
 
 const CODEX_VISUAL_STATUS: Record<CodexSessionStatus, ClaudeSessionStatus> = {
   working: "working",
@@ -109,6 +116,15 @@ const MIMO_VISUAL_STATUS: Record<MimoSessionStatus, ClaudeSessionStatus> = {
   stopped: "stopped",
   idle: "idle",
 };
+const GEMINI_VISUAL_STATUS: Record<GeminiSessionStatus, ClaudeSessionStatus> = {
+  working: "working",
+  waitingForInput: "waiting",
+  toolRunning: "working",
+  toolCompleted: "working",
+  toolFailed: "toolFailed",
+  idle: "idle",
+  stopped: "stopped",
+};
 
 const LIVE_STATUS_RANK: Record<ClaudeSessionStatus, number> = {
   working: 0,
@@ -140,10 +156,12 @@ export const isZCodeSession = (
 ): session is ZCodeSession => "reviewState" in session;
 export const isMimoSession = (session: UnifiedSession): session is MimoSession =>
   "pendingReviews" in session && "source" in session && session.source === "mimo";
+export const isGeminiSession = (session: UnifiedSession): session is GeminiSession =>
+  "pendingInteractions" in session && "integrationStatus" in session;
 
 export const unifiedSessionSource = (
   session: UnifiedSession,
-): "claude" | "codex" | "opencode" | "pi" | "dsh" | "zcode" | "mimo" =>
+): "claude" | "codex" | "opencode" | "pi" | "dsh" | "zcode" | "mimo" | "gemini" =>
   isCodexSession(session)
     ? "codex"
     : isOpenCodeSession(session)
@@ -156,7 +174,9 @@ export const unifiedSessionSource = (
             ? "zcode"
             : isMimoSession(session)
               ? "mimo"
-              : "claude";
+              : isGeminiSession(session)
+                ? "gemini"
+                : "claude";
 
 export const unifiedSessionKey = (session: UnifiedSession): string =>
   isOpenCodeSession(session)
@@ -169,7 +189,9 @@ export const unifiedSessionKey = (session: UnifiedSession): string =>
           ? zcodeSessionKey(session)
           : isMimoSession(session)
             ? mimoSessionKey(session)
-            : session.id;
+            : isGeminiSession(session)
+              ? geminiSessionKey(session)
+              : session.id;
 
 export const unifiedSessionStatusLabel = (session: UnifiedSession): string =>
   isCodexSession(session)
@@ -184,6 +206,8 @@ export const unifiedSessionStatusLabel = (session: UnifiedSession): string =>
             ? zcodeSessionStatusLabel(session)
             : isMimoSession(session)
               ? mimoStatusLabel(session.status)
+              : isGeminiSession(session)
+                ? geminiStatusLabel(session.status)
               : sessionStatusLabel(session.status);
 
 export const unifiedSessionVisualStatus = (
@@ -201,7 +225,9 @@ export const unifiedSessionVisualStatus = (
             ? ZCODE_VISUAL_STATUS[session.status]
             : isMimoSession(session)
               ? MIMO_VISUAL_STATUS[session.status]
-              : session.status;
+              : isGeminiSession(session)
+                ? GEMINI_VISUAL_STATUS[session.status]
+                : session.status;
 
 export const unifiedSessionIsRunning = (session: UnifiedSession): boolean => {
   const status = unifiedSessionVisualStatus(session);
@@ -218,6 +244,7 @@ export const unifiedSessionLiveContent = (
     !isDshSession(session) &&
     !isZCodeSession(session) &&
     !isMimoSession(session)
+    && !isGeminiSession(session)
   ) {
     return sessionLiveContent(session);
   }
@@ -244,7 +271,9 @@ export const unifiedSessionLiveContent = (
                 ? dshStatusLabel(session.status)
                   : isZCodeSession(session)
                     ? zcodeSessionStatusLabel(session)
-                    : mimoStatusLabel(session.status),
+                    : isGeminiSession(session)
+                      ? geminiStatusLabel(session.status)
+                      : mimoStatusLabel(session.status),
         };
 };
 
@@ -258,6 +287,7 @@ export const unifiedSessionLiveStatusText = (
     !isDshSession(session) &&
     !isZCodeSession(session) &&
     !isMimoSession(session)
+    && !isGeminiSession(session)
   ) {
     return sessionLiveStatusText(session);
   }
@@ -277,18 +307,22 @@ export const unifiedSessionLiveStatusText = (
           ? dshStatusLabel(session.status)
           : isZCodeSession(session)
             ? zcodeSessionStatusLabel(session)
-            : mimoStatusLabel(session.status);
+            : isGeminiSession(session)
+              ? geminiStatusLabel(session.status)
+              : mimoStatusLabel(session.status);
 };
 
 export const hasUnifiedWorkingSession = (
-  sessions: UnifiedSession[],
-): boolean =>
-  sessions.some(
-    (session) => unifiedSessionVisualStatus(session) === "working",
-  );
+  sessions: Iterable<UnifiedSession>,
+): boolean => {
+  for (const session of sessions) {
+    if (unifiedSessionVisualStatus(session) === "working") return true;
+  }
+  return false;
+};
 
 export const primaryUnifiedLiveSession = (
-  sessions: UnifiedSession[],
+  sessions: Iterable<UnifiedSession>,
 ): UnifiedSession | undefined => {
   let primary: UnifiedSession | undefined;
   for (const session of sessions) {

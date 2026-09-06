@@ -4,11 +4,18 @@ use std::{
     time::{SystemTime, UNIX_EPOCH},
 };
 
-use super::{approval_policy, pi_hook};
+use super::{approval_policy, inbox_limits, pi_hook};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
-const MAX_INBOX_FILES: usize = 500;
+const MAX_INBOX_FILES: usize = 100;
+const MAX_INBOX_INSTANCES: usize = 128;
+const MAX_INBOX_FILES_PER_INSTANCE: usize = 128;
+const MAX_INBOX_FILES_TOTAL: usize = 10_000;
+const INBOX_FILE_TTL_MS: u128 = 24 * 60 * 60 * 1_000;
+const MAX_SESSIONS: usize = 100;
+const IDLE_SESSION_TTL_MS: u64 = 30 * 60 * 1_000;
+const SESSION_TTL_MS: u64 = 24 * 60 * 60 * 1_000;
 const MAX_ACTIVITIES: usize = 40;
 const MAX_OUTPUTS: usize = 80;
 const MAX_RESOLVED_REQUESTS: usize = 2048;
@@ -180,6 +187,7 @@ pub(crate) struct PiInstance {
 pub(crate) struct PiSnapshot {
     pub(crate) connected: bool,
     pub(crate) integration_error: Option<String>,
+    pub(crate) version: u64,
     pub(crate) sessions: Vec<PiSession>,
     pub(crate) instances: Vec<PiInstance>,
 }
@@ -217,6 +225,7 @@ pub(crate) struct PiStore {
     requests: HashMap<String, pi_hook::PiEnvelope>,
     resolved_requests: HashMap<String, u64>,
     integration_error: Option<String>,
+    version: u64,
 }
 
 impl PiStore {
@@ -591,6 +600,7 @@ impl PiStore {
         for instance in fs::read_dir(&root)
             .map_err(|error| error.to_string())?
             .flatten()
+            .take(MAX_INBOX_INSTANCES)
         {
             if !instance.path().is_dir() {
                 continue;
@@ -598,6 +608,7 @@ impl PiStore {
             for entry in fs::read_dir(instance.path())
                 .map_err(|error| error.to_string())?
                 .flatten()
+                .take(MAX_INBOX_FILES_PER_INSTANCE)
             {
                 if entry.path().extension().and_then(|value| value.to_str()) == Some("json") {
                     files.push(entry.path());
@@ -605,6 +616,27 @@ impl PiStore {
             }
         }
         files.sort();
+        let now = std::time::SystemTime::now();
+        files.retain(|path| {
+            let stale = fs::metadata(path)
+                .and_then(|metadata| metadata.modified())
+                .ok()
+                .and_then(|modified| now.duration_since(modified).ok())
+                .is_some_and(|age| age.as_millis() > INBOX_FILE_TTL_MS);
+            if stale {
+                let _ = fs::remove_file(path);
+            }
+            !stale
+        });
+        let files = inbox_limits::limit_paths(files, MAX_INBOX_FILES_TOTAL, |path| {
+            let Ok(bytes) = fs::read(path) else {
+                return false;
+            };
+            let Ok(value) = serde_json::from_slice::<Value>(&bytes) else {
+                return false;
+            };
+            value.get("messageType").and_then(Value::as_str) == Some("request")
+        });
         let mut processed = 0;
         for path in files.into_iter().take(MAX_INBOX_FILES) {
             let result = fs::read(&path)
@@ -616,6 +648,9 @@ impl PiStore {
             if let Err(error) = result {
                 self.integration_error = Some(error);
             }
+        }
+        if processed > 0 {
+            self.version = self.version.wrapping_add(1);
         }
         Ok(processed)
     }
@@ -633,8 +668,11 @@ impl PiStore {
     }
 
     pub(crate) fn snapshot(&mut self) -> Result<PiSnapshot, String> {
+        let previous_session_count = self.sessions.len();
+        let previous_instance_count = self.instances.len();
         self.drain_inbox()?;
         self.cleanup_pending();
+        self.trim_sessions();
         let now = now_ms();
         let active_ids = self
             .instances
@@ -651,6 +689,11 @@ impl PiStore {
         }
         self.instances
             .retain(|_, instance| now.saturating_sub(instance.heartbeat) <= INSTANCE_STALE_MS);
+        if previous_session_count != self.sessions.len()
+            || previous_instance_count != self.instances.len()
+        {
+            self.version = self.version.wrapping_add(1);
+        }
         let mut sessions = self.sessions.values().cloned().collect::<Vec<_>>();
         sessions.sort_by(|left, right| right.updated_at.cmp(&left.updated_at));
         let mut instances = self.instances.values().cloned().collect::<Vec<_>>();
@@ -658,9 +701,51 @@ impl PiStore {
         Ok(PiSnapshot {
             connected: self.integration_error.is_none() && !instances.is_empty(),
             integration_error: self.integration_error.clone(),
+            version: self.version,
             sessions,
             instances,
         })
+    }
+
+    pub(crate) fn active_session_count(&self) -> usize {
+        self.sessions
+            .values()
+            .filter(|session| {
+                !matches!(
+                    session.status,
+                    PiSessionStatus::Idle | PiSessionStatus::Stopped
+                )
+            })
+            .count()
+    }
+
+    fn trim_sessions(&mut self) {
+        let now = now_ms();
+        self.sessions.retain(|_, session| {
+            if Self::session_has_pending(session) {
+                return true;
+            }
+            let age = now.saturating_sub(session.updated_at);
+            age <= SESSION_TTL_MS
+                && (!matches!(
+                    session.status,
+                    PiSessionStatus::Idle | PiSessionStatus::Stopped
+                ) || age <= IDLE_SESSION_TTL_MS)
+        });
+        if self.sessions.len() <= MAX_SESSIONS {
+            return;
+        }
+        let excess = self.sessions.len() - MAX_SESSIONS;
+        let mut candidates = self
+            .sessions
+            .iter()
+            .filter(|(_, session)| !Self::session_has_pending(session))
+            .map(|(key, session)| (key.clone(), session.updated_at))
+            .collect::<Vec<_>>();
+        candidates.sort_by_key(|(_, updated_at)| *updated_at);
+        for (key, _) in candidates.into_iter().take(excess) {
+            self.sessions.remove(&key);
+        }
     }
 
     pub(crate) fn submit_approval(

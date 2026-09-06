@@ -116,6 +116,7 @@ export interface MimoInstance {
 export interface MimoSnapshot {
   connected: boolean;
   integrationError: string | null;
+  version?: number;
   sessions: MimoSession[];
   instances: MimoInstance[];
 }

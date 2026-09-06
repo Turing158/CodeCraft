@@ -58,6 +58,7 @@ export interface PiInstance {
 export interface PiSnapshot {
   connected: boolean;
   integrationError: string | null;
+  version?: number;
   sessions: PiSession[];
   instances: PiInstance[];
 }

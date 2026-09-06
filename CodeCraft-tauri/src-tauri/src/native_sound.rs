@@ -3,7 +3,10 @@ use std::{
     fs,
     io::Cursor,
     path::{Path, PathBuf},
-    sync::{mpsc, OnceLock},
+    sync::{
+        atomic::{AtomicU64, Ordering},
+        mpsc, OnceLock,
+    },
     thread,
 };
 
@@ -85,7 +88,8 @@ struct PlaybackRequest {
     volume: f32,
 }
 
-static AUDIO_SENDER: OnceLock<mpsc::Sender<PlaybackRequest>> = OnceLock::new();
+static AUDIO_SENDER: OnceLock<mpsc::SyncSender<PlaybackRequest>> = OnceLock::new();
+static AUDIO_DROPPED: AtomicU64 = AtomicU64::new(0);
 
 fn settings_path() -> PathBuf {
     approval_policy::base_data_dir().join("sound-settings.json")
@@ -178,7 +182,7 @@ pub(crate) fn play(event: SoundEvent) {
     };
     let volume = settings.volume.clamp(0.0, 1.0);
     let sender = AUDIO_SENDER.get_or_init(|| {
-        let (sender, receiver) = mpsc::channel::<PlaybackRequest>();
+        let (sender, receiver) = mpsc::sync_channel::<PlaybackRequest>(32);
         thread::spawn(move || {
             let Ok(stream) = rodio::DeviceSinkBuilder::open_default_sink() else {
                 return;
@@ -193,7 +197,12 @@ pub(crate) fn play(event: SoundEvent) {
         });
         sender
     });
-    let _ = sender.send(PlaybackRequest { bytes, volume });
+    if sender.try_send(PlaybackRequest { bytes, volume }).is_err() {
+        let dropped = AUDIO_DROPPED.fetch_add(1, Ordering::Relaxed).saturating_add(1);
+        if dropped.is_power_of_two() {
+            eprintln!("Native sound queue full; dropped_requests={dropped}");
+        }
+    }
 }
 
 fn string_set(value: Option<&Value>, field: &str) -> HashSet<String> {

@@ -97,6 +97,7 @@ export interface DshInstance {
 export interface DshSnapshot {
   connected: boolean;
   integrationError: string | null;
+  version?: number;
   bridgeInstanceId: string | null;
   sessions: DshSession[];
   instances: DshInstance[];

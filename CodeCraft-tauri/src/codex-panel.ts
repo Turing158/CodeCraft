@@ -10,6 +10,7 @@ let latestSnapshot: CodexSnapshot = {
   interactions: [],
 };
 let snapshotListener: ((snapshot: CodexSnapshot) => void) | undefined;
+let refreshing = false;
 
 export function initCodexPanel(
   onSnapshot: (snapshot: CodexSnapshot) => void,
@@ -21,6 +22,8 @@ export function initCodexPanel(
 }
 
 export async function refreshCodexPanel(): Promise<void> {
+  if (refreshing) return;
+  refreshing = true;
   let snapshot: CodexSnapshot;
   try {
     snapshot = await invoke<CodexSnapshot>("list_codex_sessions");
@@ -33,7 +36,13 @@ export async function refreshCodexPanel(): Promise<void> {
       sessions: [],
       interactions: [],
     };
+  } finally {
+    refreshing = false;
   }
+  updateCodexPanel(snapshot);
+}
+
+export function updateCodexPanel(snapshot: CodexSnapshot): void {
   latestSnapshot = snapshot;
   renderConnection(snapshot);
   snapshotListener?.(snapshot);

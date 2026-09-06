@@ -91,6 +91,7 @@ export interface ClaudeAnswerOption extends ClaudeQuestionOption {
 export interface ClaudeSessionSnapshot {
   connected: boolean;
   integrationError: string | null;
+  version?: number;
   sessions: ClaudeSession[];
 }
 

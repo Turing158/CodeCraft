@@ -54,6 +54,7 @@
   --panel-inline-padding: 18px;
   --working-square-image: none;
   --startup-panel-height: 132px;
+  --content-max-height: 640px;
   --settings-min-height: 300px;
   --settings-max-height: 780px;
   --session-list-max-height: 276px;
@@ -546,9 +547,11 @@ button {
 
 .session-shell {
   display: flex;
+  max-height: var(--content-max-height);
   flex-direction: column;
   gap: 8px;
   padding: 10px var(--panel-inline-padding) 8px;
+  overflow: hidden;
 }
 
 .session-header {
@@ -888,13 +891,23 @@ button {
 .session-source-cards {
   display: flex;
   width: 100%;
+  min-height: 0;
+  flex: 1 1 auto;
   flex-direction: column;
   gap: 10px;
+  padding-right: 3px;
+  overflow-x: hidden;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-gutter: stable;
+  scrollbar-color: rgba(226, 232, 240, 0.24) transparent;
+  scrollbar-width: thin;
 }
 
 .session-source-card {
   display: flex;
   min-width: 0;
+  flex: 0 0 auto;
   flex-direction: column;
   gap: 6px;
   padding: 8px;
@@ -5306,6 +5319,7 @@ button {
   color: #e11d48;
 }
 
+:root[data-theme="light"] .session-source-cards,
 :root[data-theme="light"] .session-list,
 :root[data-theme="light"] .detail-shell,
 :root[data-theme="light"] .settings-content,

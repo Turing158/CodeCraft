@@ -7,9 +7,12 @@ use std::{
 use serde::Serialize;
 use serde_json::Value;
 
-use super::zcode_hook::{
-    self, ZCodeApprovalDecision, ZCodeDecisionEnvelope, ZCodeHookEnvelope, ZCodeHookPhase,
-    ZCodeQuestionAnswer,
+use super::{
+    inbox_limits,
+    zcode_hook::{
+        self, ZCodeApprovalDecision, ZCodeDecisionEnvelope, ZCodeHookEnvelope, ZCodeHookPhase,
+        ZCodeQuestionAnswer,
+    },
 };
 
 const SESSION_TTL_MS: u64 = 24 * 60 * 60 * 1_000;
@@ -17,6 +20,10 @@ const MAX_SESSIONS: usize = 100;
 const MAX_ACTIVITIES: usize = 100;
 const MAX_OUTPUTS: usize = 40;
 const MAX_OUTPUT_CHARS: usize = 8_000;
+const MAX_INBOX_FILES_PER_PASS: usize = 100;
+const MAX_INBOX_FILES_TOTAL: usize = 10_000;
+const INBOX_FILE_TTL_MS: u128 = 24 * 60 * 60 * 1_000;
+const IDLE_SESSION_TTL_MS: u64 = 30 * 60 * 1_000;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -167,6 +174,7 @@ impl Default for ZCodeCapabilities {
 pub(crate) struct ZCodeSnapshot {
     pub(crate) connected: bool,
     pub(crate) integration_error: Option<String>,
+    pub(crate) version: u64,
     pub(crate) detected_path: Option<String>,
     pub(crate) detected_version: Option<String>,
     pub(crate) capabilities: ZCodeCapabilities,
@@ -192,6 +200,7 @@ pub(crate) struct ZCodeStore {
     sessions: HashMap<String, ZCodeSession>,
     pending: HashMap<String, PendingRequest>,
     integration_error: Option<String>,
+    version: u64,
 }
 
 impl ZCodeStore {
@@ -213,19 +222,53 @@ impl ZCodeStore {
                 .map(|entry| entry.path())
                 .filter(|path| path.extension().and_then(|value| value.to_str()) == Some("json"))
                 .collect::<Vec<_>>();
-            paths.sort();
-            for path in paths {
+            let now = SystemTime::now();
+            paths.retain(|path| {
+                let stale = fs::metadata(path)
+                    .and_then(|metadata| metadata.modified())
+                    .ok()
+                    .and_then(|modified| now.duration_since(modified).ok())
+                    .is_some_and(|age| age.as_millis() > INBOX_FILE_TTL_MS);
+                if stale {
+                    let _ = fs::remove_file(path);
+                }
+                !stale
+            });
+            paths = inbox_limits::limit_paths(paths, MAX_INBOX_FILES_TOTAL, |path| {
+                let Ok(bytes) = fs::read(path) else {
+                    return false;
+                };
+                let Ok(envelope) = serde_json::from_slice::<ZCodeHookEnvelope>(&bytes) else {
+                    return false;
+                };
+                envelope.phase == ZCodeHookPhase::Pending
+            });
+            for path in paths.into_iter().take(MAX_INBOX_FILES_PER_PASS) {
                 if let Ok(bytes) = fs::read(&path) {
                     if let Ok(envelope) = serde_json::from_slice::<ZCodeHookEnvelope>(&bytes) {
                         self.apply_envelope(envelope);
+                        self.version = self.version.wrapping_add(1);
                     }
                 }
                 let _ = fs::remove_file(path);
             }
         }
-        let stale_before = now_ms().saturating_sub(SESSION_TTL_MS);
-        self.sessions
-            .retain(|_, session| session.updated_at >= stale_before);
+        let now = now_ms();
+        let stale_before = now.saturating_sub(SESSION_TTL_MS);
+        self.sessions.retain(|_, session| {
+            if session.question.is_some()
+                || session.permission.is_some()
+                || session.plan.is_some()
+                || session.review_state == Some(ZCodeReviewState::Pending)
+            {
+                return true;
+            }
+            session.updated_at >= stale_before
+                && (!matches!(
+                    session.status,
+                    ZCodeSessionStatus::Idle | ZCodeSessionStatus::Stopped
+                ) || now.saturating_sub(session.updated_at) <= IDLE_SESSION_TTL_MS)
+        });
         self.pending
             .retain(|_, pending| self.sessions.contains_key(&pending.session_id));
         trim_sessions(&mut self.sessions);
@@ -246,11 +289,19 @@ impl ZCodeStore {
         ZCodeSnapshot {
             connected: self.integration_error.is_none(),
             integration_error: self.integration_error.clone(),
+            version: self.version,
             detected_path,
             detected_version,
             capabilities: ZCodeCapabilities::default(),
             sessions,
         }
+    }
+
+    pub(crate) fn active_session_count(&self) -> usize {
+        self.sessions
+            .values()
+            .filter(|session| session.is_active())
+            .count()
     }
 
     pub(crate) fn submit_permission(
@@ -849,6 +900,12 @@ fn trim_sessions(sessions: &mut HashMap<String, ZCodeSession>) {
     }
     let mut keys = sessions
         .iter()
+        .filter(|(_, session)| {
+            session.question.is_none()
+                && session.permission.is_none()
+                && session.plan.is_none()
+                && session.review_state != Some(ZCodeReviewState::Pending)
+        })
         .map(|(key, session)| (key.clone(), session.updated_at))
         .collect::<Vec<_>>();
     keys.sort_by_key(|(_, updated_at)| *updated_at);

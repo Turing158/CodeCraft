@@ -745,9 +745,19 @@ const renderReview = (entry: ConsoleEntry | undefined) => {
 
   reviewNotice.hidden = actionable;
   if (!actionable) {
-    reviewNotice.textContent = pending.readOnly
+    reviewNotice.textContent = entry.source === "gemini"
+      ? "Gemini 交互只能在运行 Gemini 的设备上处理；网页仅供查看。请使用该设备的 CodeCraft 桌面端或原终端。"
+      : pending.readOnly
       ? "此请求来自外部 Codex 会话，只能在原终端或 Codex 界面完成，网页仅供查看。"
       : "桌面端未开启远程审批，网页当前为只读。";
+  }
+
+  if (entry.source === "gemini" && pending.gemini) {
+    reviewActions.append(
+      actionButton("前往 Gemini 处理", "primary", () => {
+        showToast("请在运行 Gemini 的设备上打开 CodeCraft 桌面端或原终端处理。", "info");
+      }),
+    );
   }
 
   if (pending.kind === "permission" && pending.permission) {

@@ -57,6 +57,12 @@ import {
   type ZCodeSession,
   type ZCodeSnapshot,
 } from "../../src/zcode-sessions";
+import {
+  geminiSessionKey,
+  geminiStatusLabel,
+  type GeminiSession,
+  type GeminiSnapshot,
+} from "../../src/gemini-sessions";
 
 export type ConsoleSource =
   | "claude"
@@ -65,7 +71,8 @@ export type ConsoleSource =
   | "mimo"
   | "pi"
   | "dsh"
-  | "zcode";
+  | "zcode"
+  | "gemini";
 
 export type PendingKind = "permission" | "question" | "plan";
 
@@ -116,6 +123,9 @@ export interface ConsolePending {
   zcode?: {
     sessionId: string;
   };
+  gemini?: {
+    sessionId: string;
+  };
 }
 
 export interface ConsoleEntry {
@@ -161,6 +171,7 @@ export interface RawSnapshot {
   pi?: PiSnapshot | null;
   dsh?: DshSnapshot | null;
   zcode?: ZCodeSnapshot | null;
+  gemini?: GeminiSnapshot | null;
   integrations?: RawHookIntegration[] | null;
 }
 
@@ -234,6 +245,15 @@ const emptyZCode: ZCodeSnapshot = {
     questionSound: false,
   },
   sessions: [],
+};
+const emptyGemini: GeminiSnapshot = {
+  connected: false,
+  integrationError: null,
+  version: 0,
+  sessions: [],
+  interactions: [],
+  navigationCapability: "unsupported",
+  fallbackAction: "openGeminiOnHost",
 };
 
 // Codex questions and plans arrive from an external terminal, so the console can
@@ -488,6 +508,69 @@ const zcodePending = (session: ZCodeSession): ConsolePending | null => {
   return null;
 };
 
+const geminiPending = (session: GeminiSession): ConsolePending | null => {
+  const interaction = session.pendingInteractions
+    .filter((item) => item.status !== "toolCompleted" && item.status !== "sessionEnded")
+    .sort((left, right) => left.capturedAt - right.capturedAt)[0];
+  if (!interaction) return null;
+  const common = { requestId: interaction.observationId, readOnly: true };
+  if (interaction.kind === "askUser") {
+    return {
+      ...common,
+      kind: "question",
+      question: {
+        id: interaction.observationId,
+        questions: (interaction.questions.length ? interaction.questions : [{ question: interaction.detail }]).map((raw) => {
+          const item = isRecord(raw) ? raw : {};
+          return {
+            header: typeof item.header === "string" ? item.header : interaction.title,
+            question: typeof item.question === "string" ? item.question : interaction.detail,
+            options: Array.isArray(item.options) ? item.options.flatMap((option) => isRecord(option) && typeof option.label === "string" ? [{ label: option.label, description: typeof option.description === "string" ? option.description : null }] : []) : [],
+            multiSelect: item.multiSelect === true,
+            allowOther: false,
+            allowChat: false,
+            readOnly: true,
+          };
+        }),
+      },
+      gemini: { sessionId: session.id },
+    };
+  }
+  if (interaction.kind === "exitPlanMode") {
+    const planText = interaction.plan
+      ?? (interaction.planFilename
+        ? `计划文件：${interaction.planFilename}`
+        : interaction.detail);
+    return {
+      ...common,
+      kind: "plan",
+      plan: {
+        id: interaction.observationId,
+        toolName: interaction.title,
+        plan: interaction.planReadError
+          ? `${planText}\n\n计划文件不可读取：${interaction.planReadError}`
+          : planText,
+        cwd: session.cwd,
+        capturedAt: interaction.capturedAt,
+      },
+      gemini: { sessionId: session.id },
+    };
+  }
+  return {
+    ...common,
+    kind: "permission",
+    permission: {
+      id: interaction.observationId,
+      toolName: interaction.toolName ?? interaction.title,
+      summary: interaction.detail,
+      cwd: session.cwd,
+      canAlwaysAllow: false,
+      capturedAt: interaction.capturedAt,
+    },
+    gemini: { sessionId: session.id },
+  };
+};
+
 const sourceFromHookId = (id: string | undefined): ConsoleSource | undefined => {
   if (id === "claudeCode") return "claude";
   if (id === "codex") return "codex";
@@ -496,6 +579,7 @@ const sourceFromHookId = (id: string | undefined): ConsoleSource | undefined => 
   if (id === "pi") return "pi";
   if (id === "deepSeekHarness") return "dsh";
   if (id === "zCode") return "zcode";
+  if (id === "geminiCli") return "gemini";
   return undefined;
 };
 
@@ -512,7 +596,9 @@ const integrationName = (source: ConsoleSource): string =>
           ? "PI"
           : source === "dsh"
             ? "DeepSeek Harness"
-            : "ZCode";
+            : source === "zcode"
+              ? "ZCode"
+              : "Gemini CLI";
 
 type SessionCounts = Record<ConsoleSource, number>;
 
@@ -615,6 +701,20 @@ const zcodeEntry = (session: ZCodeSession): ConsoleEntry => ({
   pending: zcodePending(session),
 });
 
+const geminiEntry = (session: GeminiSession): ConsoleEntry => ({
+  key: geminiSessionKey(session),
+  source: "gemini",
+  sessionId: session.id,
+  title: session.title,
+  status: session.status,
+  statusLabel: geminiStatusLabel(session.status),
+  cwd: session.cwd,
+  updatedAt: session.updatedAt,
+  activities: session.activities.map((activity) => ({ id: activity.id, tool: activity.tool, summary: activity.summary, status: activity.status, updatedAt: activity.updatedAt })),
+  outputs: session.outputs.map((output) => ({ id: output.id, text: output.text })),
+  pending: geminiPending(session),
+});
+
 const codexEntry = (
   session: CodexSession,
   interactions: CodexInteraction[],
@@ -675,6 +775,9 @@ export const mergeSnapshot = (raw: RawSnapshot): ConsoleSnapshot => {
   const zcode = isRecord(raw.zcode)
     ? { ...emptyZCode, ...(raw.zcode as ZCodeSnapshot) }
     : emptyZCode;
+  const gemini = isRecord(raw.gemini)
+    ? { ...emptyGemini, ...(raw.gemini as GeminiSnapshot) }
+    : emptyGemini;
 
   const entries = [
     ...claude.sessions.map(claudeEntry),
@@ -684,6 +787,7 @@ export const mergeSnapshot = (raw: RawSnapshot): ConsoleSnapshot => {
     ...pi.sessions.map(piEntry),
     ...dsh.sessions.map(dshEntry),
     ...zcode.sessions.map(zcodeEntry),
+    ...gemini.sessions.map(geminiEntry),
   ].sort(compareEntries);
 
   const counts: SessionCounts = {
@@ -694,6 +798,7 @@ export const mergeSnapshot = (raw: RawSnapshot): ConsoleSnapshot => {
     pi: pi.sessions.length,
     dsh: dsh.sessions.length,
     zcode: zcode.sessions.length,
+    gemini: gemini.sessions.length,
   };
 
   return {
@@ -777,6 +882,15 @@ const buildIntegrations = (
         agentInstalled: true,
         hookInstalled: true,
       },
+      {
+        source: "gemini",
+        name: integrationName("gemini"),
+        connected: geminiConnected(raw),
+        error: integrationError(raw, "gemini"),
+        sessionCount: counts.gemini,
+        agentInstalled: true,
+        hookInstalled: true,
+      },
     ];
   }
 
@@ -796,7 +910,9 @@ const buildIntegrations = (
               ? piConnected(raw)
               : source === "dsh"
                 ? dshConnected(raw)
-                : zcodeConnected(raw);
+                : source === "zcode"
+                  ? zcodeConnected(raw)
+                  : geminiConnected(raw);
     return [
       {
         source,
@@ -825,6 +941,8 @@ const dshConnected = (raw: RawSnapshot): boolean =>
   isRecord(raw.dsh) ? raw.dsh.connected === true : false;
 const zcodeConnected = (raw: RawSnapshot): boolean =>
   isRecord(raw.zcode) ? raw.zcode.connected === true : false;
+const geminiConnected = (raw: RawSnapshot): boolean =>
+  isRecord(raw.gemini) ? raw.gemini.connected === true : false;
 
 const integrationError = (raw: RawSnapshot, source: ConsoleSource): string | null => {
   const value =
@@ -852,9 +970,13 @@ const integrationError = (raw: RawSnapshot, source: ConsoleSource): string | nul
               ? isRecord(raw.dsh)
                 ? raw.dsh.integrationError
                 : null
-              : isRecord(raw.zcode)
-                ? raw.zcode.integrationError
-                : null;
+              : source === "zcode"
+                ? isRecord(raw.zcode)
+                  ? raw.zcode.integrationError
+                  : null
+                : isRecord(raw.gemini)
+                  ? raw.gemini.integrationError
+                  : null;
   return (value ?? null) as string | null;
 };
 

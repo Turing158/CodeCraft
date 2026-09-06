@@ -1,13 +1,16 @@
 use std::{
     collections::HashMap,
     env,
+    fs::{self, OpenOptions},
+    io::Write,
     path::Path,
     sync::{
         atomic::{AtomicBool, AtomicU64, AtomicUsize, Ordering},
+        mpsc::{self, Receiver, SyncSender},
         Mutex, OnceLock,
     },
     thread,
-    time::{Duration, Instant},
+    time::{Duration, Instant, SystemTime, UNIX_EPOCH},
 };
 
 use serde::{Deserialize, Serialize};
@@ -24,7 +27,11 @@ mod codex;
 mod codex_hook;
 mod dsh;
 mod dsh_hook;
+mod gemini;
+mod gemini_hook;
+mod gemini_focus;
 mod hook_config;
+mod inbox_limits;
 mod lan_auth;
 mod lan_config;
 mod lan_net;
@@ -41,6 +48,7 @@ mod zcode_hook;
 
 pub use claude_hook::capture_claude_hook;
 pub use codex_hook::capture_codex_hook;
+pub use gemini_hook::capture_gemini_hook;
 pub use zcode_hook::capture_zcode_hook;
 
 const PANEL_WIDTH: f64 = 500.0;
@@ -60,6 +68,9 @@ const TRAY_ICON_ID: &str = "codecraft-tray";
 const REOPEN_REQUESTED_EVENT: &str = "reopen-requested";
 const OPEN_SETTINGS_REQUESTED_EVENT: &str = "open-settings-requested";
 const APPROVAL_SETTINGS_CHANGED_EVENT: &str = "approval-settings-changed";
+const CRASH_LOG_MAX_BYTES: u64 = 1024 * 1024;
+const RUNTIME_METRICS_LOG_MAX_BYTES: u64 = 1024 * 1024;
+const HOOK_STATUS_CACHE_TTL: Duration = Duration::from_secs(5);
 
 static PANEL_ANIMATION_GENERATION: AtomicU64 = AtomicU64::new(0);
 static PANEL_POSITION_ANIMATION_GENERATION: AtomicU64 = AtomicU64::new(0);
@@ -71,6 +82,142 @@ static PANEL_POSITION_LOCK: Mutex<()> = Mutex::new(());
 // install or uninstall. Keep this lock separate from the panel locks so the
 // slow refresh cannot stall unrelated window and settings commands.
 static HOOK_CONFIGURATION_LOCK: OnceLock<Mutex<()>> = OnceLock::new();
+static CRASH_LOG_LOCK: Mutex<()> = Mutex::new(());
+static HOOK_STATUS_CACHE: OnceLock<Mutex<Option<(Instant, Vec<HookIntegrationStatus>)>>> = OnceLock::new();
+static SNAPSHOT_REFRESH_COUNT: AtomicU64 = AtomicU64::new(0);
+static SNAPSHOT_REFRESH_TOTAL_MS: AtomicU64 = AtomicU64::new(0);
+static SNAPSHOT_REFRESH_OVERLAPS: AtomicU64 = AtomicU64::new(0);
+static SNAPSHOT_REFRESH_IN_FLIGHT: AtomicUsize = AtomicUsize::new(0);
+
+fn process_working_set_bytes() -> Option<usize> {
+    #[cfg(windows)]
+    {
+        use std::mem::size_of;
+        use windows::Win32::System::{
+            ProcessStatus::{GetProcessMemoryInfo, PROCESS_MEMORY_COUNTERS},
+            Threading::GetCurrentProcess,
+        };
+
+        let mut counters = PROCESS_MEMORY_COUNTERS::default();
+        let result = unsafe {
+            GetProcessMemoryInfo(
+                GetCurrentProcess(),
+                &mut counters,
+                size_of::<PROCESS_MEMORY_COUNTERS>() as u32,
+            )
+        };
+        if result.is_ok() {
+            return Some(counters.WorkingSetSize);
+        }
+    }
+    None
+}
+
+fn append_runtime_metrics(elapsed_ms: u64, count: u64) {
+    let directory = approval_policy::base_data_dir();
+    if fs::create_dir_all(&directory).is_err() {
+        return;
+    }
+    let path = directory.join("metrics.log");
+    if fs::metadata(&path)
+        .map(|metadata| metadata.len() >= RUNTIME_METRICS_LOG_MAX_BYTES)
+        .unwrap_or(false)
+    {
+        let rotated = directory.join("metrics.log.1");
+        let _ = fs::remove_file(&rotated);
+        let _ = fs::rename(&path, rotated);
+    }
+    let total = SNAPSHOT_REFRESH_TOTAL_MS.load(Ordering::Relaxed);
+    let overlaps = SNAPSHOT_REFRESH_OVERLAPS.load(Ordering::Relaxed);
+    let memory = process_working_set_bytes()
+        .map(|bytes| bytes.to_string())
+        .unwrap_or_else(|| "unknown".to_string());
+    if let Ok(mut file) = OpenOptions::new().create(true).append(true).open(path) {
+        let _ = writeln!(
+            file,
+            "timestamp_ms={} snapshot_count={} last_snapshot_ms={} avg_snapshot_ms={} overlapping_refreshes={} working_set_bytes={memory}",
+            SystemTime::now()
+                .duration_since(UNIX_EPOCH)
+                .map(|duration| duration.as_millis())
+                .unwrap_or_default(),
+            count,
+            elapsed_ms,
+            total / count.max(1),
+            overlaps,
+        );
+    }
+}
+
+fn invalidate_hook_status_cache() {
+    if let Some(cache) = HOOK_STATUS_CACHE.get() {
+        if let Ok(mut cache) = cache.lock() {
+            *cache = None;
+        }
+    }
+}
+
+pub fn install_panic_hook() {
+    std::panic::set_hook(Box::new(|info| {
+        let _guard = CRASH_LOG_LOCK.lock().ok();
+        let directory = approval_policy::base_data_dir();
+        if fs::create_dir_all(&directory).is_err() {
+            return;
+        }
+
+        let path = directory.join("crash.log");
+        if fs::metadata(&path)
+            .map(|metadata| metadata.len() >= CRASH_LOG_MAX_BYTES)
+            .unwrap_or(false)
+        {
+            let rotated = directory.join("crash.log.1");
+            let _ = fs::remove_file(&rotated);
+            let _ = fs::rename(&path, rotated);
+        }
+
+        let role = std::env::args_os()
+            .find_map(|argument| match argument.to_string_lossy().as_ref() {
+                "--codecraft-zcode-hook" => Some("zcode-hook"),
+        "--codecraft-codex-hook" => Some("codex-hook"),
+                "--codecraft-gemini-hook" => Some("gemini-hook"),
+                "--codecraft-claude-hook" => Some("claude-hook"),
+                _ => None,
+            })
+            .unwrap_or("desktop");
+        let payload = info
+            .payload()
+            .downcast_ref::<&str>()
+            .copied()
+            .or_else(|| info.payload().downcast_ref::<String>().map(String::as_str))
+            .unwrap_or("non-string panic payload");
+        let location = info
+            .location()
+            .map(|location| {
+                format!(
+                    "{}:{}:{}",
+                    location.file(),
+                    location.line(),
+                    location.column()
+                )
+            })
+            .unwrap_or_else(|| "unknown".to_string());
+        let timestamp_ms = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .map(|duration| duration.as_millis())
+            .unwrap_or_default();
+        let current_thread = thread::current();
+        let thread_name = current_thread.name().unwrap_or("unnamed");
+        let backtrace = std::backtrace::Backtrace::force_capture();
+
+        if let Ok(mut file) = OpenOptions::new().create(true).append(true).open(path) {
+            let _ = writeln!(
+                file,
+                "timestamp_ms={timestamp_ms} pid={} role={role} thread={thread_name} location={location} payload={payload}\n{backtrace}\n",
+                std::process::id()
+            );
+            let _ = file.flush();
+        }
+    }));
+}
 
 fn hook_configuration_lock() -> Result<std::sync::MutexGuard<'static, ()>, String> {
     HOOK_CONFIGURATION_LOCK
@@ -108,6 +255,12 @@ struct CodexIntegrationState {
 }
 
 #[derive(Default)]
+struct GeminiIntegrationState {
+    store: Mutex<gemini::GeminiStore>,
+    hook_error: Mutex<Option<String>>,
+}
+
+#[derive(Default)]
 struct OpenCodeIntegrationState {
     store: Mutex<opencode::OpenCodeStore>,
     hook_error: Mutex<Option<String>>,
@@ -137,6 +290,7 @@ struct DshIntegrationState {
 struct ZCodeIntegrationState {
     store: Mutex<zcode::ZCodeStore>,
     hook_error: Mutex<Option<String>>,
+    installation: Mutex<Option<zcode_hook::ZCodeInstallation>>,
 }
 
 struct PanelWindowState {
@@ -165,12 +319,91 @@ struct PanelShapeState {
     request: Mutex<Option<PanelShapeRequest>>,
 }
 
-#[derive(Serialize)]
+#[derive(Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
-struct ClaudeSessionSnapshot {
+pub(crate) struct ClaudeSessionSnapshot {
     pub(crate) connected: bool,
     pub(crate) integration_error: Option<String>,
+    pub(crate) version: u64,
     pub(crate) sessions: Vec<claude_hook::ClaudeSession>,
+}
+
+#[derive(Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct AllSessionSnapshots {
+    pub(crate) claude: ClaudeSessionSnapshot,
+    pub(crate) codex: codex::CodexSnapshot,
+    pub(crate) gemini: gemini::GeminiSnapshot,
+    pub(crate) opencode: opencode::OpenCodeSnapshot,
+    pub(crate) mimo: mimo::MimoSnapshot,
+    pub(crate) pi: pi::PiSnapshot,
+    pub(crate) dsh: dsh::DshSnapshot,
+    pub(crate) zcode: zcode::ZCodeSnapshot,
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+struct ActiveSessionCounts {
+    claude: usize,
+    codex: usize,
+    gemini: usize,
+    opencode: usize,
+    mimo: usize,
+    pi: usize,
+    dsh: usize,
+    zcode: usize,
+}
+
+#[derive(Default)]
+pub(crate) struct SessionSnapshotCache {
+    state: Mutex<SessionSnapshotCacheState>,
+    refresh_sender: Mutex<Option<SyncSender<SnapshotRefreshRequest>>>,
+}
+
+#[derive(Default)]
+struct SessionSnapshotCacheState {
+    snapshot: Option<AllSessionSnapshots>,
+}
+
+struct SnapshotRefreshRequest {
+    reply: Option<SyncSender<Result<AllSessionSnapshots, String>>>,
+}
+
+impl SessionSnapshotCache {
+    fn get(&self) -> Option<AllSessionSnapshots> {
+        self.state
+            .lock()
+            .ok()
+            .and_then(|state| state.snapshot.clone())
+    }
+
+    fn set(&self, snapshot: AllSessionSnapshots) {
+        if let Ok(mut state) = self.state.lock() {
+            state.snapshot = Some(snapshot);
+        }
+    }
+
+    fn register_refresh_sender(&self, sender: SyncSender<SnapshotRefreshRequest>) {
+        if let Ok(mut slot) = self.refresh_sender.lock() {
+            *slot = Some(sender);
+        }
+    }
+
+    fn request_refresh(&self) -> Result<AllSessionSnapshots, String> {
+        let sender = self
+            .refresh_sender
+            .lock()
+            .map_err(|error| error.to_string())?
+            .clone()
+            .ok_or_else(|| "session snapshot refresher is not ready".to_string())?;
+        let (reply, response) = mpsc::sync_channel(1);
+        sender
+            .send(SnapshotRefreshRequest { reply: Some(reply) })
+            .map_err(|error| error.to_string())?;
+        response
+            .recv_timeout(Duration::from_secs(3))
+            .map_err(|error| error.to_string())?
+    }
 }
 
 #[derive(Clone, Copy, Debug, Deserialize, Serialize)]
@@ -178,6 +411,7 @@ struct ClaudeSessionSnapshot {
 enum HookAgentId {
     ClaudeCode,
     Codex,
+    GeminiCli,
     OpenCode,
     Mimo,
     Pi,
@@ -190,6 +424,7 @@ impl hook_config::HookInstallConfig {
         match agent {
             HookAgentId::ClaudeCode => self.claude_code,
             HookAgentId::Codex => self.codex,
+            HookAgentId::GeminiCli => self.gemini_cli,
             HookAgentId::OpenCode => self.open_code,
             HookAgentId::Mimo => self.mimo,
             HookAgentId::Pi => self.pi,
@@ -202,6 +437,7 @@ impl hook_config::HookInstallConfig {
         match agent {
             HookAgentId::ClaudeCode => self.claude_code = enabled,
             HookAgentId::Codex => self.codex = enabled,
+            HookAgentId::GeminiCli => self.gemini_cli = enabled,
             HookAgentId::OpenCode => self.open_code = enabled,
             HookAgentId::Mimo => self.mimo = enabled,
             HookAgentId::Pi => self.pi = enabled,
@@ -216,6 +452,7 @@ impl HookAgentId {
         match self {
             Self::ClaudeCode => "claude",
             Self::Codex => "codex",
+            Self::GeminiCli => "geminiCli",
             Self::OpenCode => "opencode",
             Self::Mimo => "mimo",
             Self::Pi => "pi",
@@ -228,6 +465,7 @@ impl HookAgentId {
         match self {
             Self::ClaudeCode => "Claude Code",
             Self::Codex => "Codex",
+            Self::GeminiCli => "Gemini CLI",
             Self::OpenCode => "OpenCode",
             Self::Mimo => "Mimo",
             Self::Pi => "PI",
@@ -237,7 +475,7 @@ impl HookAgentId {
     }
 }
 
-#[derive(Serialize)]
+#[derive(Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
 struct HookIntegrationStatus {
     id: HookAgentId,
@@ -283,7 +521,10 @@ fn command_is_installed(command: &str) -> bool {
     })
 }
 
-fn agent_is_installed(agent: HookAgentId, state: &CodexIntegrationState) -> Result<bool, String> {
+fn agent_is_installed(
+    agent: HookAgentId,
+    zcode_state: &ZCodeIntegrationState,
+) -> Result<bool, String> {
     if matches!(agent, HookAgentId::Pi) {
         return Ok(command_is_installed(agent.command()) || command_is_installed("pi.ps1"));
     }
@@ -294,9 +535,16 @@ fn agent_is_installed(agent: HookAgentId, state: &CodexIntegrationState) -> Resu
             || command_is_installed("npx.cmd"));
     }
     if matches!(agent, HookAgentId::ZCode) {
-        return Ok(zcode_hook::detect_zcode_installation().is_some());
+        let discovered = zcode_state
+            .installation
+            .lock()
+            .map_err(|error| error.to_string())?
+            .is_some();
+        return Ok(zcode_hook::config_exists()? || discovered);
     }
-    let _ = state;
+    if matches!(agent, HookAgentId::GeminiCli) {
+        return Ok(command_is_installed("gemini") || command_is_installed("gemini.cmd"));
+    }
     Ok(command_is_installed(agent.command()))
 }
 
@@ -355,7 +603,6 @@ fn zcode_install_state_label(state: zcode_hook::ZCodeHookInstallState) -> String
         zcode_hook::ZCodeHookInstallState::Installed => "installed",
         zcode_hook::ZCodeHookInstallState::Modified => "modified",
         zcode_hook::ZCodeHookInstallState::Conflict => "conflict",
-        zcode_hook::ZCodeHookInstallState::Incompatible => "incompatible",
         zcode_hook::ZCodeHookInstallState::Error => "error",
     }
     .to_string()
@@ -377,22 +624,38 @@ fn install_codex_hooks(executable: &Path, project_dir: Option<&Path>) -> Result<
 fn save_hook_installation_state(agent: HookAgentId, enabled: bool) -> Result<(), String> {
     let mut config = hook_config::load();
     config.set_enabled(agent, enabled);
-    hook_config::save(&config)
+    hook_config::save(&config)?;
+    invalidate_hook_status_cache();
+    Ok(())
 }
 
 pub(crate) fn hook_statuses(
     state: &CodexIntegrationState,
+    gemini_state: &GeminiIntegrationState,
     opencode_state: &OpenCodeIntegrationState,
     mimo_state: &MimoIntegrationState,
     dsh_state: &DshIntegrationState,
     zcode_state: &ZCodeIntegrationState,
 ) -> Result<Vec<HookIntegrationStatus>, String> {
     let _lock = hook_configuration_lock()?;
-    hook_statuses_unlocked(state, opencode_state, mimo_state, dsh_state, zcode_state)
+    let cache = HOOK_STATUS_CACHE.get_or_init(|| Mutex::new(None));
+    if let Ok(cache) = cache.lock() {
+        if let Some((created_at, statuses)) = cache.as_ref() {
+            if created_at.elapsed() <= HOOK_STATUS_CACHE_TTL {
+                return Ok(statuses.clone());
+            }
+        }
+    }
+    let statuses = hook_statuses_unlocked(state, gemini_state, opencode_state, mimo_state, dsh_state, zcode_state)?;
+    if let Ok(mut cache) = cache.lock() {
+        *cache = Some((Instant::now(), statuses.clone()));
+    }
+    Ok(statuses)
 }
 
 fn hook_statuses_unlocked(
     state: &CodexIntegrationState,
+    gemini_state: &GeminiIntegrationState,
     opencode_state: &OpenCodeIntegrationState,
     mimo_state: &MimoIntegrationState,
     dsh_state: &DshIntegrationState,
@@ -408,7 +671,7 @@ fn hook_statuses_unlocked(
         HookIntegrationStatus {
             id: HookAgentId::ClaudeCode,
             name: HookAgentId::ClaudeCode.display_name(),
-            agent_installed: agent_is_installed(HookAgentId::ClaudeCode, state)?,
+            agent_installed: agent_is_installed(HookAgentId::ClaudeCode, zcode_state)?,
             hook_installed: claude_hook::claude_hooks_installed()?,
             install_state: None,
             install_path: None,
@@ -420,7 +683,7 @@ fn hook_statuses_unlocked(
         HookIntegrationStatus {
             id: HookAgentId::Codex,
             name: HookAgentId::Codex.display_name(),
-            agent_installed: agent_is_installed(HookAgentId::Codex, state)?,
+            agent_installed: agent_is_installed(HookAgentId::Codex, zcode_state)?,
             hook_installed: codex_hook::codex_hooks_installed(
                 project_dir.as_deref().map(Path::new),
             )?,
@@ -432,9 +695,25 @@ fn hook_statuses_unlocked(
             error: None,
         },
         HookIntegrationStatus {
+            id: HookAgentId::GeminiCli,
+            name: HookAgentId::GeminiCli.display_name(),
+            agent_installed: agent_is_installed(HookAgentId::GeminiCli, zcode_state)?,
+            hook_installed: gemini_hook::installed()?,
+            install_state: None,
+            install_path: None,
+            bundled_version: None,
+            installed_version: None,
+            running_versions: Vec::new(),
+            error: gemini_state
+                .hook_error
+                .lock()
+                .map_err(|error| error.to_string())?
+                .clone(),
+        },
+        HookIntegrationStatus {
             id: HookAgentId::OpenCode,
             name: HookAgentId::OpenCode.display_name(),
-            agent_installed: agent_is_installed(HookAgentId::OpenCode, state)?,
+            agent_installed: agent_is_installed(HookAgentId::OpenCode, zcode_state)?,
             hook_installed: opencode.installed(),
             install_state: Some(opencode_install_state_label(opencode.state)),
             install_path: Some(opencode.install_path),
@@ -453,7 +732,7 @@ fn hook_statuses_unlocked(
             HookIntegrationStatus {
                 id: HookAgentId::Mimo,
                 name: HookAgentId::Mimo.display_name(),
-                agent_installed: agent_is_installed(HookAgentId::Mimo, state)?,
+                agent_installed: agent_is_installed(HookAgentId::Mimo, zcode_state)?,
                 hook_installed: status.installed(),
                 install_state: Some(mimo_install_state_label(status.state)),
                 install_path: Some(status.install_path),
@@ -468,7 +747,7 @@ fn hook_statuses_unlocked(
             HookIntegrationStatus {
                 id: HookAgentId::Pi,
                 name: HookAgentId::Pi.display_name(),
-                agent_installed: agent_is_installed(HookAgentId::Pi, state)?,
+                agent_installed: agent_is_installed(HookAgentId::Pi, zcode_state)?,
                 hook_installed: status.installed(),
                 install_state: Some(pi_install_state_label(status.state)),
                 install_path: Some(status.install_path),
@@ -497,7 +776,7 @@ fn hook_statuses_unlocked(
             HookIntegrationStatus {
                 id: HookAgentId::DeepSeekHarness,
                 name: HookAgentId::DeepSeekHarness.display_name(),
-                agent_installed: agent_is_installed(HookAgentId::DeepSeekHarness, state)?,
+                agent_installed: agent_is_installed(HookAgentId::DeepSeekHarness, zcode_state)?,
                 hook_installed: status.installed(),
                 install_state: Some(dsh_install_state_label(status.state)),
                 install_path: Some(status.install_path),
@@ -509,6 +788,11 @@ fn hook_statuses_unlocked(
         },
         {
             let status = zcode_hook::status()?;
+            let installation = zcode_state
+                .installation
+                .lock()
+                .map_err(|error| error.to_string())?
+                .clone();
             let runtime_error = zcode_state
                 .hook_error
                 .lock()
@@ -517,12 +801,15 @@ fn hook_statuses_unlocked(
             HookIntegrationStatus {
                 id: HookAgentId::ZCode,
                 name: HookAgentId::ZCode.display_name(),
-                agent_installed: agent_is_installed(HookAgentId::ZCode, state)?,
+                agent_installed: agent_is_installed(HookAgentId::ZCode, zcode_state)?,
                 hook_installed: status.installed(),
                 install_state: Some(zcode_install_state_label(status.state)),
-                install_path: Some(status.install_path),
+                install_path: installation
+                    .as_ref()
+                    .map(|installation| installation.path.to_string_lossy().to_string())
+                    .or(Some(status.install_path)),
                 bundled_version: Some("3.10.1".to_string()),
-                installed_version: status.detected_version,
+                installed_version: installation.and_then(|installation| installation.version),
                 running_versions: Vec::new(),
                 error: status.error.or(runtime_error),
             }
@@ -1788,10 +2075,111 @@ fn focus_zcode_window(window: WebviewWindow) -> Result<(), String> {
 }
 
 #[tauri::command]
-fn list_claude_sessions(
-    state: tauri::State<'_, ClaudeIntegrationState>,
-) -> Result<ClaudeSessionSnapshot, String> {
-    claude_snapshot(&state)
+fn list_claude_sessions(app: tauri::AppHandle) -> Result<ClaudeSessionSnapshot, String> {
+    Ok(cached_all_sessions_snapshot(&app)?.claude)
+}
+
+#[tauri::command]
+async fn list_all_sessions(app: tauri::AppHandle) -> Result<AllSessionSnapshots, String> {
+    tauri::async_runtime::spawn_blocking(move || cached_all_sessions_snapshot(&app))
+        .await
+        .map_err(|error| error.to_string())?
+}
+
+pub(crate) fn cached_all_sessions_snapshot(
+    app: &tauri::AppHandle,
+) -> Result<AllSessionSnapshots, String> {
+    let cache = app.state::<SessionSnapshotCache>();
+    if let Some(snapshot) = cache.get() {
+        return Ok(snapshot);
+    }
+    cache.request_refresh()
+}
+
+/// Forces the single background refresher to consume all inboxes and publish a
+/// coherent snapshot before a decision is validated against the in-memory
+/// session store.
+pub(crate) fn refresh_sessions_now(app: &tauri::AppHandle) -> Result<AllSessionSnapshots, String> {
+    app.state::<SessionSnapshotCache>().request_refresh()
+}
+
+pub(crate) fn all_sessions_snapshot(
+    app: &tauri::AppHandle,
+) -> Result<AllSessionSnapshots, String> {
+    let claude = claude_snapshot(&app.state::<ClaudeIntegrationState>())?;
+    let codex = codex_snapshot(&app.state::<CodexIntegrationState>())?;
+    let gemini = gemini_snapshot(&app.state::<GeminiIntegrationState>())?;
+    let opencode = opencode_snapshot(&app.state::<OpenCodeIntegrationState>())?;
+    let mimo = mimo_snapshot(&app.state::<MimoIntegrationState>())?;
+    let pi = pi_snapshot(&app.state::<PiIntegrationState>())?;
+    let dsh = dsh_snapshot(&app.state::<DshIntegrationState>())?;
+    let zcode = zcode_snapshot(&app.state::<ZCodeIntegrationState>())?;
+    Ok(AllSessionSnapshots {
+        claude,
+        codex,
+        gemini,
+        opencode,
+        mimo,
+        pi,
+        dsh,
+        zcode,
+    })
+}
+
+#[tauri::command]
+fn active_session_counts(
+    app: tauri::AppHandle,
+) -> Result<ActiveSessionCounts, String> {
+    Ok(ActiveSessionCounts {
+        claude: app
+            .state::<ClaudeIntegrationState>()
+            .sessions
+            .lock()
+            .map_err(|error| error.to_string())?
+            .active_session_count(),
+        codex: app
+            .state::<CodexIntegrationState>()
+            .hook_store
+            .lock()
+            .map_err(|error| error.to_string())?
+            .active_session_count(),
+        gemini: app
+            .state::<GeminiIntegrationState>()
+            .store
+            .lock()
+            .map_err(|error| error.to_string())?
+            .active_session_count(),
+        opencode: app
+            .state::<OpenCodeIntegrationState>()
+            .store
+            .lock()
+            .map_err(|error| error.to_string())?
+            .active_session_count(),
+        mimo: app
+            .state::<MimoIntegrationState>()
+            .store
+            .lock()
+            .map_err(|error| error.to_string())?
+            .active_session_count(),
+        pi: app
+            .state::<PiIntegrationState>()
+            .store
+            .lock()
+            .map_err(|error| error.to_string())?
+            .active_session_count(),
+        dsh: app
+            .state::<DshIntegrationState>()
+            .store
+            .lock()
+            .map_err(|error| error.to_string())?
+            .active_session_count(),
+        zcode: app
+            .state::<ZCodeIntegrationState>()
+            .store
+            .lock()
+            .map_err(|error| error.to_string())?
+            .active_session_count(),
+    })
 }
 
 /// Shared snapshot builder so the desktop panel and the LAN console always read
@@ -1809,6 +2197,7 @@ fn claude_snapshot(state: &ClaudeIntegrationState) -> Result<ClaudeSessionSnapsh
     Ok(ClaudeSessionSnapshot {
         connected: integration_error.is_none(),
         integration_error,
+        version: session_store.version(),
         sessions: session_store.sessions(),
     })
 }
@@ -1829,12 +2218,44 @@ async fn list_hook_integrations(
 ) -> Result<Vec<HookIntegrationStatus>, String> {
     tauri::async_runtime::spawn_blocking(move || {
         let state = app.state::<CodexIntegrationState>();
+        let gemini_state = app.state::<GeminiIntegrationState>();
         let opencode_state = app.state::<OpenCodeIntegrationState>();
         let mimo_state = app.state::<MimoIntegrationState>();
         let dsh_state = app.state::<DshIntegrationState>();
         let zcode_state = app.state::<ZCodeIntegrationState>();
         hook_statuses(
             &state,
+            &gemini_state,
+            &opencode_state,
+            &mimo_state,
+            &dsh_state,
+            &zcode_state,
+        )
+    })
+    .await
+    .map_err(|error| error.to_string())?
+}
+
+#[tauri::command]
+async fn refresh_hook_integrations(
+    app: tauri::AppHandle,
+) -> Result<Vec<HookIntegrationStatus>, String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        let installation = zcode_hook::discover_zcode_installation();
+        let state = app.state::<CodexIntegrationState>();
+        let gemini_state = app.state::<GeminiIntegrationState>();
+        let opencode_state = app.state::<OpenCodeIntegrationState>();
+        let mimo_state = app.state::<MimoIntegrationState>();
+        let dsh_state = app.state::<DshIntegrationState>();
+        let zcode_state = app.state::<ZCodeIntegrationState>();
+        *zcode_state
+            .installation
+            .lock()
+            .map_err(|error| error.to_string())? = installation;
+        invalidate_hook_status_cache();
+        hook_statuses(
+            &state,
+            &gemini_state,
             &opencode_state,
             &mimo_state,
             &dsh_state,
@@ -1863,8 +2284,8 @@ fn pi_hook_uninstall() -> Result<(), String> {
 }
 
 #[tauri::command]
-fn list_pi_sessions(state: tauri::State<'_, PiIntegrationState>) -> Result<pi::PiSnapshot, String> {
-    pi_snapshot(&state)
+fn list_pi_sessions(app: tauri::AppHandle) -> Result<pi::PiSnapshot, String> {
+    Ok(cached_all_sessions_snapshot(&app)?.pi)
 }
 
 pub(crate) fn pi_snapshot(state: &PiIntegrationState) -> Result<pi::PiSnapshot, String> {
@@ -1887,6 +2308,7 @@ pub(crate) fn pi_snapshot(state: &PiIntegrationState) -> Result<pi::PiSnapshot, 
 
 #[tauri::command]
 fn pi_respond_approval(
+    app: tauri::AppHandle,
     state: tauri::State<'_, PiIntegrationState>,
     extension_instance_id: String,
     session_id: String,
@@ -1894,6 +2316,7 @@ fn pi_respond_approval(
     decision: pi::PiApprovalDecision,
 ) -> Result<(), String> {
     apply_pi_approval(
+        &app,
         &state,
         &extension_instance_id,
         &session_id,
@@ -1903,19 +2326,21 @@ fn pi_respond_approval(
 }
 
 pub(crate) fn apply_pi_approval(
+    app: &tauri::AppHandle,
     state: &PiIntegrationState,
     extension_instance_id: &str,
     session_id: &str,
     request_id: &str,
     decision: pi::PiApprovalDecision,
 ) -> Result<(), String> {
+    refresh_sessions_now(app)?;
     let mut store = state.store.lock().map_err(|error| error.to_string())?;
-    store.drain_inbox()?;
     store.submit_approval(extension_instance_id, session_id, request_id, decision)
 }
 
 #[tauri::command]
 fn pi_respond_question(
+    app: tauri::AppHandle,
     state: tauri::State<'_, PiIntegrationState>,
     extension_instance_id: String,
     session_id: String,
@@ -1923,6 +2348,7 @@ fn pi_respond_question(
     answers: Vec<pi::PiQuestionAnswer>,
 ) -> Result<(), String> {
     apply_pi_question(
+        &app,
         &state,
         &extension_instance_id,
         &session_id,
@@ -1932,10 +2358,8 @@ fn pi_respond_question(
 }
 
 #[tauri::command]
-fn list_dsh_sessions(
-    state: tauri::State<'_, DshIntegrationState>,
-) -> Result<dsh::DshSnapshot, String> {
-    dsh_snapshot(&state)
+fn list_dsh_sessions(app: tauri::AppHandle) -> Result<dsh::DshSnapshot, String> {
+    Ok(cached_all_sessions_snapshot(&app)?.dsh)
 }
 
 pub(crate) fn dsh_snapshot(state: &DshIntegrationState) -> Result<dsh::DshSnapshot, String> {
@@ -1985,6 +2409,7 @@ fn deliver_dsh_response(
 
 #[tauri::command]
 fn dsh_respond_approval(
+    app: tauri::AppHandle,
     state: tauri::State<'_, DshIntegrationState>,
     bridge_instance_id: String,
     plugin_instance_id: String,
@@ -1993,6 +2418,7 @@ fn dsh_respond_approval(
     decision: dsh::DshApprovalDecision,
 ) -> Result<(), String> {
     apply_dsh_approval(
+        &app,
         &state,
         &bridge_instance_id,
         &plugin_instance_id,
@@ -2003,6 +2429,7 @@ fn dsh_respond_approval(
 }
 
 pub(crate) fn apply_dsh_approval(
+    app: &tauri::AppHandle,
     state: &DshIntegrationState,
     bridge_instance_id: &str,
     plugin_instance_id: &str,
@@ -2010,6 +2437,7 @@ pub(crate) fn apply_dsh_approval(
     request_id: &str,
     decision: dsh::DshApprovalDecision,
 ) -> Result<(), String> {
+    refresh_sessions_now(app)?;
     let response = state
         .store
         .lock()
@@ -2026,6 +2454,7 @@ pub(crate) fn apply_dsh_approval(
 
 #[tauri::command]
 fn dsh_respond_question(
+    app: tauri::AppHandle,
     state: tauri::State<'_, DshIntegrationState>,
     bridge_instance_id: String,
     plugin_instance_id: String,
@@ -2034,6 +2463,7 @@ fn dsh_respond_question(
     answers: Vec<dsh::DshQuestionAnswer>,
 ) -> Result<(), String> {
     apply_dsh_question(
+        &app,
         &state,
         &bridge_instance_id,
         &plugin_instance_id,
@@ -2044,6 +2474,7 @@ fn dsh_respond_question(
 }
 
 pub(crate) fn apply_dsh_question(
+    app: &tauri::AppHandle,
     state: &DshIntegrationState,
     bridge_instance_id: &str,
     plugin_instance_id: &str,
@@ -2051,6 +2482,7 @@ pub(crate) fn apply_dsh_question(
     request_id: &str,
     answers: Vec<dsh::DshQuestionAnswer>,
 ) -> Result<(), String> {
+    refresh_sessions_now(app)?;
     let response = state
         .store
         .lock()
@@ -2067,6 +2499,7 @@ pub(crate) fn apply_dsh_question(
 
 #[tauri::command]
 fn dsh_respond_plan(
+    app: tauri::AppHandle,
     state: tauri::State<'_, DshIntegrationState>,
     bridge_instance_id: String,
     plugin_instance_id: String,
@@ -2076,6 +2509,7 @@ fn dsh_respond_plan(
     feedback: Option<String>,
 ) -> Result<(), String> {
     apply_dsh_plan(
+        &app,
         &state,
         &bridge_instance_id,
         &plugin_instance_id,
@@ -2087,6 +2521,7 @@ fn dsh_respond_plan(
 }
 
 pub(crate) fn apply_dsh_plan(
+    app: &tauri::AppHandle,
     state: &DshIntegrationState,
     bridge_instance_id: &str,
     plugin_instance_id: &str,
@@ -2095,6 +2530,7 @@ pub(crate) fn apply_dsh_plan(
     approved: bool,
     feedback: Option<String>,
 ) -> Result<(), String> {
+    refresh_sessions_now(app)?;
     let response = state
         .store
         .lock()
@@ -2111,24 +2547,24 @@ pub(crate) fn apply_dsh_plan(
 }
 
 #[tauri::command]
-fn list_zcode_sessions(
-    state: tauri::State<'_, ZCodeIntegrationState>,
-) -> Result<zcode::ZCodeSnapshot, String> {
-    zcode_snapshot(&state)
+fn list_zcode_sessions(app: tauri::AppHandle) -> Result<zcode::ZCodeSnapshot, String> {
+    Ok(cached_all_sessions_snapshot(&app)?.zcode)
 }
 
 pub(crate) fn zcode_snapshot(
     state: &ZCodeIntegrationState,
 ) -> Result<zcode::ZCodeSnapshot, String> {
     let status = zcode_hook::status()?;
+    let installation = state
+        .installation
+        .lock()
+        .map_err(|error| error.to_string())?
+        .clone();
     let mut store = state.store.lock().map_err(|error| error.to_string())?;
     if !status.installed() {
         store.clear();
         store.set_integration_error(status.error.or_else(|| {
             Some(match status.state {
-                zcode_hook::ZCodeHookInstallState::Incompatible => {
-                    "当前 ZCode 版本与 CodeCraft Hook 不兼容".to_string()
-                }
                 zcode_hook::ZCodeHookInstallState::Modified => {
                     "ZCode Hook 配置已被修改，需要修复".to_string()
                 }
@@ -2148,81 +2584,108 @@ pub(crate) fn zcode_snapshot(
                 .clone(),
         );
     }
-    Ok(store.snapshot(status.detected_path, status.detected_version))
+    let (detected_path, detected_version) = installation
+        .map(|installation| {
+            (
+                Some(installation.path.to_string_lossy().to_string()),
+                installation.version,
+            )
+        })
+        .unwrap_or((None, None));
+    Ok(store.snapshot(detected_path, detected_version))
 }
 
 #[tauri::command]
 fn zcode_respond_approval(
+    app: tauri::AppHandle,
     state: tauri::State<'_, ZCodeIntegrationState>,
     session_id: String,
     request_id: String,
     decision: zcode_hook::ZCodeApprovalDecision,
     message: Option<String>,
 ) -> Result<(), String> {
-    apply_zcode_approval(&state, &session_id, &request_id, decision, message)
+    apply_zcode_approval(&app, &state, &session_id, &request_id, decision, message)
 }
 
 pub(crate) fn apply_zcode_approval(
+    app: &tauri::AppHandle,
     state: &ZCodeIntegrationState,
     session_id: &str,
     request_id: &str,
     decision: zcode_hook::ZCodeApprovalDecision,
     message: Option<String>,
 ) -> Result<(), String> {
+    refresh_sessions_now(app)?;
     let mut store = state.store.lock().map_err(|error| error.to_string())?;
-    store.drain_inbox()?;
     store.submit_permission(session_id, request_id, decision, message)
 }
 
 #[tauri::command]
 fn zcode_respond_question(
+    app: tauri::AppHandle,
     state: tauri::State<'_, ZCodeIntegrationState>,
     session_id: String,
     request_id: String,
     answers: Vec<zcode_hook::ZCodeQuestionAnswer>,
     annotations: Option<serde_json::Value>,
 ) -> Result<(), String> {
-    apply_zcode_question(&state, &session_id, &request_id, answers, annotations)
+    apply_zcode_question(&app, &state, &session_id, &request_id, answers, annotations)
 }
 
 pub(crate) fn apply_zcode_question(
+    app: &tauri::AppHandle,
     state: &ZCodeIntegrationState,
     session_id: &str,
     request_id: &str,
     answers: Vec<zcode_hook::ZCodeQuestionAnswer>,
     annotations: Option<serde_json::Value>,
 ) -> Result<(), String> {
+    refresh_sessions_now(app)?;
     let mut store = state.store.lock().map_err(|error| error.to_string())?;
-    store.drain_inbox()?;
     store.submit_question(session_id, request_id, answers, annotations)
 }
 
 #[tauri::command]
 fn zcode_respond_plan(
+    app: tauri::AppHandle,
     state: tauri::State<'_, ZCodeIntegrationState>,
     session_id: String,
     request_id: String,
     approved: bool,
     feedback: Option<String>,
 ) -> Result<(), String> {
-    apply_zcode_plan(&state, &session_id, &request_id, approved, feedback)
+    apply_zcode_plan(&app, &state, &session_id, &request_id, approved, feedback)
 }
 
 pub(crate) fn apply_zcode_plan(
+    app: &tauri::AppHandle,
     state: &ZCodeIntegrationState,
     session_id: &str,
     request_id: &str,
     approved: bool,
     feedback: Option<String>,
 ) -> Result<(), String> {
+    refresh_sessions_now(app)?;
     let feedback_for_zcode = zcode_plan_feedback(approved, feedback.as_deref());
+    let feedback_executable = if feedback_for_zcode.is_some() {
+        Some(
+            state
+                .installation
+                .lock()
+                .map_err(|error| error.to_string())?
+                .as_ref()
+                .map(|installation| installation.path.clone())
+                .ok_or_else(|| "请先在 Hook 管理中手动刷新 ZCode 安装信息".to_string())?,
+        )
+    } else {
+        None
+    };
     {
         let mut store = state.store.lock().map_err(|error| error.to_string())?;
-        store.drain_inbox()?;
         store.submit_plan(session_id, request_id, approved, feedback)?;
     }
-    if let Some(feedback) = feedback_for_zcode {
-        zcode_hook::queue_plan_feedback(session_id, &feedback);
+    if let (Some(executable), Some(feedback)) = (feedback_executable, feedback_for_zcode) {
+        zcode_hook::queue_plan_feedback(executable, session_id, &feedback);
     }
     Ok(())
 }
@@ -2239,22 +2702,21 @@ fn zcode_plan_feedback(approved: bool, feedback: Option<&str>) -> Option<String>
 }
 
 pub(crate) fn apply_pi_question(
+    app: &tauri::AppHandle,
     state: &PiIntegrationState,
     extension_instance_id: &str,
     session_id: &str,
     request_id: &str,
     answers: Vec<pi::PiQuestionAnswer>,
 ) -> Result<(), String> {
+    refresh_sessions_now(app)?;
     let mut store = state.store.lock().map_err(|error| error.to_string())?;
-    store.drain_inbox()?;
     store.submit_question(extension_instance_id, session_id, request_id, answers)
 }
 
 #[tauri::command]
-fn list_opencode_sessions(
-    state: tauri::State<'_, OpenCodeIntegrationState>,
-) -> Result<opencode::OpenCodeSnapshot, String> {
-    opencode_snapshot(&state)
+fn list_opencode_sessions(app: tauri::AppHandle) -> Result<opencode::OpenCodeSnapshot, String> {
+    Ok(cached_all_sessions_snapshot(&app)?.opencode)
 }
 
 pub(crate) fn opencode_snapshot(
@@ -2274,31 +2736,34 @@ pub(crate) fn opencode_snapshot(
 
 #[tauri::command]
 fn submit_opencode_question(
+    app: tauri::AppHandle,
     plugin_instance_id: String,
     session_id: String,
     request_id: String,
     answers: Vec<Vec<String>>,
     state: tauri::State<'_, OpenCodeIntegrationState>,
 ) -> Result<(), String> {
+    refresh_sessions_now(&app)?;
     let mut store = state.store.lock().map_err(|error| error.to_string())?;
-    store.drain_inbox()?;
     store.submit_question(&plugin_instance_id, &session_id, &request_id, answers)
 }
 
 #[tauri::command]
 fn reject_opencode_question(
+    app: tauri::AppHandle,
     plugin_instance_id: String,
     session_id: String,
     request_id: String,
     state: tauri::State<'_, OpenCodeIntegrationState>,
 ) -> Result<(), String> {
+    refresh_sessions_now(&app)?;
     let mut store = state.store.lock().map_err(|error| error.to_string())?;
-    store.drain_inbox()?;
     store.reject_question(&plugin_instance_id, &session_id, &request_id)
 }
 
 #[tauri::command]
 fn submit_opencode_permission(
+    app: tauri::AppHandle,
     plugin_instance_id: String,
     session_id: String,
     request_id: String,
@@ -2306,8 +2771,8 @@ fn submit_opencode_permission(
     message: Option<String>,
     state: tauri::State<'_, OpenCodeIntegrationState>,
 ) -> Result<(), String> {
+    refresh_sessions_now(&app)?;
     let mut store = state.store.lock().map_err(|error| error.to_string())?;
-    store.drain_inbox()?;
     store.submit_permission(
         &plugin_instance_id,
         &session_id,
@@ -2319,22 +2784,21 @@ fn submit_opencode_permission(
 
 #[tauri::command]
 fn submit_opencode_tool_gate(
+    app: tauri::AppHandle,
     plugin_instance_id: String,
     session_id: String,
     review_id: String,
     action: String,
     state: tauri::State<'_, OpenCodeIntegrationState>,
 ) -> Result<(), String> {
+    refresh_sessions_now(&app)?;
     let mut store = state.store.lock().map_err(|error| error.to_string())?;
-    store.drain_inbox()?;
     store.submit_gate(&plugin_instance_id, &session_id, &review_id, &action)
 }
 
 #[tauri::command]
-fn list_mimo_sessions(
-    state: tauri::State<'_, MimoIntegrationState>,
-) -> Result<mimo::MimoSnapshot, String> {
-    mimo_snapshot(&state)
+fn list_mimo_sessions(app: tauri::AppHandle) -> Result<mimo::MimoSnapshot, String> {
+    Ok(cached_all_sessions_snapshot(&app)?.mimo)
 }
 
 pub(crate) fn mimo_snapshot(
@@ -2354,31 +2818,34 @@ pub(crate) fn mimo_snapshot(
 
 #[tauri::command]
 fn mimo_respond_question(
+    app: tauri::AppHandle,
     plugin_instance_id: String,
     session_id: String,
     request_id: String,
     answers: Vec<Vec<String>>,
     state: tauri::State<'_, MimoIntegrationState>,
 ) -> Result<(), String> {
+    refresh_sessions_now(&app)?;
     let mut store = state.store.lock().map_err(|error| error.to_string())?;
-    store.drain_inbox()?;
     store.submit_question(&plugin_instance_id, &session_id, &request_id, answers)
 }
 
 #[tauri::command]
 fn mimo_reject_question(
+    app: tauri::AppHandle,
     plugin_instance_id: String,
     session_id: String,
     request_id: String,
     state: tauri::State<'_, MimoIntegrationState>,
 ) -> Result<(), String> {
+    refresh_sessions_now(&app)?;
     let mut store = state.store.lock().map_err(|error| error.to_string())?;
-    store.drain_inbox()?;
     store.reject_question(&plugin_instance_id, &session_id, &request_id)
 }
 
 #[tauri::command]
 fn mimo_respond_approval(
+    app: tauri::AppHandle,
     plugin_instance_id: String,
     session_id: String,
     request_id: String,
@@ -2386,26 +2853,28 @@ fn mimo_respond_approval(
     message: Option<String>,
     state: tauri::State<'_, MimoIntegrationState>,
 ) -> Result<(), String> {
+    refresh_sessions_now(&app)?;
     let mut store = state.store.lock().map_err(|error| error.to_string())?;
-    store.drain_inbox()?;
     store.submit_permission(&plugin_instance_id, &session_id, &request_id, &action, message)
 }
 
 #[tauri::command]
 fn mimo_respond_gate(
+    app: tauri::AppHandle,
     plugin_instance_id: String,
     session_id: String,
     review_id: String,
     action: String,
     state: tauri::State<'_, MimoIntegrationState>,
 ) -> Result<(), String> {
+    refresh_sessions_now(&app)?;
     let mut store = state.store.lock().map_err(|error| error.to_string())?;
-    store.drain_inbox()?;
     store.submit_gate(&plugin_instance_id, &session_id, &review_id, &action)
 }
 
 #[tauri::command]
 fn mimo_respond_plan(
+    app: tauri::AppHandle,
     plugin_instance_id: String,
     session_id: String,
     request_id: String,
@@ -2413,8 +2882,8 @@ fn mimo_respond_plan(
     feedback: Option<String>,
     state: tauri::State<'_, MimoIntegrationState>,
 ) -> Result<(), String> {
+    refresh_sessions_now(&app)?;
     let mut store = state.store.lock().map_err(|error| error.to_string())?;
-    store.drain_inbox()?;
     store.submit_plan(&plugin_instance_id, &session_id, &request_id, approved, feedback)
 }
 
@@ -2426,7 +2895,6 @@ async fn wait_for_opencode_decision(
     loop {
         {
             let mut store = state.store.lock().map_err(|error| error.to_string())?;
-            store.drain_inbox()?;
             if let Some(receipt) = store.take_decision_receipt(decision_id) {
                 return if receipt.result == "applied" {
                     Ok(())
@@ -2446,14 +2914,15 @@ async fn wait_for_opencode_decision(
 
 #[tauri::command]
 async fn switch_opencode_agent(
+    app: tauri::AppHandle,
     plugin_instance_id: String,
     session_id: String,
     agent: String,
     state: tauri::State<'_, OpenCodeIntegrationState>,
 ) -> Result<(), String> {
+    refresh_sessions_now(&app)?;
     let decision_id = {
         let mut store = state.store.lock().map_err(|error| error.to_string())?;
-        store.drain_inbox()?;
         store.switch_agent(&plugin_instance_id, &session_id, &agent)?
     };
     wait_for_opencode_decision(&state, &decision_id).await
@@ -2461,14 +2930,15 @@ async fn switch_opencode_agent(
 
 #[tauri::command]
 async fn send_opencode_session_message(
+    app: tauri::AppHandle,
     plugin_instance_id: String,
     session_id: String,
     message: String,
     state: tauri::State<'_, OpenCodeIntegrationState>,
 ) -> Result<(), String> {
+    refresh_sessions_now(&app)?;
     let decision_id = {
         let mut store = state.store.lock().map_err(|error| error.to_string())?;
-        store.drain_inbox()?;
         store.send_message(&plugin_instance_id, &session_id, &message)?
     };
     wait_for_opencode_decision(&state, &decision_id).await
@@ -2480,12 +2950,13 @@ async fn install_agent_hook(agent: HookAgentId, app: tauri::AppHandle) -> Result
         let _lock = hook_configuration_lock()?;
         let claude_state = app.state::<ClaudeIntegrationState>();
         let codex_state = app.state::<CodexIntegrationState>();
+        let gemini_state = app.state::<GeminiIntegrationState>();
         let opencode_state = app.state::<OpenCodeIntegrationState>();
         let mimo_state = app.state::<MimoIntegrationState>();
         let pi_state = app.state::<PiIntegrationState>();
         let dsh_state = app.state::<DshIntegrationState>();
         let zcode_state = app.state::<ZCodeIntegrationState>();
-        if !agent_is_installed(agent, &codex_state)? {
+        if !agent_is_installed(agent, &zcode_state)? {
             return Err(format!("{} 未安装", agent.display_name()));
         }
 
@@ -2509,6 +2980,19 @@ async fn install_agent_hook(agent: HookAgentId, app: tauri::AppHandle) -> Result
                     .map_err(|error| error.to_string())? = None;
                 codex_state
                     .hook_store
+                    .lock()
+                    .map_err(|error| error.to_string())?
+                    .set_integration_error(None);
+            }
+            HookAgentId::GeminiCli => {
+                gemini_hook::install(&executable)?;
+                save_hook_installation_state(agent, true)?;
+                *gemini_state
+                    .hook_error
+                    .lock()
+                    .map_err(|error| error.to_string())? = None;
+                gemini_state
+                    .store
                     .lock()
                     .map_err(|error| error.to_string())?
                     .set_integration_error(None);
@@ -2566,12 +3050,13 @@ async fn uninstall_agent_hook(agent: HookAgentId, app: tauri::AppHandle) -> Resu
         let _lock = hook_configuration_lock()?;
         let claude_state = app.state::<ClaudeIntegrationState>();
         let codex_state = app.state::<CodexIntegrationState>();
+        let gemini_state = app.state::<GeminiIntegrationState>();
         let opencode_state = app.state::<OpenCodeIntegrationState>();
         let mimo_state = app.state::<MimoIntegrationState>();
         let pi_state = app.state::<PiIntegrationState>();
         let dsh_state = app.state::<DshIntegrationState>();
         let zcode_state = app.state::<ZCodeIntegrationState>();
-        if !agent_is_installed(agent, &codex_state)? {
+        if !agent_is_installed(agent, &zcode_state)? {
             return Err(format!("{} 未安装", agent.display_name()));
         }
 
@@ -2596,6 +3081,21 @@ async fn uninstall_agent_hook(agent: HookAgentId, app: tauri::AppHandle) -> Resu
                     .map_err(|error| error.to_string())? = Some(message.clone());
                 let mut store = codex_state
                     .hook_store
+                    .lock()
+                    .map_err(|error| error.to_string())?;
+                store.clear();
+                store.set_integration_error(Some(message));
+            }
+            HookAgentId::GeminiCli => {
+                gemini_hook::uninstall()?;
+                save_hook_installation_state(agent, false)?;
+                let message = "Gemini CLI Hook 未安装".to_string();
+                *gemini_state
+                    .hook_error
+                    .lock()
+                    .map_err(|error| error.to_string())? = Some(message.clone());
+                let mut store = gemini_state
+                    .store
                     .lock()
                     .map_err(|error| error.to_string())?;
                 store.clear();
@@ -2747,30 +3247,34 @@ fn submit_claude_question_answer(
 
 #[tauri::command]
 fn submit_claude_permission_decision(
+    app: tauri::AppHandle,
     state: tauri::State<'_, ClaudeIntegrationState>,
     request_id: String,
     decision: claude_hook::PermissionDecision,
 ) -> Result<(), String> {
-    apply_claude_permission_decision(&state, &request_id, decision)
+    apply_claude_permission_decision(&app, &state, &request_id, decision)
 }
 
 #[tauri::command]
 fn submit_claude_plan_decision(
+    app: tauri::AppHandle,
     state: tauri::State<'_, ClaudeIntegrationState>,
     request_id: String,
     mode: claude_hook::PlanExecutionMode,
     note: Option<String>,
 ) -> Result<(), String> {
-    apply_claude_plan_decision(&state, &request_id, mode, note)
+    apply_claude_plan_decision(&app, &state, &request_id, mode, note)
 }
 
 /// Writes a Claude permission decision and clears it from the store so both the
 /// desktop panel and the LAN console stay idempotent.
 fn apply_claude_permission_decision(
+    app: &tauri::AppHandle,
     state: &ClaudeIntegrationState,
     request_id: &str,
     decision: claude_hook::PermissionDecision,
 ) -> Result<(), String> {
+    refresh_sessions_now(app)?;
     claude_hook::submit_permission_decision(request_id, decision)?;
     let mut session_store = state.sessions.lock().map_err(|error| error.to_string())?;
     session_store.clear_permission(request_id);
@@ -2778,11 +3282,13 @@ fn apply_claude_permission_decision(
 }
 
 fn apply_claude_plan_decision(
+    app: &tauri::AppHandle,
     state: &ClaudeIntegrationState,
     request_id: &str,
     mode: claude_hook::PlanExecutionMode,
     note: Option<String>,
 ) -> Result<(), String> {
+    refresh_sessions_now(app)?;
     claude_hook::submit_plan_decision(request_id, mode, note)?;
     let mut session_store = state.sessions.lock().map_err(|error| error.to_string())?;
     session_store.clear_plan(request_id);
@@ -2790,10 +3296,47 @@ fn apply_claude_plan_decision(
 }
 
 #[tauri::command]
-fn list_codex_sessions(
-    state: tauri::State<'_, CodexIntegrationState>,
-) -> Result<codex::CodexSnapshot, String> {
-    codex_snapshot(&state)
+fn list_codex_sessions(app: tauri::AppHandle) -> Result<codex::CodexSnapshot, String> {
+    Ok(cached_all_sessions_snapshot(&app)?.codex)
+}
+
+#[tauri::command]
+fn list_gemini_sessions(app: tauri::AppHandle) -> Result<gemini::GeminiSnapshot, String> {
+    Ok(cached_all_sessions_snapshot(&app)?.gemini)
+}
+
+#[tauri::command]
+fn focus_gemini_session(
+    app: tauri::AppHandle,
+    session_id: String,
+) -> Result<gemini_focus::GeminiFocusResult, String> {
+    let snapshot = cached_all_sessions_snapshot(&app)?.gemini;
+    let Some(session) = snapshot.sessions.into_iter().find(|session| session.id == session_id) else {
+        return Ok(gemini_focus::GeminiFocusResult::NotFound);
+    };
+    Ok(gemini_focus::focus_session(&session))
+}
+
+fn gemini_snapshot(state: &GeminiIntegrationState) -> Result<gemini::GeminiSnapshot, String> {
+    let installed = gemini_hook::installed()?;
+    let mut store = state.store.lock().map_err(|error| error.to_string())?;
+    if !installed {
+        let _ = gemini_hook::drain_inbox_events();
+        store.clear();
+        store.set_integration_error(Some("Gemini CLI Hook 未安装".to_string()));
+        return Ok(store.snapshot());
+    }
+    let events = gemini_hook::drain_inbox_events()?;
+    for event in events {
+        store.apply(event);
+    }
+    let error = state
+        .hook_error
+        .lock()
+        .map_err(|error| error.to_string())?
+        .clone();
+    store.set_integration_error(error);
+    Ok(store.snapshot())
 }
 
 /// Shared snapshot builder for the desktop panel and the LAN console.
@@ -2829,6 +3372,7 @@ fn codex_snapshot(state: &CodexIntegrationState) -> Result<codex::CodexSnapshot,
         .map_err(|error| error.to_string())?
         .clone();
     let mut store = state.hook_store.lock().map_err(|error| error.to_string())?;
+    store.cleanup();
     store.set_integration_error(integration_error);
     Ok(store.snapshot())
 }
@@ -2938,8 +3482,11 @@ async fn codex_hook_install(
 }
 
 #[tauri::command]
-fn codex_hook_drain(state: tauri::State<'_, CodexIntegrationState>) -> Result<usize, String> {
-    drain_codex_hook_events(&state)
+fn codex_hook_drain(app: tauri::AppHandle) -> Result<usize, String> {
+    refresh_sessions_now(&app)?;
+    // The refresher owns event draining; this command is retained for
+    // compatibility with older clients that only use its success signal.
+    Ok(0)
 }
 
 #[tauri::command]
@@ -2949,20 +3496,23 @@ fn codex_hook_audit_tail(lines: Option<usize>) -> Result<String, String> {
 
 #[tauri::command]
 fn codex_respond_approval(
+    app: tauri::AppHandle,
     state: tauri::State<'_, CodexIntegrationState>,
     request_id: String,
     decision: codex::CodexApprovalDecision,
 ) -> Result<(), String> {
-    apply_codex_approval(&state, &request_id, decision)
+    apply_codex_approval(&app, &state, &request_id, decision)
 }
 
 /// Shared Codex approval path. Returning early for an already-resolved request
 /// keeps repeated submissions (desktop and remote) harmless.
 fn apply_codex_approval(
+    app: &tauri::AppHandle,
     state: &CodexIntegrationState,
     request_id: &str,
     decision: codex::CodexApprovalDecision,
 ) -> Result<(), String> {
+    refresh_sessions_now(app)?;
     if !codex_hook::is_hook_approval_request(request_id) {
         return Err("not a Codex Hook approval request".to_string());
     }
@@ -3172,143 +3722,235 @@ fn lan_address_qr_code(url: String) -> Result<String, String> {
         .build())
 }
 
+fn active_session_count(app: &tauri::AppHandle) -> usize {
+    app.state::<ClaudeIntegrationState>()
+        .sessions
+        .lock()
+        .map(|store| store.active_session_count())
+        .unwrap_or(0)
+        + app
+            .state::<CodexIntegrationState>()
+            .hook_store
+            .lock()
+            .map(|store| store.active_session_count())
+            .unwrap_or(0)
+        + app
+            .state::<GeminiIntegrationState>()
+            .store
+            .lock()
+            .map(|store| store.active_session_count())
+            .unwrap_or(0)
+        + app
+            .state::<OpenCodeIntegrationState>()
+            .store
+            .lock()
+            .map(|store| store.active_session_count())
+            .unwrap_or(0)
+        + app
+            .state::<MimoIntegrationState>()
+            .store
+            .lock()
+            .map(|store| store.active_session_count())
+            .unwrap_or(0)
+        + app
+            .state::<PiIntegrationState>()
+            .store
+            .lock()
+            .map(|store| store.active_session_count())
+            .unwrap_or(0)
+        + app
+            .state::<DshIntegrationState>()
+            .store
+            .lock()
+            .map(|store| store.active_session_count())
+            .unwrap_or(0)
+        + app
+            .state::<ZCodeIntegrationState>()
+            .store
+            .lock()
+            .map(|store| store.active_session_count())
+            .unwrap_or(0)
+}
+
+fn watch_session_snapshot_cache(app: tauri::AppHandle) {
+    let cache = app.state::<SessionSnapshotCache>();
+    let (sender, receiver): (SyncSender<SnapshotRefreshRequest>, Receiver<SnapshotRefreshRequest>) =
+        mpsc::sync_channel(32);
+    cache.register_refresh_sender(sender);
+    thread::spawn(move || loop {
+        let request = receiver
+            .recv_timeout(Duration::from_millis(400))
+            .ok();
+        let had_request = request.is_some();
+        let previous = SNAPSHOT_REFRESH_IN_FLIGHT.fetch_add(1, Ordering::AcqRel);
+        if previous > 0 {
+            SNAPSHOT_REFRESH_OVERLAPS.fetch_add(1, Ordering::Relaxed);
+        }
+        let started = Instant::now();
+        let result = all_sessions_snapshot(&app);
+        SNAPSHOT_REFRESH_IN_FLIGHT.fetch_sub(1, Ordering::AcqRel);
+        let elapsed_ms = started.elapsed().as_millis() as u64;
+        let count = SNAPSHOT_REFRESH_COUNT.fetch_add(1, Ordering::Relaxed) + 1;
+        SNAPSHOT_REFRESH_TOTAL_MS.fetch_add(elapsed_ms, Ordering::Relaxed);
+        if count % 150 == 0 {
+            let total = SNAPSHOT_REFRESH_TOTAL_MS.load(Ordering::Relaxed);
+            let overlaps = SNAPSHOT_REFRESH_OVERLAPS.load(Ordering::Relaxed);
+            eprintln!(
+                "snapshot_metrics count={count} last_ms={elapsed_ms} avg_ms={} overlaps={overlaps}",
+                total / count
+            );
+            append_runtime_metrics(elapsed_ms, count);
+        }
+        if let Ok(snapshot) = &result {
+            app.state::<SessionSnapshotCache>().set(snapshot.clone());
+            app.state::<lan_server::LanServerState>()
+                .notify_snapshot_updated();
+        }
+        if let Some(request) = request {
+            if let Some(reply) = request.reply {
+                let _ = reply.send(result);
+            }
+        }
+        if had_request {
+            // Drain a burst of synchronous requests in the next loop turn;
+            // each request still receives the exact snapshot it waited for.
+            continue;
+        }
+    });
+}
+
+fn observe_sound_snapshot<T: Serialize>(
+    observer: &mut native_sound::NativeSoundObserver,
+    observed_versions: &mut HashMap<&'static str, u64>,
+    source: &'static str,
+    version: u64,
+    snapshot: &T,
+) {
+    if observed_versions.get(source).copied() == Some(version) {
+        return;
+    }
+    observed_versions.insert(source, version);
+    if let Ok(value) = serde_json::to_value(snapshot) {
+        observer.observe(source, &value);
+    }
+}
+
 fn watch_tray_and_minimal_mode_sounds(app: tauri::AppHandle) {
     thread::spawn(move || {
         let mut observer = native_sound::NativeSoundObserver::default();
+        let mut observed_versions = HashMap::<&'static str, u64>::new();
         let mut was_minimal = false;
         loop {
-            let claude_state = app.state::<ClaudeIntegrationState>();
-            let claude_snapshot = claude_snapshot(&claude_state);
-            let codex_state = app.state::<CodexIntegrationState>();
-            let codex_snapshot = codex_snapshot(&codex_state);
-            let opencode_state = app.state::<OpenCodeIntegrationState>();
-            let opencode_snapshot = opencode_snapshot(&opencode_state);
-            let mimo_state = app.state::<MimoIntegrationState>();
-            let mimo_snapshot = mimo_snapshot(&mimo_state);
-            let pi_state = app.state::<PiIntegrationState>();
-            let pi_snapshot = pi_snapshot(&pi_state);
-            let dsh_state = app.state::<DshIntegrationState>();
-            let dsh_snapshot = dsh_snapshot(&dsh_state);
-            let zcode_state = app.state::<ZCodeIntegrationState>();
-            let zcode_snapshot = zcode_snapshot(&zcode_state);
-
-            if let (Ok(claude), Ok(codex), Ok(opencode), Ok(mimo), Ok(pi), Ok(dsh), Ok(zcode)) = (
-                &claude_snapshot,
-                &codex_snapshot,
-                &opencode_snapshot,
-                &mimo_snapshot,
-                &pi_snapshot,
-                &dsh_snapshot,
-                &zcode_snapshot,
-            ) {
-                let active_session_count = claude
-                    .sessions
-                    .iter()
-                    .filter(|session| session.is_active())
-                    .count()
-                    + codex
-                        .sessions
-                        .iter()
-                        .filter(|session| session.is_active())
-                        .count()
-                    + opencode
-                        .sessions
-                        .iter()
-                        .filter(|session| session.is_active())
-                        .count()
-                    + mimo
-                        .sessions
-                        .iter()
-                        .filter(|session| session.is_active())
-                        .count()
-                    + pi.sessions
-                        .iter()
-                        .filter(|session| {
-                            !matches!(
-                                session.status,
-                                pi::PiSessionStatus::Idle | pi::PiSessionStatus::Stopped
-                            )
-                        })
-                        .count()
-                    + dsh
-                        .sessions
-                        .iter()
-                        .filter(|session| session.is_active())
-                        .count()
-                    + zcode
-                        .sessions
-                        .iter()
-                        .filter(|session| session.is_active())
-                        .count();
-                let previous = app
-                    .state::<TrayMenuState>()
-                    .active_session_count
-                    .swap(active_session_count, Ordering::Relaxed);
-                if previous != active_session_count {
-                    if let Err(error) = refresh_tray_menu(&app) {
-                        eprintln!("Unable to refresh the tray session count: {error}");
-                    }
-                }
-            }
-
             let minimal = app
                 .state::<ApprovalIntegrationState>()
                 .settings
                 .lock()
                 .map(|settings| settings.minimal_mode)
                 .unwrap_or(false);
-            if !minimal {
-                if was_minimal {
-                    observer.reset();
-                }
-                was_minimal = false;
-            } else {
-                was_minimal = true;
-                let sound_enabled = app
+            let sound_enabled = minimal
+                && app
                     .state::<NativeSoundIntegrationState>()
                     .settings
                     .lock()
                     .map(|settings| settings.enabled)
                     .unwrap_or(false);
-                if !sound_enabled {
-                    observer.reset();
+
+            let active_session_count = if sound_enabled {
+                let snapshot = cached_all_sessions_snapshot(&app).ok();
+                if let Some(snapshot) = snapshot.as_ref() {
+                    observe_sound_snapshot(
+                        &mut observer,
+                        &mut observed_versions,
+                        "claude",
+                        snapshot.claude.version,
+                        &snapshot.claude,
+                    );
+                    observe_sound_snapshot(
+                        &mut observer,
+                        &mut observed_versions,
+                        "codex",
+                        snapshot.codex.version,
+                        &snapshot.codex,
+                    );
+                    observe_sound_snapshot(
+                        &mut observer,
+                        &mut observed_versions,
+                        "gemini",
+                        snapshot.gemini.version,
+                        &snapshot.gemini,
+                    );
+                    observe_sound_snapshot(
+                        &mut observer,
+                        &mut observed_versions,
+                        "opencode",
+                        snapshot.opencode.version,
+                        &snapshot.opencode,
+                    );
+                    observe_sound_snapshot(
+                        &mut observer,
+                        &mut observed_versions,
+                        "mimo",
+                        snapshot.mimo.version,
+                        &snapshot.mimo,
+                    );
+                    observe_sound_snapshot(
+                        &mut observer,
+                        &mut observed_versions,
+                        "pi",
+                        snapshot.pi.version,
+                        &snapshot.pi,
+                    );
+                    observe_sound_snapshot(
+                        &mut observer,
+                        &mut observed_versions,
+                        "dsh",
+                        snapshot.dsh.version,
+                        &snapshot.dsh,
+                    );
+                    observe_sound_snapshot(
+                        &mut observer,
+                        &mut observed_versions,
+                        "zcode",
+                        snapshot.zcode.version,
+                        &snapshot.zcode,
+                    );
+                    snapshot
+                        .claude
+                        .sessions
+                        .iter()
+                        .filter(|session| session.is_active())
+                        .count()
+                        + snapshot.codex.sessions.iter().filter(|session| session.is_active()).count()
+                        + snapshot.gemini.sessions.iter().filter(|session| session.is_active()).count()
+                        + snapshot.opencode.sessions.iter().filter(|session| session.is_active()).count()
+                        + snapshot.mimo.sessions.iter().filter(|session| session.is_active()).count()
+                        + snapshot.pi.sessions.iter().filter(|session| !matches!(session.status, pi::PiSessionStatus::Idle | pi::PiSessionStatus::Stopped)).count()
+                        + snapshot.dsh.sessions.iter().filter(|session| session.is_active()).count()
+                        + snapshot.zcode.sessions.iter().filter(|session| session.is_active()).count()
                 } else {
-                    if let Ok(snapshot) = &claude_snapshot {
-                        if let Ok(value) = serde_json::to_value(snapshot) {
-                            observer.observe("claude", &value);
-                        }
-                    }
-                    if let Ok(snapshot) = &codex_snapshot {
-                        if let Ok(value) = serde_json::to_value(snapshot) {
-                            observer.observe("codex", &value);
-                        }
-                    }
-                    if let Ok(snapshot) = &opencode_snapshot {
-                        if let Ok(value) = serde_json::to_value(snapshot) {
-                            observer.observe("opencode", &value);
-                        }
-                    }
-                    if let Ok(snapshot) = &mimo_snapshot {
-                        if let Ok(value) = serde_json::to_value(snapshot) {
-                            observer.observe("mimo", &value);
-                        }
-                    }
-                    if let Ok(snapshot) = &pi_snapshot {
-                        if let Ok(value) = serde_json::to_value(snapshot) {
-                            observer.observe("pi", &value);
-                        }
-                    }
-                    if let Ok(snapshot) = &dsh_snapshot {
-                        if let Ok(value) = serde_json::to_value(snapshot) {
-                            observer.observe("dsh", &value);
-                        }
-                    }
-                    if let Ok(snapshot) = &zcode_snapshot {
-                        if let Ok(value) = serde_json::to_value(snapshot) {
-                            observer.observe("zcode", &value);
-                        }
-                    }
+                    active_session_count(&app)
                 }
+            } else {
+                if was_minimal {
+                    observer.reset();
+                    observed_versions.clear();
+                }
+                active_session_count(&app)
+            };
+            was_minimal = minimal;
+
+            let previous = app
+                .state::<TrayMenuState>()
+                .active_session_count
+                .swap(active_session_count, Ordering::Relaxed);
+            if previous != active_session_count {
+                if let Err(error) = refresh_tray_menu(&app) {
+                    eprintln!("Unable to refresh the tray session count: {error}");
+                }
+            }
+            if minimal && !sound_enabled {
+                observer.reset();
+                observed_versions.clear();
             }
             thread::sleep(Duration::from_secs(1));
         }
@@ -3331,6 +3973,7 @@ pub fn run() {
         }))
         .manage(ClaudeIntegrationState::default())
         .manage(CodexIntegrationState::default())
+        .manage(GeminiIntegrationState::default())
         .manage(OpenCodeIntegrationState::default())
         .manage(MimoIntegrationState::default())
         .manage(PiIntegrationState::default())
@@ -3339,6 +3982,7 @@ pub fn run() {
         .manage(ApprovalIntegrationState::default())
         .manage(NativeSoundIntegrationState::default())
         .manage(TrayMenuState::default())
+        .manage(SessionSnapshotCache::default())
         .manage(PanelWindowState::default())
         .manage(PanelShapeState::default())
         .manage(lan_server::LanServerState::default())
@@ -3415,7 +4059,6 @@ pub fn run() {
                             status.state,
                             zcode_hook::ZCodeHookInstallState::NotInstalled
                                 | zcode_hook::ZCodeHookInstallState::Modified
-                                | zcode_hook::ZCodeHookInstallState::Incompatible
                         ) =>
                 {
                     match executable.as_deref() {
@@ -3520,6 +4163,29 @@ pub fn run() {
                 .lock()
                 .map_err(|error| error.to_string())? = codex_hook_error;
 
+            let gemini_state = app.state::<GeminiIntegrationState>();
+            let gemini_configured = hook_install_config.is_enabled(HookAgentId::GeminiCli);
+            let gemini_status = gemini_hook::installed();
+            let gemini_error = match gemini_status {
+                Ok(true) => {
+                    if !gemini_configured {
+                        hook_install_config.set_enabled(HookAgentId::GeminiCli, true);
+                        hook_config_changed = true;
+                    }
+                    None
+                }
+                Ok(false) if gemini_configured => match executable.as_deref() {
+                    Some(executable) => gemini_hook::install(executable).err(),
+                    None => Some("Unable to locate the CodeCraft executable".to_string()),
+                },
+                Ok(false) => Some("Gemini CLI Hook 未安装".to_string()),
+                Err(error) => Some(error),
+            };
+            *gemini_state
+                .hook_error
+                .lock()
+                .map_err(|error| error.to_string())? = gemini_error;
+
             let opencode_configured = hook_install_config.is_enabled(HookAgentId::OpenCode);
             let opencode_status = if opencode_configured {
                 opencode_hook::status_and_sync()
@@ -3603,6 +4269,9 @@ pub fn run() {
                 .config
                 .lock()
                 .map_err(|error| error.to_string())? = lan_server_config;
+            // Start the single snapshot writer before exposing the LAN API so
+            // the first remote read can always wait for a coherent snapshot.
+            watch_session_snapshot_cache(app.handle().clone());
             if lan_enabled {
                 // A busy port must not stop the app from starting, so the
                 // failure is reported through lan_status instead.
@@ -3708,14 +4377,18 @@ pub fn run() {
             take_reopen_request,
             take_open_settings_request,
             focus_codex_window,
+            focus_gemini_session,
             focus_zcode_window,
             get_approval_settings,
             set_approval_settings,
             set_native_sound_settings,
             set_native_custom_sound,
             list_claude_sessions,
+            list_all_sessions,
+            active_session_counts,
             claude_hook_install,
             list_hook_integrations,
+            refresh_hook_integrations,
             pi_hook_status,
             pi_hook_install,
             pi_hook_uninstall,
@@ -3749,6 +4422,7 @@ pub fn run() {
             submit_claude_permission_decision,
             submit_claude_plan_decision,
             list_codex_sessions,
+            list_gemini_sessions,
             codex_respond_approval,
             codex_hook_get_config,
             codex_hook_set_config,

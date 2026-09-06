@@ -39,7 +39,7 @@ import {
   type ClaudeSession,
   type ClaudeSessionSnapshot,
 } from "./claude-sessions";
-import { initCodexPanel, refreshCodexPanel } from "./codex-panel";
+import { initCodexPanel, refreshCodexPanel, updateCodexPanel } from "./codex-panel";
 import {
   codexInteractionFor,
   codexPendingInteraction,
@@ -106,6 +106,13 @@ import {
   type ZCodeSnapshot,
 } from "./zcode-sessions";
 import {
+  geminiInteractionFor,
+  geminiSessionKey,
+  type GeminiInteraction,
+  type GeminiSession,
+  type GeminiSnapshot,
+} from "./gemini-sessions";
+import {
   hasUnifiedWorkingSession,
   isCodexSession,
   isOpenCodeSession,
@@ -113,6 +120,7 @@ import {
   isDshSession,
   isZCodeSession,
   isMimoSession,
+  isGeminiSession,
   primaryUnifiedLiveSession,
   unifiedSessionKey,
   unifiedSessionIsRunning,
@@ -135,6 +143,7 @@ import {
   filterAutoCleanedSessions,
   normalizeSessionCleanupSettings,
   parseSessionCleanupSettings,
+  shouldAutoCleanupSession,
   type SessionCleanupPreset,
   type SessionCleanupSettings,
 } from "./session-cleanup-settings";
@@ -314,12 +323,19 @@ const applyInterfaceSettings = () => {
   const maximumHeight = proportional
     ? BASE_SETTINGS_MAX_HEIGHT
     : interfaceSettings.customMaxHeight;
+  const contentMaximumHeight = proportional
+    ? BASE_CONTENT_MAX_HEIGHT
+    : interfaceSettings.customMaxHeight;
 
   rootElement.dataset.interfaceSizing = interfaceSettings.mode;
   rootElement.style.setProperty("--interface-scale", String(scale));
   rootElement.style.setProperty("--font-scale", String(fontScale));
   rootElement.style.setProperty("--panel-width", `${currentPanelWidth()}px`);
   rootElement.style.setProperty("--panel-inline-padding", `${padding}px`);
+  rootElement.style.setProperty(
+    "--content-max-height",
+    `${contentMaximumHeight}px`,
+  );
   rootElement.style.setProperty("--settings-min-height", `${minimumHeight}px`);
   rootElement.style.setProperty("--settings-max-height", `${maximumHeight}px`);
 };
@@ -537,6 +553,7 @@ const mimoSessionCard = panel?.querySelector<HTMLElement>("#mimo-session-card");
 const piSessionCard = panel?.querySelector<HTMLElement>("#pi-session-card");
 const dshSessionCard = panel?.querySelector<HTMLElement>("#dsh-session-card");
 const zcodeSessionCard = panel?.querySelector<HTMLElement>("#zcode-session-card");
+const geminiSessionCard = panel?.querySelector<HTMLElement>("#gemini-session-card");
 const codexSessionList = panel?.querySelector<HTMLUListElement>(
   "#codex-session-list",
 );
@@ -553,6 +570,9 @@ const dshSessionList = panel?.querySelector<HTMLUListElement>(
 const zcodeSessionList = panel?.querySelector<HTMLUListElement>(
   "#zcode-session-list",
 );
+const geminiSessionList = panel?.querySelector<HTMLUListElement>(
+  "#gemini-session-list",
+);
 const claudeConnectionStatus = panel?.querySelector<HTMLButtonElement>(
   "#claude-connection-status",
 );
@@ -568,6 +588,9 @@ const dshConnectionStatus = panel?.querySelector<HTMLElement>(
 );
 const zcodeConnectionStatus = panel?.querySelector<HTMLElement>(
   "#zcode-connection-status",
+);
+const geminiConnectionStatus = panel?.querySelector<HTMLElement>(
+  "#gemini-connection-status",
 );
 const claudeSessionCardIcon = panel?.querySelector<HTMLImageElement>(
   "#claude-session-card-icon",
@@ -999,6 +1022,9 @@ const questionPreviousButton =
 const questionOpenCodexButton = panel?.querySelector<HTMLButtonElement>(
   "#question-open-codex",
 );
+const questionOpenGeminiButton = panel?.querySelector<HTMLButtonElement>(
+  "#question-open-gemini",
+);
 const questionRejectButton =
   panel?.querySelector<HTMLButtonElement>("#question-reject");
 const questionNextButton =
@@ -1026,6 +1052,9 @@ const permissionAlwaysAllowButton = panel?.querySelector<HTMLButtonElement>(
 );
 const permissionDenyButton =
   panel?.querySelector<HTMLButtonElement>("#permission-deny");
+const permissionOpenGeminiButton = panel?.querySelector<HTMLButtonElement>(
+  "#permission-open-gemini",
+);
 const planView = panel?.querySelector<HTMLElement>("#plan-view");
 const planBackButton = panel?.querySelector<HTMLButtonElement>("#plan-back");
 const planTool = panel?.querySelector<HTMLElement>("#plan-tool");
@@ -1050,6 +1079,8 @@ const planOpenCodexButton =
   panel?.querySelector<HTMLButtonElement>("#plan-open-codex");
 const planOpenZCodeButton =
   panel?.querySelector<HTMLButtonElement>("#plan-open-zcode");
+const planOpenGeminiButton =
+  panel?.querySelector<HTMLButtonElement>("#plan-open-gemini");
 
 const setSourceStatusLabel = (button: HTMLElement, label: string) => {
   const labelElement = button.querySelector<HTMLElement>(
@@ -1109,18 +1140,21 @@ if (
   !piSessionCard ||
   !dshSessionCard ||
   !zcodeSessionCard ||
+  !geminiSessionCard ||
   !codexSessionList ||
   !openCodeSessionList ||
   !mimoSessionList ||
   !piSessionList ||
   !dshSessionList ||
   !zcodeSessionList ||
+  !geminiSessionList ||
   !claudeConnectionStatus ||
   !openCodeConnectionStatus ||
   !mimoConnectionStatus ||
   !piConnectionStatus ||
   !dshConnectionStatus ||
   !zcodeConnectionStatus ||
+  !geminiConnectionStatus ||
   !claudeSessionCardIcon ||
   !codexSessionCardIcon ||
   !openCodeSessionCardIcon ||
@@ -1273,6 +1307,7 @@ if (
   !questionActionsBlock ||
   !questionPreviousButton ||
   !questionOpenCodexButton ||
+  !questionOpenGeminiButton ||
   !questionRejectButton ||
   !questionNextButton ||
   !questionSubmitButton ||
@@ -1286,6 +1321,7 @@ if (
   !permissionAllowButton ||
   !permissionAlwaysAllowButton ||
   !permissionDenyButton ||
+  !permissionOpenGeminiButton ||
   !planView ||
   !planBackButton ||
   !planTool ||
@@ -1300,7 +1336,8 @@ if (
   !planCustomSubmitButton ||
   !planActionBadge ||
   !planOpenCodexButton ||
-  !planOpenZCodeButton
+  !planOpenZCodeButton ||
+  !planOpenGeminiButton
 ) {
   throw new Error("CodeCraft session panel is incomplete");
 }
@@ -1422,10 +1459,17 @@ syncSoundControls();
 
 let activeNativeAnimations = 0;
 let panelShapeFrame: number | undefined;
-let sessionRefreshTimer: ReturnType<typeof setInterval> | undefined;
-let refreshingSessions = false;
+let sessionRefreshTimer: ReturnType<typeof setTimeout> | undefined;
+let sessionRefreshStopped = false;
+let refreshingClaudeSessions = false;
 let refreshingOpenCodeSessions = false;
 let refreshingMimoSessions = false;
+let refreshingPiSessions = false;
+let refreshingDshSessions = false;
+let refreshingZCodeSessions = false;
+let refreshingLanStatus = false;
+let refreshingAllSessions = false;
+const renderedSessionVersions: Partial<Record<ReviewSource, number>> = {};
 let selectedSessionId: string | undefined;
 let selectedCodexSessionId: string | undefined;
 let selectedOpenCodeSessionKey: string | undefined;
@@ -1433,6 +1477,7 @@ let selectedMimoSessionKey: string | undefined;
 let selectedPiSessionKey: string | undefined;
 let selectedDshSessionKey: string | undefined;
 let selectedZCodeSessionKey: string | undefined;
+let selectedGeminiSessionId: string | undefined;
 type ReviewSource =
   | "claude"
   | "codex"
@@ -1440,7 +1485,8 @@ type ReviewSource =
   | "mimo"
   | "pi"
   | "dsh"
-  | "zcode";
+  | "zcode"
+  | "gemini";
 let selectedSessionSource: ReviewSource = "claude";
 let lastRefreshError: string | undefined;
 let lastOpenCodeRefreshError: string | undefined;
@@ -1455,6 +1501,68 @@ let mimoSessionItems = new Map<string, HTMLLIElement>();
 let piSessionItems = new Map<string, HTMLLIElement>();
 let dshSessionItems = new Map<string, HTMLLIElement>();
 let zcodeSessionItems = new Map<string, HTMLLIElement>();
+let geminiSessionItems = new Map<string, HTMLLIElement>();
+interface AllSessionSnapshots {
+  claude: ClaudeSessionSnapshot;
+  codex: CodexSnapshot;
+  opencode: OpenCodeSnapshot;
+  mimo: MimoSnapshot;
+  pi: PiSnapshot;
+  dsh: DshSnapshot;
+  zcode: ZCodeSnapshot;
+  gemini: GeminiSnapshot;
+}
+
+interface ActiveSessionCounts {
+  claude: number;
+  codex: number;
+  opencode: number;
+  mimo: number;
+  pi: number;
+  dsh: number;
+  zcode: number;
+  gemini: number;
+}
+
+let latestActiveSessionCounts: ActiveSessionCounts = {
+  claude: 0,
+  codex: 0,
+  opencode: 0,
+  mimo: 0,
+  pi: 0,
+  dsh: 0,
+  zcode: 0,
+  gemini: 0,
+};
+
+const activeSessionCount = (sessions: Array<{ status: string }>) =>
+  sessions.filter((session) => session.status !== "idle" && session.status !== "stopped").length;
+
+const snapshotNeedsRender = <
+  T extends { connected: boolean; integrationError: string | null; version?: number; sessions: Array<{ status: string; updatedAt: number }> },
+>(source: ReviewSource, snapshot: T, previous: T): boolean => {
+  const version = snapshot.version ?? 0;
+  const cleanupDue = snapshot.sessions.some(
+    (session) =>
+      shouldAutoCleanupSession(
+        session.status,
+        session.updatedAt,
+        sessionCleanupSettings,
+      ) &&
+      previous.sessions.some(
+        (previousSession) =>
+          previousSession.status === session.status &&
+          previousSession.updatedAt === session.updatedAt,
+      ),
+  );
+  const changed =
+    renderedSessionVersions[source] !== version ||
+    snapshot.connected !== previous.connected ||
+    snapshot.integrationError !== previous.integrationError ||
+    cleanupDue;
+  if (changed) renderedSessionVersions[source] = version;
+  return changed;
+};
 let latestCodexSnapshot: CodexSnapshot = {
   connected: false,
   integrationError: null,
@@ -1464,6 +1572,8 @@ let latestCodexSnapshot: CodexSnapshot = {
 };
 let dismissedCodexInteractionId: string | undefined;
 let lastAutoRevealedCodexInteractionId: string | undefined;
+let dismissedGeminiInteractionId: string | undefined;
+let lastAutoRevealedGeminiInteractionId: string | undefined;
 let latestOpenCodeSnapshot: OpenCodeSnapshot = {
   connected: false,
   integrationError: null,
@@ -1507,6 +1617,15 @@ let latestZCodeSnapshot: ZCodeSnapshot = {
   },
   sessions: [],
 };
+let latestGeminiSnapshot: GeminiSnapshot = {
+  connected: false,
+  integrationError: null,
+  version: 0,
+  sessions: [],
+  interactions: [],
+  navigationCapability: "unsupported",
+  fallbackAction: "openGeminiOnHost",
+};
 let displayedContentView: ContentView = "sessions";
 let requestedContentView: ContentView = "sessions";
 let questionOriginView: ContentView | undefined;
@@ -1531,6 +1650,7 @@ const soundSourcePrimed: Record<
   pi: false,
   dsh: false,
   zcode: false,
+  gemini: false,
 };
 
 const observeSoundFrames = (
@@ -1740,7 +1860,8 @@ type SessionProductId =
   | "mimo"
   | "pi"
   | "dsh"
-  | "zcode";
+  | "zcode"
+  | "gemini";
 type SessionSourceProductId = Exclude<SessionProductId, "all">;
 type SessionProduct = {
   id: SessionProductId;
@@ -1754,7 +1875,8 @@ type SessionProduct = {
     | "mimo"
     | "pi"
     | "dsh"
-    | "zcode";
+    | "zcode"
+    | "gemini";
   iconUrl: string;
 };
 
@@ -1814,6 +1936,13 @@ const sessionProducts: SessionProduct[] = [
     optionLabel: "ZCode",
     kind: "zcode",
     iconUrl: zcodeIconUrl,
+  },
+  {
+    id: "gemini",
+    triggerLabel: "Gemini CLI",
+    optionLabel: "Gemini CLI",
+    kind: "gemini",
+    iconUrl: codeCraftIconUrl,
   },
 ];
 const installedSessionProductIds = new Set<SessionSourceProductId>();
@@ -2482,6 +2611,10 @@ const hasSelectedSessionDetail = () =>
             ? latestMimoSnapshot.sessions.some(
                 (session) => mimoSessionKey(session) === selectedMimoSessionKey,
               )
+            : selectedSessionSource === "gemini"
+              ? latestGeminiSnapshot.sessions.some(
+                  (session) => session.id === selectedGeminiSessionId,
+                )
           : latestSessions.some((session) => session.id === selectedSessionId);
 
 const returnViewForReview = (origin: ContentView | undefined) =>
@@ -3044,14 +3177,17 @@ const syncQuestionAnswerState = (
   );
   const showOpenCodex =
     activeQuestionSource === "codex" && state.question.readOnly === true;
+  const showOpenGemini =
+    activeQuestionSource === "gemini" && state.question.readOnly === true;
   const showReject = activeQuestionSource === "opencode" || activeQuestionSource === "mimo";
-  setActionNavVisible(actions.size > 0 || showOpenCodex || showReject, animate);
+  setActionNavVisible(actions.size > 0 || showOpenCodex || showOpenGemini || showReject, animate);
   setActionButtonVisible(
     questionPreviousButton,
     actions.has("previous"),
     animate,
   );
   setActionButtonVisible(questionOpenCodexButton, showOpenCodex, animate);
+  setActionButtonVisible(questionOpenGeminiButton, showOpenGemini, animate);
   setActionButtonVisible(questionRejectButton, showReject, animate);
   setActionButtonVisible(questionNextButton, actions.has("next"), animate);
   setActionButtonVisible(questionSubmitButton, actions.has("submit"), animate);
@@ -3489,6 +3625,53 @@ const focusZCodeWindow = async (button: HTMLButtonElement) => {
   }
 };
 
+const focusGeminiSession = async (sessionId: string, button: HTMLButtonElement) => {
+  const setStatus = (
+    message: string | undefined,
+    state: "pending" | "success" | "error" = "pending",
+  ) => {
+    if (button.id === "question-open-gemini") {
+      setQuestionSubmitStatus(message, state);
+    } else if (button.id === "permission-open-gemini") {
+      setPermissionSubmitStatus(message, state);
+    } else if (button.id === "plan-open-gemini") {
+      setPlanSubmitStatus(message, state);
+    }
+  };
+  const focusMessage = (result: string): [string, "success" | "error"] => {
+    switch (result) {
+      case "focusedExactWindow":
+        return [translate("已定位 Gemini 窗口"), "success"];
+      case "focusedSharedTerminal":
+        return [translate("已定位共享终端，请手动选择会话"), "success"];
+      case "sessionEnded":
+        return [translate("Gemini 会话已结束"), "error"];
+      case "accessDenied":
+        return [translate("没有权限激活 Gemini 窗口，请在原终端处理"), "error"];
+      case "staleTarget":
+      case "notFound":
+      case "unsupported":
+      default:
+        return [translate("无法定位 Gemini，请在原终端处理"), "error"];
+    }
+  };
+  button.disabled = true;
+  setStatus(translate("正在定位 Gemini"));
+  try {
+    if (isTauriRuntime) {
+      const result = await invoke<string>("focus_gemini_session", { sessionId });
+      button.dataset.focusResult = result;
+      const [message, state] = focusMessage(result);
+      setStatus(message, state);
+    }
+  } catch (error) {
+    console.error("Unable to focus the Gemini terminal", error);
+    setStatus(translate("无法定位 Gemini，请在原终端处理"), "error");
+  } finally {
+    button.disabled = false;
+  }
+};
+
 questionOpenCodexButton.addEventListener("click", () => {
   const state = currentQuestionState();
   if (
@@ -3736,6 +3919,11 @@ const renderPermissionRequest = (request: ClaudePermissionRequest) => {
   permissionSubmitStatus.hidden = true;
   permissionSubmitStatus.textContent = "";
   delete permissionSubmitStatus.dataset.state;
+  const readOnlyGemini = activePermissionSource === "gemini";
+  permissionAllowButton.hidden = readOnlyGemini;
+  permissionAlwaysAllowButton.hidden = readOnlyGemini || !request.canAlwaysAllow;
+  permissionDenyButton.hidden = readOnlyGemini;
+  permissionOpenGeminiButton.hidden = !readOnlyGemini;
 };
 
 const clearActivePermissionRequest = () => {
@@ -3749,6 +3937,9 @@ const clearActivePermissionRequest = () => {
   permissionCwd.textContent = "";
   permissionCwd.hidden = true;
   permissionAlwaysAllowButton.hidden = false;
+  permissionAllowButton.hidden = false;
+  permissionDenyButton.hidden = false;
+  permissionOpenGeminiButton.hidden = true;
   permissionSubmitStatus.hidden = true;
   permissionSubmitStatus.textContent = "";
   delete permissionSubmitStatus.dataset.state;
@@ -4003,12 +4194,18 @@ permissionDenyButton.addEventListener("click", () => {
   void submitPermissionDecision("deny");
 });
 
+permissionOpenGeminiButton.addEventListener("click", () => {
+  if (activePermissionSource !== "gemini" || !selectedGeminiSessionId) return;
+  void focusGeminiSession(selectedGeminiSessionId, permissionOpenGeminiButton);
+});
+
 const syncPlanSourceControls = () => {
   const isCodexPlan = activePlanSource === "codex";
   const isClaudePlan = activePlanSource === "claude";
   const isDshPlan = activePlanSource === "dsh";
   const isZCodePlan = activePlanSource === "zcode";
   const isMimoPlan = activePlanSource === "mimo";
+  const isGeminiPlan = activePlanSource === "gemini";
   const isFeedbackPlan = isDshPlan || isZCodePlan || isMimoPlan;
   planView.dataset.planSource = activePlanSource;
   planAutoButton.hidden = !isClaudePlan && !isFeedbackPlan;
@@ -4017,9 +4214,17 @@ const syncPlanSourceControls = () => {
   planCustomSubmitButton.hidden = !isClaudePlan && !isFeedbackPlan;
   planOpenCodexButton.hidden = !isCodexPlan;
   planOpenZCodeButton.hidden = !isZCodePlan;
+  planOpenGeminiButton.hidden = !isGeminiPlan;
+  planAutoButton.disabled = isGeminiPlan;
+  planAutoRememberButton.disabled = isGeminiPlan;
+  planCustomInput.disabled = isGeminiPlan;
+  planCustomSubmitButton.disabled = isGeminiPlan;
   const zcodeOpenLabel = translate("前往 ZCode 处理");
+  const geminiOpenLabel = translate("前往 Gemini 处理");
   planOpenZCodeButton.querySelector("span")!.textContent = zcodeOpenLabel;
   planOpenZCodeButton.setAttribute("aria-label", zcodeOpenLabel);
+  planOpenGeminiButton.textContent = geminiOpenLabel;
+  planOpenGeminiButton.setAttribute("aria-label", geminiOpenLabel);
   planCustomInput.placeholder = isFeedbackPlan
     ? "输入继续规划的反馈"
     : translate("请输入需要修改的内容");
@@ -4046,7 +4251,9 @@ const syncPlanSourceControls = () => {
         : "允许 DeepSeek Harness 退出计划模式"
       : "以自动模式执行此计划";
   }
-  planActionBadge.textContent = isCodexPlan
+  planActionBadge.textContent = isGeminiPlan
+    ? translate("在原 Gemini 中处理")
+    : isCodexPlan
     ? "在原 Codex 中选择"
     : isZCodePlan
       ? "在 ZCode 中处理"
@@ -4142,7 +4349,7 @@ type PlanExecutionMode = "auto";
 
 const submitPlanDecision = async (mode: PlanExecutionMode, note?: string) => {
   const request = activePlanRequest;
-  if (!request || activePlanSource === "codex") return;
+  if (!request || activePlanSource === "codex" || activePlanSource === "gemini") return;
 
   const returnView = returnViewForReview(planOriginView);
   setPlanButtonsDisabled(true);
@@ -4210,6 +4417,8 @@ planBackButton.addEventListener("click", () => {
     dismissedZCodeReviewId = activePlanRequest.id;
   } else if (activePlanSource === "mimo") {
     dismissedMimoReviewId = activePlanRequest.id;
+  } else if (activePlanSource === "gemini") {
+    manuallyHiddenPlanRequestId = activePlanRequest.id;
   } else {
     manuallyHiddenPlanRequestId = activePlanRequest.id;
   }
@@ -4248,6 +4457,16 @@ planCustomInput.addEventListener("keydown", (event) => {
 planOpenCodexButton.addEventListener("click", () => {
   if (activePlanSource !== "codex" || !activeCodexPlanThreadId) return;
   void focusCodexSessionWindow(activeCodexPlanThreadId, planOpenCodexButton);
+});
+
+planOpenGeminiButton.addEventListener("click", () => {
+  if (activePlanSource !== "gemini" || !selectedGeminiSessionId) return;
+  void focusGeminiSession(selectedGeminiSessionId, planOpenGeminiButton);
+});
+
+questionOpenGeminiButton.addEventListener("click", () => {
+  if (activeQuestionSource !== "gemini" || !selectedGeminiSessionId) return;
+  void focusGeminiSession(selectedGeminiSessionId, questionOpenGeminiButton);
 });
 
 planOpenZCodeButton.addEventListener("click", () => {
@@ -4443,6 +4662,9 @@ const syncProductVisibility = () => {
   const showZCode =
     installedSessionProductIds.has("zcode") &&
     (selectedSessionProductId === "all" || selectedSessionProductId === "zcode");
+  const showGemini =
+    installedSessionProductIds.has("gemini") &&
+    (selectedSessionProductId === "all" || selectedSessionProductId === "gemini");
   claudeSessionCard.hidden = !showClaude;
   codexSessionCard.hidden = !showCodex;
   openCodeSessionCard.hidden = !showOpenCode;
@@ -4450,6 +4672,7 @@ const syncProductVisibility = () => {
   piSessionCard.hidden = !showPi;
   dshSessionCard.hidden = !showDsh;
   zcodeSessionCard.hidden = !showZCode;
+  geminiSessionCard.hidden = !showGemini;
   sessionSourceCards.dataset.filter = selectedSessionProductId;
   renderSessionSummary();
 };
@@ -4464,6 +4687,7 @@ const sessionProductIdForHookAgent = (
   if (id === "pi") return "pi";
   if (id === "deepSeekHarness") return "dsh";
   if (id === "zCode") return "zcode";
+  if (id === "geminiCli") return "gemini";
   return undefined;
 };
 
@@ -4727,15 +4951,16 @@ const createPixelStatusSvg = (status: string, className: string) => {
 const sessionLiveStatusIcon = createPixelStatusSvg("idle", "pixel-status");
 sessionLiveStatus.replaceChildren(sessionLiveStatusIcon);
 
-const latestUnifiedSessions = (): UnifiedSession[] => [
-  ...latestSessions,
-  ...latestCodexSnapshot.sessions,
-  ...latestOpenCodeSnapshot.sessions,
-  ...latestMimoSnapshot.sessions,
-  ...latestPiSnapshot.sessions,
-  ...latestDshSnapshot.sessions,
-  ...latestZCodeSnapshot.sessions,
-];
+function* latestUnifiedSessions(): Generator<UnifiedSession> {
+  yield* latestSessions;
+  yield* latestCodexSnapshot.sessions;
+  yield* latestOpenCodeSnapshot.sessions;
+  yield* latestMimoSnapshot.sessions;
+  yield* latestPiSnapshot.sessions;
+  yield* latestDshSnapshot.sessions;
+  yield* latestZCodeSnapshot.sessions;
+  yield* latestGeminiSnapshot.sessions;
+}
 
 const collapsedPanelHeight = () =>
   liveCollapsedHeightActive ? LIVE_COLLAPSED_HEIGHT : COLLAPSED_PANEL_HEIGHT;
@@ -4744,6 +4969,12 @@ const collapsedPanelCornerProgress = () =>
 
 const syncCollapsedPanelSize = (): Promise<void> => {
   if (!isTauriRuntime) return Promise.resolve();
+  // Session snapshots can arrive while the startup layer is still using its
+  // fixed height. Defer the live-strip resize until that layer has exited so
+  // a snapshot cannot clip the startup UI to the collapsed strip.
+  if (rootElement.hasAttribute("data-startup-phase")) {
+    return Promise.resolve();
+  }
   if (document.documentElement.dataset.panelState !== "collapsed") {
     return Promise.resolve();
   }
@@ -4768,9 +4999,11 @@ const syncCollapsedPanelSize = (): Promise<void> => {
 
 const updateCollapsedLiveView = () => {
   const collapsed = document.documentElement.dataset.panelState === "collapsed";
+  const startupActive = rootElement.hasAttribute("data-startup-phase");
   const collapseSource = document.documentElement.dataset.collapseSource;
   const liveSession = primaryUnifiedLiveSession(latestUnifiedSessions());
   const eligible =
+    !startupActive &&
     (collapseSource === "auto" || collapseSource === "mini") &&
     liveSession !== undefined;
   const liveShown = collapsed && eligible;
@@ -5410,34 +5643,41 @@ const setSelectedZCodeSession = (sessionKey: string) => {
   sessionDetailBack.focus({ preventScroll: true });
 };
 
+const setSelectedGeminiSession = (sessionId: string) => {
+  const session = latestGeminiSnapshot.sessions.find((item) => item.id === sessionId);
+  if (!session) return;
+  selectedGeminiSessionId = sessionId;
+  selectedSessionSource = "gemini";
+  selectedSessionId = undefined;
+  selectedCodexSessionId = undefined;
+  selectedOpenCodeSessionKey = undefined;
+  selectedMimoSessionKey = undefined;
+  selectedPiSessionKey = undefined;
+  selectedDshSessionKey = undefined;
+  selectedZCodeSessionKey = undefined;
+  for (const button of geminiSessionList.querySelectorAll<HTMLButtonElement>(".session-button")) {
+    button.setAttribute("aria-pressed", String(button.dataset.sessionId === sessionId));
+  }
+  const interaction = geminiInteractionFor(session);
+  if (interaction) {
+    renderGeminiInteraction(interaction, session, false);
+    return;
+  }
+  renderSessionDetail(session);
+  switchContentView("detail");
+  sessionDetailBack.focus({ preventScroll: true });
+};
+
 const renderSessionSummary = () => {
-  const claudeActiveCount = latestSessions.filter(
-    (session) => session.status !== "idle",
-  ).length;
-  const codexActiveCount = latestCodexSnapshot.sessions.filter(
-    (session) => session.status !== "idle",
-  ).length;
-  const openCodeActiveCount = latestOpenCodeSnapshot.sessions.filter(
-    (session) => session.status !== "idle",
-  ).length;
-  const piActiveCount = latestPiSnapshot.sessions.filter(
-    (session) => session.status !== "idle",
-  ).length;
-  const dshActiveCount = latestDshSnapshot.sessions.filter(
-    (session) => session.status !== "idle",
-  ).length;
-  const zcodeActiveCount = latestZCodeSnapshot.sessions.filter(
-    (session) => session.status !== "idle",
-  ).length;
-  const mimoActiveCount = latestMimoSnapshot.sessions.filter((session) => session.status !== "idle").length;
   const activeCounts: Record<SessionSourceProductId, number> = {
-    "claude-code": claudeActiveCount,
-    codex: codexActiveCount,
-    opencode: openCodeActiveCount,
-    pi: piActiveCount,
-    dsh: dshActiveCount,
-    zcode: zcodeActiveCount,
-    mimo: mimoActiveCount,
+    "claude-code": latestActiveSessionCounts.claude,
+    codex: latestActiveSessionCounts.codex,
+    opencode: latestActiveSessionCounts.opencode,
+    pi: latestActiveSessionCounts.pi,
+    dsh: latestActiveSessionCounts.dsh,
+    zcode: latestActiveSessionCounts.zcode,
+    mimo: latestActiveSessionCounts.mimo,
+    gemini: latestActiveSessionCounts.gemini,
   };
   const connectionStates: Record<SessionSourceProductId, boolean> = {
     "claude-code": latestClaudeSnapshot.connected,
@@ -5447,6 +5687,7 @@ const renderSessionSummary = () => {
     dsh: latestDshSnapshot.connected,
     zcode: latestZCodeSnapshot.connected,
     mimo: latestMimoSnapshot.connected,
+    gemini: latestGeminiSnapshot.connected,
   };
   const selectedSources =
     selectedSessionProductId === "all"
@@ -5505,6 +5746,7 @@ const renderCodexSnapshot = (snapshot: CodexSnapshot) => {
   }
   observeCodexSounds(snapshot.sessions, snapshot.interactions);
   latestCodexSnapshot = snapshot;
+  latestActiveSessionCounts.codex = activeSessionCount(snapshot.sessions);
   if (
     !snapshot.sessions.some((session) => session.id === selectedCodexSessionId)
   ) {
@@ -5624,6 +5866,7 @@ const renderOpenCodeSnapshot = (snapshot: OpenCodeSnapshot) => {
   };
   observeOpenCodeSounds(snapshot.sessions);
   latestOpenCodeSnapshot = snapshot;
+  latestActiveSessionCounts.opencode = activeSessionCount(snapshot.sessions);
   syncOpenCodeHookStatus();
 
   if (
@@ -5716,6 +5959,7 @@ const renderMimoSnapshot = (snapshot: MimoSnapshot) => {
   };
   observeMimoSounds(snapshot.sessions);
   latestMimoSnapshot = snapshot;
+  latestActiveSessionCounts.mimo = activeSessionCount(snapshot.sessions);
   if (mimoConnectionStatus) {
     setSourceStatusLabel(mimoConnectionStatus, snapshot.connected ? "Hook 正常" : "Hook 异常");
     mimoConnectionStatus.dataset.connected = String(snapshot.connected);
@@ -5775,6 +6019,7 @@ const renderPiSnapshot = (snapshot: PiSnapshot) => {
   };
   observePiSounds(snapshot.sessions);
   latestPiSnapshot = snapshot;
+  latestActiveSessionCounts.pi = activeSessionCount(snapshot.sessions);
   setSourceStatusLabel(
     piConnectionStatus,
     snapshot.connected ? "Hook 正常" : "Hook 异常",
@@ -5835,7 +6080,8 @@ const renderPiSnapshot = (snapshot: PiSnapshot) => {
 };
 
 const refreshPiSessions = async () => {
-  if (!isTauriRuntime) return;
+  if (refreshingPiSessions || !isTauriRuntime) return;
+  refreshingPiSessions = true;
   try {
     const snapshot = await invoke<PiSnapshot>("list_pi_sessions");
     renderPiSnapshot(snapshot);
@@ -5852,6 +6098,8 @@ const refreshPiSessions = async () => {
       console.error("Unable to refresh PI sessions", error);
       lastPiRefreshError = message;
     }
+  } finally {
+    refreshingPiSessions = false;
   }
 };
 
@@ -5870,6 +6118,7 @@ const renderDshSnapshot = (snapshot: DshSnapshot) => {
   };
   observeDshSounds(snapshot.sessions);
   latestDshSnapshot = snapshot;
+  latestActiveSessionCounts.dsh = activeSessionCount(snapshot.sessions);
   setSourceStatusLabel(
     dshConnectionStatus,
     snapshot.connected ? "桥已连接" : "等待 DSH",
@@ -5930,7 +6179,8 @@ const renderDshSnapshot = (snapshot: DshSnapshot) => {
 };
 
 const refreshDshSessions = async () => {
-  if (!isTauriRuntime) return;
+  if (refreshingDshSessions || !isTauriRuntime) return;
+  refreshingDshSessions = true;
   try {
     const snapshot = await invoke<DshSnapshot>("list_dsh_sessions");
     renderDshSnapshot(snapshot);
@@ -5948,6 +6198,8 @@ const refreshDshSessions = async () => {
       console.error("Unable to refresh DeepSeek Harness sessions", error);
       lastDshRefreshError = message;
     }
+  } finally {
+    refreshingDshSessions = false;
   }
 };
 
@@ -5966,6 +6218,7 @@ const renderZCodeSnapshot = (snapshot: ZCodeSnapshot) => {
   };
   observeZCodeSounds(snapshot.sessions);
   latestZCodeSnapshot = snapshot;
+  latestActiveSessionCounts.zcode = activeSessionCount(snapshot.sessions);
   setSourceStatusLabel(
     zcodeConnectionStatus,
     snapshot.connected ? "Hook 正常" : "等待 ZCode",
@@ -6029,7 +6282,8 @@ const renderZCodeSnapshot = (snapshot: ZCodeSnapshot) => {
 };
 
 const refreshZCodeSessions = async () => {
-  if (!isTauriRuntime) return;
+  if (refreshingZCodeSessions || !isTauriRuntime) return;
+  refreshingZCodeSessions = true;
   try {
     const snapshot = await invoke<ZCodeSnapshot>("list_zcode_sessions");
     renderZCodeSnapshot(snapshot);
@@ -6046,6 +6300,130 @@ const refreshZCodeSessions = async () => {
       console.error("Unable to refresh ZCode sessions", error);
       lastZCodeRefreshError = message;
     }
+  } finally {
+    refreshingZCodeSessions = false;
+  }
+};
+
+const geminiQuestionRequest = (interaction: GeminiInteraction): ClaudeQuestionRequest => ({
+  id: interaction.observationId,
+  questions: (interaction.questions.length > 0 ? interaction.questions : [{ question: interaction.detail }]).map((raw) => {
+    const question = typeof raw === "object" && raw !== null ? raw as Record<string, unknown> : {};
+    const options = Array.isArray(question.options)
+      ? question.options.flatMap((option) => {
+          if (typeof option !== "object" || option === null) return [];
+          const item = option as Record<string, unknown>;
+          const label = typeof item.label === "string" ? item.label : "";
+          return label ? [{ label, description: typeof item.description === "string" ? item.description : null }] : [];
+        })
+      : [];
+    return {
+      header: typeof question.header === "string" ? question.header : interaction.title,
+      question: typeof question.question === "string" ? question.question : interaction.detail,
+      options,
+      multiSelect: question.multiSelect === true,
+      allowOther: false,
+      allowChat: false,
+      readOnly: true,
+      answerMode: translate("Gemini CLI 外部会话 · 请在原终端处理"),
+    };
+  }),
+});
+
+const renderGeminiInteraction = (interaction: GeminiInteraction, session: GeminiSession, shouldAutoReveal: boolean) => {
+  selectedGeminiSessionId = session.id;
+  const reveal = (view: ReviewContentView) => {
+    if (requestedContentView !== view) {
+      rememberReviewOrigin(view);
+      switchContentView(view);
+    }
+    if (shouldAutoReveal && collapseExpandSettings.approvalAutoExpand) void revealPanelForAttention();
+  };
+  if (interaction.kind === "askUser") {
+    clearActivePermissionRequest();
+    activeQuestionSource = "gemini";
+    renderQuestionRequest(geminiQuestionRequest(interaction));
+    reveal("question");
+    return;
+  }
+  if (interaction.kind === "exitPlanMode") {
+    clearActiveQuestionRequest();
+    clearActivePermissionRequest();
+    activePlanSource = "gemini";
+    const planText = interaction.plan
+      ?? (interaction.planFilename
+        ? `${translate("计划文件：")}${interaction.planFilename}`
+        : interaction.detail);
+    renderPlanRequest({
+      id: interaction.observationId,
+      toolName: interaction.title,
+      plan: interaction.planReadError
+        ? `${planText}\n\n${translate("计划文件不可读取")}：${interaction.planReadError}`
+        : planText,
+      cwd: session.cwd,
+      capturedAt: interaction.capturedAt,
+    }, "gemini");
+    reveal("plan");
+    return;
+  }
+  clearActiveQuestionRequest();
+  activePermissionSource = "gemini";
+  renderPermissionRequest({
+    id: interaction.observationId,
+    toolName: interaction.toolName ?? interaction.title,
+    summary: interaction.detail,
+    cwd: session.cwd,
+    canAlwaysAllow: false,
+    capturedAt: interaction.capturedAt,
+  });
+  setPermissionButtonsDisabled(true);
+  reveal("permission");
+};
+
+const renderGeminiSnapshot = (snapshot: GeminiSnapshot) => {
+  snapshot = {
+    ...snapshot,
+    sessions: filterAutoCleanedSessions(
+      filterDismissedSessions(snapshot.sessions, dismissedSessionKeys, geminiSessionKey, unifiedSessionIsRunning),
+      sessionCleanupSettings,
+    ),
+  };
+  latestGeminiSnapshot = snapshot;
+  latestActiveSessionCounts.gemini = activeSessionCount(snapshot.sessions);
+  setSourceStatusLabel(geminiConnectionStatus, snapshot.connected ? translate("Hook 正常") : translate("等待 Gemini"));
+  geminiConnectionStatus.dataset.connected = String(snapshot.connected);
+  geminiConnectionStatus.title = snapshot.connected ? translate("Gemini CLI Hook 已连接") : (snapshot.integrationError ?? translate("在设置中安装 Gemini CLI Hook"));
+  if (!snapshot.sessions.some((session) => session.id === selectedGeminiSessionId)) {
+    selectedGeminiSessionId = undefined;
+    if (selectedSessionSource === "gemini") renderedDetailSignature = undefined;
+  }
+  renderUnifiedSessionList(geminiSessionList, snapshot.sessions, geminiSessionItems);
+  const selected = snapshot.sessions.find((session) => session.id === selectedGeminiSessionId);
+  if (selectedSessionSource === "gemini" && requestedContentView === "detail" && selected) renderSessionDetail(selected);
+  renderSessionSummary();
+  syncCollapsedSessionState();
+  const pending = snapshot.interactions
+    .filter((interaction) => interaction.status !== "toolCompleted" && interaction.status !== "sessionEnded")
+    .sort((left, right) => left.capturedAt - right.capturedAt)[0];
+  if (!pending) {
+    lastAutoRevealedGeminiInteractionId = undefined;
+    dismissedGeminiInteractionId = undefined;
+    return;
+  }
+  const session = snapshot.sessions.find((item) => item.pendingInteractions.some((item) => item.observationId === pending.observationId));
+  if (!session || pending.observationId === dismissedGeminiInteractionId) return;
+  const shouldAutoReveal = pending.observationId !== lastAutoRevealedGeminiInteractionId;
+  renderGeminiInteraction(pending, session, shouldAutoReveal);
+  if (shouldAutoReveal) lastAutoRevealedGeminiInteractionId = pending.observationId;
+};
+
+const refreshGeminiSessions = async () => {
+  if (!isTauriRuntime) return;
+  try {
+    renderGeminiSnapshot(await invoke<GeminiSnapshot>("list_gemini_sessions"));
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    renderGeminiSnapshot({ ...latestGeminiSnapshot, connected: false, integrationError: message, sessions: [], interactions: [] });
   }
 };
 
@@ -7131,10 +7509,7 @@ const syncHookAgentButton = (
   ) {
     state.dataset.kind = "action";
     state.textContent = "请重启 OpenCode";
-  } else if (
-    !status.hookInstalled &&
-    status.installState === "notInstalled"
-  ) {
+  } else if (!status.hookInstalled) {
     state.dataset.kind = "action";
     state.textContent = "安装";
   } else if (status.error) {
@@ -7213,18 +7588,22 @@ const renderHookIntegrations = (
   }
 };
 
-const readHookIntegrations = () =>
+const readHookIntegrations = (discoverZCodeInstallation = false) =>
   isTauriRuntime
-    ? invoke<HookIntegrationStatus[]>("list_hook_integrations")
+    ? invoke<HookIntegrationStatus[]>(
+        discoverZCodeInstallation
+          ? "refresh_hook_integrations"
+          : "list_hook_integrations",
+      )
     : Promise.resolve(browserHookIntegrations.map((status) => ({ ...status })));
 
-const refreshHookIntegrations = async () => {
+const refreshHookIntegrations = async (discoverZCodeInstallation = false) => {
   if (hookRefreshing || hookOperation) return;
   hookRefreshing = true;
   setHookSettingsError();
   renderHookIntegrations(hookIntegrations, false);
   try {
-    const statuses = await readHookIntegrations();
+    const statuses = await readHookIntegrations(discoverZCodeInstallation);
     hookRefreshing = false;
     renderHookIntegrations(statuses);
   } catch (error) {
@@ -7290,7 +7669,7 @@ async function toggleAgentHook(id: HookAgentId) {
 
 hookRefreshButton.addEventListener(
   "click",
-  () => void refreshHookIntegrations(),
+  () => void refreshHookIntegrations(true),
 );
 
 const LAN_STATUS_INTERVAL_MS = 1500;
@@ -7701,6 +8080,8 @@ const renderLanSettings = () => {
 };
 
 const refreshLanStatus = async () => {
+  if (refreshingLanStatus) return;
+  refreshingLanStatus = true;
   try {
     const [config, status] = await Promise.all([
       readLanConfig(),
@@ -7714,6 +8095,8 @@ const refreshLanStatus = async () => {
     renderLanSettings();
   } catch (error) {
     setLanNotice("读取局域网状态失败：" + String(error));
+  } finally {
+    refreshingLanStatus = false;
   }
 };
 
@@ -8630,8 +9013,10 @@ const createSessionButton = (session: UnifiedSession): HTMLLIElement => {
               ? dshSessionKey(session) === selectedDshSessionKey
               : isZCodeSession(session)
                 ? zcodeSessionKey(session) === selectedZCodeSessionKey
-                : isMimoSession(session)
+              : isMimoSession(session)
                   ? mimoSessionKey(session) === selectedMimoSessionKey
+                  : isGeminiSession(session)
+                    ? session.id === selectedGeminiSessionId
                   : session.id === selectedSessionId,
     ),
   );
@@ -8649,6 +9034,8 @@ const createSessionButton = (session: UnifiedSession): HTMLLIElement => {
               ? setSelectedZCodeSession(zcodeSessionKey(session))
               : isMimoSession(session)
                 ? setSelectedMimoSession(mimoSessionKey(session))
+                : isGeminiSession(session)
+                  ? setSelectedGeminiSession(session.id)
                 : setSelectedSession(session.id),
   );
 
@@ -8720,34 +9107,40 @@ const updateSessionButton = (
   if (button.dataset.sessionStatus !== visualStatus) {
     button.dataset.sessionStatus = visualStatus;
   }
-  button.dataset.sessionKey = unifiedSessionKey(session);
-  button.dataset.sessionSource = unifiedSessionSource(session);
-  button.setAttribute(
-    "aria-pressed",
-    String(
-      isCodexSession(session)
-        ? session.id === selectedCodexSessionId
-        : isOpenCodeSession(session)
-          ? openCodeSessionKey(session) === selectedOpenCodeSessionKey
-          : isPiSession(session)
-            ? piSessionKey(session) === selectedPiSessionKey
-            : isDshSession(session)
-              ? dshSessionKey(session) === selectedDshSessionKey
-              : isZCodeSession(session)
-                ? zcodeSessionKey(session) === selectedZCodeSessionKey
-                : session.id === selectedSessionId,
-    ),
+  const sessionKey = unifiedSessionKey(session);
+  const sessionSource = unifiedSessionSource(session);
+  if (button.dataset.sessionKey !== sessionKey) button.dataset.sessionKey = sessionKey;
+  if (button.dataset.sessionSource !== sessionSource) button.dataset.sessionSource = sessionSource;
+  const pressed = String(
+    isCodexSession(session)
+      ? session.id === selectedCodexSessionId
+      : isOpenCodeSession(session)
+        ? openCodeSessionKey(session) === selectedOpenCodeSessionKey
+        : isPiSession(session)
+          ? piSessionKey(session) === selectedPiSessionKey
+          : isDshSession(session)
+            ? dshSessionKey(session) === selectedDshSessionKey
+            : isZCodeSession(session)
+              ? zcodeSessionKey(session) === selectedZCodeSessionKey
+              : session.id === selectedSessionId,
   );
-  button.title = `${unifiedSessionStatusLabel(session)} · ${session.title}`;
-  statusLabel.textContent = unifiedSessionStatusLabel(session);
-  title.textContent = session.title;
+  if (button.getAttribute("aria-pressed") !== pressed) {
+    button.setAttribute("aria-pressed", pressed);
+  }
+  const statusText = unifiedSessionStatusLabel(session);
+  const buttonTitle = `${statusText} · ${session.title}`;
+  if (button.title !== buttonTitle) button.title = buttonTitle;
+  if (statusLabel.textContent !== statusText) statusLabel.textContent = statusText;
+  if (title.textContent !== session.title) title.textContent = session.title;
   const liveContent = unifiedSessionLiveContent(session);
-  content.dataset.contentKind = liveContent.kind;
-  content.textContent = liveContent.text;
-  content.title = liveContent.text;
-  statusIcon.dataset.status = visualStatus;
-  time.dateTime = new Date(session.startedAt).toISOString();
-  time.textContent = formatSessionTime(session.startedAt);
+  if (content.dataset.contentKind !== liveContent.kind) content.dataset.contentKind = liveContent.kind;
+  if (content.textContent !== liveContent.text) content.textContent = liveContent.text;
+  if (content.title !== liveContent.text) content.title = liveContent.text;
+  if (statusIcon.dataset.status !== visualStatus) statusIcon.dataset.status = visualStatus;
+  const dateTime = new Date(session.startedAt).toISOString();
+  if (time.dateTime !== dateTime) time.dateTime = dateTime;
+  const formattedTime = formatSessionTime(session.startedAt);
+  if (time.textContent !== formattedTime) time.textContent = formattedTime;
 
   return listItem;
 };
@@ -8768,6 +9161,7 @@ const renderSessionSnapshot = (snapshot: ClaudeSessionSnapshot) => {
   observeClaudeSounds(snapshot.sessions);
   latestClaudeSnapshot = snapshot;
   latestSessions = snapshot.sessions;
+  latestActiveSessionCounts.claude = activeSessionCount(snapshot.sessions);
   integrationState.title =
     snapshot.integrationError ?? "Claude Code Hook 已连接";
   setSourceStatusLabel(
@@ -8978,8 +9372,8 @@ const updateMinimalMode = async (enabled: boolean) => {
 };
 
 const refreshClaudeSessions = async () => {
-  if (refreshingSessions || !isTauriRuntime) return;
-  refreshingSessions = true;
+  if (refreshingClaudeSessions || !isTauriRuntime) return;
+  refreshingClaudeSessions = true;
 
   try {
     const snapshot = await invoke<ClaudeSessionSnapshot>(
@@ -8999,8 +9393,88 @@ const refreshClaudeSessions = async () => {
       lastRefreshError = message;
     }
   } finally {
-    refreshingSessions = false;
+    refreshingClaudeSessions = false;
   }
+};
+
+const refreshAllSessions = async () => {
+  if (refreshingAllSessions || !isTauriRuntime) return;
+  refreshingAllSessions = true;
+  try {
+    const bundle = await invoke<AllSessionSnapshots>("list_all_sessions");
+    latestActiveSessionCounts = {
+      claude: activeSessionCount(bundle.claude.sessions),
+      codex: activeSessionCount(bundle.codex.sessions),
+      opencode: activeSessionCount(bundle.opencode.sessions),
+      mimo: activeSessionCount(bundle.mimo.sessions),
+      pi: activeSessionCount(bundle.pi.sessions),
+      dsh: activeSessionCount(bundle.dsh.sessions),
+      zcode: activeSessionCount(bundle.zcode.sessions),
+      gemini: activeSessionCount(bundle.gemini.sessions),
+    };
+    if (snapshotNeedsRender("claude", bundle.claude, latestClaudeSnapshot)) {
+      renderSessionSnapshot(bundle.claude);
+    }
+    if (snapshotNeedsRender("codex", bundle.codex, latestCodexSnapshot)) {
+      updateCodexPanel(bundle.codex);
+    }
+    if (snapshotNeedsRender("opencode", bundle.opencode, latestOpenCodeSnapshot)) {
+      renderOpenCodeSnapshot(bundle.opencode);
+    }
+    if (snapshotNeedsRender("mimo", bundle.mimo, latestMimoSnapshot)) {
+      renderMimoSnapshot(bundle.mimo);
+    }
+    if (snapshotNeedsRender("pi", bundle.pi, latestPiSnapshot)) {
+      renderPiSnapshot(bundle.pi);
+    }
+    if (snapshotNeedsRender("dsh", bundle.dsh, latestDshSnapshot)) {
+      renderDshSnapshot(bundle.dsh);
+    }
+    if (snapshotNeedsRender("zcode", bundle.zcode, latestZCodeSnapshot)) {
+      renderZCodeSnapshot(bundle.zcode);
+    }
+    if (snapshotNeedsRender("gemini", bundle.gemini, latestGeminiSnapshot)) {
+      renderGeminiSnapshot(bundle.gemini);
+    }
+    latestActiveSessionCounts = {
+      claude: activeSessionCount(latestSessions),
+      codex: activeSessionCount(latestCodexSnapshot.sessions),
+      opencode: activeSessionCount(latestOpenCodeSnapshot.sessions),
+      mimo: activeSessionCount(latestMimoSnapshot.sessions),
+      pi: activeSessionCount(latestPiSnapshot.sessions),
+      dsh: activeSessionCount(latestDshSnapshot.sessions),
+      zcode: activeSessionCount(latestZCodeSnapshot.sessions),
+      gemini: activeSessionCount(latestGeminiSnapshot.sessions),
+    };
+    renderSessionSummary();
+  } catch (error: unknown) {
+    console.error("Unable to refresh all CodeCraft sessions", error);
+    await Promise.allSettled([
+      refreshClaudeSessions(),
+      refreshCodexPanel(),
+      refreshOpenCodeSessions(),
+      refreshMimoSessions(),
+      refreshPiSessions(),
+      refreshDshSessions(),
+      refreshZCodeSessions(),
+      refreshGeminiSessions(),
+    ]);
+  } finally {
+    refreshingAllSessions = false;
+  }
+};
+
+const scheduleSessionRefresh = () => {
+  if (sessionRefreshStopped || !isTauriRuntime) return;
+  if (sessionRefreshTimer !== undefined) clearTimeout(sessionRefreshTimer);
+  sessionRefreshTimer = window.setTimeout(async () => {
+    sessionRefreshTimer = undefined;
+    try {
+      await refreshAllSessions();
+    } finally {
+      scheduleSessionRefresh();
+    }
+  }, SESSION_REFRESH_INTERVAL_MS);
 };
 
 let panelContentResizeFrame: number | undefined;
@@ -9302,13 +9776,7 @@ const contextMenu = new ContextMenuController<CodeCraftContextData>(
           shortcut: "R",
           disabled: !isTauriRuntime,
           onSelect: () => {
-            void refreshClaudeSessions();
-            void refreshCodexPanel();
-            void refreshOpenCodeSessions();
-            void refreshMimoSessions();
-            void refreshPiSessions();
-            void refreshDshSessions();
-            void refreshZCodeSessions();
+            void refreshAllSessions();
           },
         },
         {
@@ -9430,22 +9898,7 @@ if (isTauriRuntime) {
       console.error("Unable to register the CodeCraft reopen handler", error);
     });
   initCodexPanel(renderCodexSnapshot);
-  void refreshClaudeSessions();
-  void refreshCodexPanel();
-  void refreshOpenCodeSessions();
-  void refreshMimoSessions();
-  void refreshPiSessions();
-  void refreshDshSessions();
-  void refreshZCodeSessions();
-  sessionRefreshTimer = setInterval(() => {
-    void refreshClaudeSessions();
-    void refreshCodexPanel();
-    void refreshOpenCodeSessions();
-    void refreshMimoSessions();
-    void refreshPiSessions();
-    void refreshDshSessions();
-    void refreshZCodeSessions();
-  }, SESSION_REFRESH_INTERVAL_MS);
+  void refreshAllSessions().finally(scheduleSessionRefresh);
 } else {
   const previewParameters = new URLSearchParams(window.location.search);
   const previewQuestionEnabled = previewParameters.has("previewQuestion");
@@ -9866,8 +10319,10 @@ window.addEventListener("beforeunload", () => {
     window.cancelAnimationFrame(panelShapeFrame);
   }
   if (sessionRefreshTimer !== undefined) {
-    clearInterval(sessionRefreshTimer);
+    clearTimeout(sessionRefreshTimer);
+    sessionRefreshTimer = undefined;
   }
+  sessionRefreshStopped = true;
   stopLanStatusPolling();
   if (contentViewTransitionTimer !== undefined) {
     clearTimeout(contentViewTransitionTimer);

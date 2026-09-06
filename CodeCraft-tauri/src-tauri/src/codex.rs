@@ -10,6 +10,9 @@ const MAX_OUTPUT_ENTRIES: usize = 24;
 const MAX_OUTPUT_ENTRY_CHARS: usize = 8_000;
 const MAX_INTERACTIONS_PER_SESSION: usize = 8;
 const MAX_ACTIVITIES: usize = 40;
+const MAX_SESSIONS: usize = 100;
+const IDLE_SESSION_TTL_MS: u64 = 30 * 60 * 1_000;
+const SESSION_TTL_MS: u64 = 24 * 60 * 60 * 1_000;
 
 fn now_ms() -> u64 {
     SystemTime::now()
@@ -488,7 +491,14 @@ impl CodexStore {
                 }
             }
         }
+        self.trim_sessions();
         self.bump();
+    }
+
+    pub(crate) fn cleanup(&mut self) {
+        if self.trim_sessions() {
+            self.bump();
+        }
     }
 
     fn ensure_session(
@@ -691,6 +701,74 @@ impl CodexStore {
         self.version = self.version.wrapping_add(1);
     }
 
+    fn session_has_pending(&self, session: &CodexSession) -> bool {
+        session.pending_interaction_id.as_ref().is_some_and(|id| {
+            !self.responded.contains(id)
+                && self
+                    .interactions
+                    .get(id)
+                    .is_some_and(|interaction| !interaction.resolved)
+        })
+    }
+
+    fn trim_sessions(&mut self) -> bool {
+        let original_len = self.sessions.len();
+        let now = now_ms();
+        let mut removable = Vec::new();
+        for (key, session) in &self.sessions {
+            if self.session_has_pending(session) {
+                continue;
+            }
+            let age = now.saturating_sub(session.updated_at);
+            if age > SESSION_TTL_MS
+                || (matches!(
+                    session.status,
+                    CodexSessionStatus::Idle | CodexSessionStatus::Stopped
+                ) && age > IDLE_SESSION_TTL_MS)
+            {
+                removable.push((key.clone(), session.updated_at));
+            }
+        }
+        for (key, _) in removable {
+            self.remove_session(&key);
+        }
+
+        if self.sessions.len() <= MAX_SESSIONS {
+            return self.sessions.len() != original_len;
+        }
+        let excess = self.sessions.len() - MAX_SESSIONS;
+        let mut candidates = self
+            .sessions
+            .iter()
+            .filter(|(_, session)| !self.session_has_pending(session))
+            .map(|(key, session)| (key.clone(), session.updated_at))
+            .collect::<Vec<_>>();
+        candidates.sort_by_key(|(_, updated_at)| *updated_at);
+        let removed = candidates
+            .into_iter()
+            .take(excess)
+            .map(|(key, _)| key)
+            .collect::<Vec<_>>();
+        for key in removed {
+            self.remove_session(&key);
+        }
+        self.sessions.len() != original_len
+    }
+
+    fn remove_session(&mut self, key: &str) {
+        self.sessions.remove(key);
+        let interaction_ids = self
+            .interactions
+            .iter()
+            .filter(|(_, interaction)| interaction.thread_id == key)
+            .map(|(id, _)| id.clone())
+            .collect::<Vec<_>>();
+        for id in interaction_ids {
+            self.interactions.remove(&id);
+            self.responded.remove(&id);
+        }
+    }
+
     pub(crate) fn snapshot(&self) -> CodexSnapshot {
         let mut sessions: Vec<CodexSession> = self.sessions.values().cloned().collect();
         sessions.sort_by(|left, right| right.updated_at.cmp(&left.updated_at));
@@ -703,6 +781,13 @@ impl CodexStore {
             sessions,
             interactions,
         }
+    }
+
+    pub(crate) fn active_session_count(&self) -> usize {
+        self.sessions
+            .values()
+            .filter(|session| session.is_active())
+            .count()
     }
 }
 
@@ -930,5 +1015,65 @@ mod tests {
         });
 
         assert!(store.snapshot().interactions[0].resolved);
+    }
+
+    #[test]
+    fn session_cleanup_keeps_pending_interactions_and_caps_history() {
+        let mut store = CodexStore::default();
+        let base = now_ms();
+        for index in 0..=MAX_SESSIONS {
+            let id = format!("session-{index}");
+            store.sessions.insert(
+                id.clone(),
+                CodexSession {
+                    id,
+                    status: CodexSessionStatus::Idle,
+                    title: "Codex 会话".to_string(),
+                    cwd: None,
+                    started_at: base + index as u64,
+                    updated_at: base + index as u64,
+                    activities: Vec::new(),
+                    outputs: Vec::new(),
+                    pending_interaction_id: None,
+                },
+            );
+        }
+        store.sessions.insert(
+            "pending".to_string(),
+            CodexSession {
+                id: "pending".to_string(),
+                status: CodexSessionStatus::WaitingForApproval,
+                title: "Codex 会话".to_string(),
+                cwd: None,
+                started_at: base,
+                updated_at: base,
+                activities: Vec::new(),
+                outputs: Vec::new(),
+                pending_interaction_id: Some("request".to_string()),
+            },
+        );
+        store.interactions.insert(
+            "request".to_string(),
+            CodexInteraction {
+                request_id: "request".to_string(),
+                kind: CodexInteractionKind::PermissionsApproval,
+                answerable: true,
+                thread_id: "pending".to_string(),
+                title: "Approval".to_string(),
+                detail: "detail".to_string(),
+                plan: None,
+                questions: Vec::new(),
+                allow_session: false,
+                is_secret: false,
+                resolved: false,
+                captured_at: base,
+            },
+        );
+
+        store.cleanup();
+
+        assert_eq!(store.sessions.len(), MAX_SESSIONS);
+        assert!(store.sessions.contains_key("pending"));
+        assert!(store.interactions.contains_key("request"));
     }
 }

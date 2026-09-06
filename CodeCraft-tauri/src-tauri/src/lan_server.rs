@@ -26,8 +26,8 @@ use axum::{
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 use tauri::Manager;
-use tokio::sync::oneshot;
-use tokio_stream::{wrappers::IntervalStream, StreamExt};
+use tokio::sync::{oneshot, watch};
+use tokio_stream::{wrappers::WatchStream, StreamExt};
 
 use crate::{
     approval_policy,
@@ -43,6 +43,7 @@ use crate::{
     pi::{PiApprovalDecision, PiQuestionAnswer},
     zcode_hook::{ZCodeApprovalDecision, ZCodeQuestionAnswer},
     ApprovalIntegrationState, ClaudeIntegrationState, CodexIntegrationState, DshIntegrationState,
+    GeminiIntegrationState,
     OpenCodeIntegrationState, MimoIntegrationState, PiIntegrationState, ZCodeIntegrationState,
 };
 
@@ -51,7 +52,7 @@ use crate::{
 const REQUEST_HEADER: &str = "x-codecraft-lan";
 const MAX_BODY_BYTES: usize = 64 * 1024;
 const MAX_SSE_CLIENTS: usize = 8;
-const SNAPSHOT_POLL_INTERVAL: Duration = Duration::from_millis(300);
+const SNAPSHOT_CACHE_TTL: Duration = Duration::from_millis(250);
 const CONSOLE_HTML: &str = include_str!("../assets/lan/index.html");
 
 const CONTENT_SECURITY_POLICY: &str = "default-src 'self'; \
@@ -77,7 +78,6 @@ struct LanRuntime {
     address: SocketAddr,
 }
 
-#[derive(Default)]
 pub(crate) struct LanServerState {
     pub(crate) config: Mutex<LanServerConfig>,
     pub(crate) auth: Mutex<LanAuthStore>,
@@ -85,6 +85,24 @@ pub(crate) struct LanServerState {
     sse_clients: AtomicUsize,
     last_error: Mutex<Option<String>>,
     last_client_at: Mutex<Option<u64>>,
+    snapshot_cache: Mutex<Option<(u64, Value)>>,
+    snapshot_updates: watch::Sender<u64>,
+}
+
+impl Default for LanServerState {
+    fn default() -> Self {
+        let (snapshot_updates, _) = watch::channel(0_u64);
+        Self {
+            config: Mutex::new(LanServerConfig::default()),
+            auth: Mutex::new(LanAuthStore::default()),
+            runtime: Mutex::new(None),
+            sse_clients: AtomicUsize::new(0),
+            last_error: Mutex::new(None),
+            last_client_at: Mutex::new(None),
+            snapshot_cache: Mutex::new(None),
+            snapshot_updates,
+        }
+    }
 }
 
 impl LanServerState {
@@ -106,6 +124,16 @@ impl LanServerState {
         if let Ok(mut slot) = self.last_client_at.lock() {
             *slot = Some(now_ms());
         }
+    }
+
+    fn subscribe_snapshot_updates(&self) -> watch::Receiver<u64> {
+        self.snapshot_updates.subscribe()
+    }
+
+    pub(crate) fn notify_snapshot_updated(&self) {
+        let _ = self
+            .snapshot_updates
+            .send_modify(|version| *version = version.wrapping_add(1));
     }
 }
 
@@ -216,41 +244,38 @@ struct LanHttpState {
     app: tauri::AppHandle,
 }
 
-/// Reads the current Claude and Codex state plus the flags the console needs.
+/// Reads the current session state plus the flags the console needs.
 fn snapshot_value(app: &tauri::AppHandle) -> Value {
-    let claude = crate::claude_snapshot(&app.state::<ClaudeIntegrationState>())
+    let state = app.state::<LanServerState>();
+    let now = now_ms();
+    if let Ok(cache) = state.snapshot_cache.lock() {
+        if let Some((cached_at, snapshot)) = cache.as_ref() {
+            if now.saturating_sub(*cached_at) <= SNAPSHOT_CACHE_TTL.as_millis() as u64 {
+                return snapshot.clone();
+            }
+        }
+    }
+    let mut sessions = crate::cached_all_sessions_snapshot(app)
         .ok()
         .and_then(|snapshot| serde_json::to_value(snapshot).ok())
         .unwrap_or(Value::Null);
-    let codex = crate::codex_snapshot(&app.state::<CodexIntegrationState>())
-        .ok()
-        .and_then(|snapshot| serde_json::to_value(snapshot).ok())
-        .unwrap_or(Value::Null);
-    let opencode = crate::opencode_snapshot(&app.state::<OpenCodeIntegrationState>())
-        .ok()
-        .and_then(|snapshot| serde_json::to_value(snapshot).ok())
-        .unwrap_or(Value::Null);
-    let mimo = crate::mimo_snapshot(&app.state::<MimoIntegrationState>())
-        .ok()
-        .and_then(|snapshot| serde_json::to_value(snapshot).ok())
-        .unwrap_or(Value::Null);
-    let pi = crate::pi_snapshot(&app.state::<PiIntegrationState>())
-        .ok()
-        .and_then(|snapshot| serde_json::to_value(snapshot).ok())
-        .unwrap_or(Value::Null);
-    let dsh = crate::dsh_snapshot(&app.state::<DshIntegrationState>())
-        .ok()
-        .and_then(|snapshot| serde_json::to_value(snapshot).ok())
-        .unwrap_or(Value::Null);
-    let zcode = crate::zcode_snapshot(&app.state::<ZCodeIntegrationState>())
-        .ok()
-        .and_then(|snapshot| serde_json::to_value(snapshot).ok())
-        .unwrap_or(Value::Null);
+    // Terminal handles and process identifiers are local navigation metadata;
+    // never expose them through the LAN snapshot.
+    if let Some(gemini) = sessions.get_mut("gemini") {
+        if let Some(items) = gemini.get_mut("sessions").and_then(Value::as_array_mut) {
+            for session in items {
+                if let Some(object) = session.as_object_mut() {
+                    object.remove("terminalBinding");
+                }
+            }
+        }
+    }
     // Per-agent install state drives which agent cards the console shows. The
     // desktop panel already relies on this list for its hook settings, so the
     // LAN console reads the same source of truth.
     let integrations = crate::hook_statuses(
         &app.state::<CodexIntegrationState>(),
+        &app.state::<GeminiIntegrationState>(),
         &app.state::<OpenCodeIntegrationState>(),
         &app.state::<MimoIntegrationState>(),
         &app.state::<DshIntegrationState>(),
@@ -269,25 +294,54 @@ fn snapshot_value(app: &tauri::AppHandle) -> Value {
         .unwrap_or(Value::Null);
     let config = app.state::<LanServerState>().config_snapshot().ok();
 
-    json!({
+    let snapshot = json!({
         "generatedAt": now_ms(),
         "allowApprovals": config
             .as_ref()
             .map(|config| config.allow_approvals)
             .unwrap_or(false),
         "approvalMode": approval_mode,
-        "claude": claude,
-        "codex": codex,
-        "opencode": opencode,
-        "mimo": mimo,
-        "pi": pi,
-        "dsh": dsh,
-        "zcode": zcode,
+        "claude": sessions.get("claude").cloned().unwrap_or(Value::Null),
+        "codex": sessions.get("codex").cloned().unwrap_or(Value::Null),
+        "gemini": sessions.get("gemini").cloned().unwrap_or(Value::Null),
+        "opencode": sessions.get("opencode").cloned().unwrap_or(Value::Null),
+        "mimo": sessions.get("mimo").cloned().unwrap_or(Value::Null),
+        "pi": sessions.get("pi").cloned().unwrap_or(Value::Null),
+        "dsh": sessions.get("dsh").cloned().unwrap_or(Value::Null),
+        "zcode": sessions.get("zcode").cloned().unwrap_or(Value::Null),
         "integrations": integrations,
-    })
+    });
+    if let Ok(mut cache) = state.snapshot_cache.lock() {
+        *cache = Some((now, snapshot.clone()));
+    }
+    snapshot
+}
+
+fn snapshot_version_fingerprint(snapshot: &Value) -> u64 {
+    let mut hash = 0xcbf29ce484222325_u64;
+    for source in ["claude", "codex", "gemini", "opencode", "mimo", "pi", "dsh", "zcode"] {
+        if let Some(version) = snapshot
+            .get(source)
+            .and_then(|value| value.get("version"))
+            .and_then(Value::as_u64)
+        {
+            for byte in version.to_le_bytes() {
+                hash = (hash ^ u64::from(byte)).wrapping_mul(0x100000001b3);
+            }
+        }
+    }
+    for key in ["allowApprovals", "approvalMode", "integrations"] {
+        if let Some(value) = snapshot.get(key) {
+            for byte in value.to_string().bytes() {
+                hash = (hash ^ u64::from(byte)).wrapping_mul(0x100000001b3);
+            }
+        }
+    }
+    hash
 }
 
 /// FNV-1a over the serialized snapshot so an SSE stream only pushes on change.
+#[cfg(test)]
 fn snapshot_fingerprint(snapshot: &str) -> u64 {
     snapshot.bytes().fold(0xcbf29ce484222325_u64, |hash, byte| {
         (hash ^ u64::from(byte)).wrapping_mul(0x100000001b3)
@@ -464,11 +518,11 @@ async fn get_events(State(http_state): State<LanHttpState>, headers: HeaderMap) 
     let guard = StreamGuard { app: app.clone() };
 
     let mut last_fingerprint: Option<u64> = None;
-    let stream =
-        IntervalStream::new(tokio::time::interval(SNAPSHOT_POLL_INTERVAL)).filter_map(move |_| {
+    let stream = WatchStream::new(state.subscribe_snapshot_updates()).filter_map(move |_| {
             let _guard = &guard;
-            let snapshot = snapshot_value(&app).to_string();
-            let fingerprint = snapshot_fingerprint(&snapshot);
+            let snapshot_value = snapshot_value(&app);
+            let snapshot = snapshot_value.to_string();
+            let fingerprint = snapshot_version_fingerprint(&snapshot_value);
             if last_fingerprint == Some(fingerprint) {
                 return None;
             }
@@ -711,6 +765,7 @@ async fn post_claude_permission(
         decision_label,
         || {
             crate::apply_claude_permission_decision(
+                &app,
                 &app.state::<ClaudeIntegrationState>(),
                 &body.request_id,
                 body.decision,
@@ -752,6 +807,7 @@ async fn post_claude_plan(
         "auto",
         || {
             crate::apply_claude_plan_decision(
+                &app,
                 &app.state::<ClaudeIntegrationState>(),
                 &body.request_id,
                 PlanExecutionMode::Auto,
@@ -783,6 +839,7 @@ async fn post_codex_approval(
         decision_label,
         || {
             crate::apply_codex_approval(
+                &app,
                 &app.state::<CodexIntegrationState>(),
                 &body.request_id,
                 body.decision,
@@ -812,6 +869,7 @@ async fn post_pi_permission(
         decision_label,
         || {
             crate::apply_pi_approval(
+                &app,
                 &app.state::<PiIntegrationState>(),
                 &body.extension_instance_id,
                 &body.session_id,
@@ -838,6 +896,7 @@ async fn post_pi_question(
         "answer",
         || {
             crate::apply_pi_question(
+                &app,
                 &app.state::<PiIntegrationState>(),
                 &body.extension_instance_id,
                 &body.session_id,
@@ -868,6 +927,7 @@ async fn post_dsh_permission(
         decision_label,
         || {
             crate::apply_dsh_approval(
+                &app,
                 &app.state::<DshIntegrationState>(),
                 &body.bridge_instance_id,
                 &body.plugin_instance_id,
@@ -895,6 +955,7 @@ async fn post_dsh_question(
         "answer",
         || {
             crate::apply_dsh_question(
+                &app,
                 &app.state::<DshIntegrationState>(),
                 &body.bridge_instance_id,
                 &body.plugin_instance_id,
@@ -926,6 +987,7 @@ async fn post_dsh_plan(
         },
         || {
             crate::apply_dsh_plan(
+                &app,
                 &app.state::<DshIntegrationState>(),
                 &body.bridge_instance_id,
                 &body.plugin_instance_id,
@@ -958,6 +1020,7 @@ async fn post_zcode_permission(
         decision_label,
         || {
             crate::apply_zcode_approval(
+                &app,
                 &app.state::<ZCodeIntegrationState>(),
                 &body.session_id,
                 &body.request_id,
@@ -984,6 +1047,7 @@ async fn post_zcode_question(
         "answer",
         || {
             crate::apply_zcode_question(
+                &app,
                 &app.state::<ZCodeIntegrationState>(),
                 &body.session_id,
                 &body.request_id,
@@ -1014,6 +1078,7 @@ async fn post_zcode_plan(
         },
         || {
             crate::apply_zcode_plan(
+                &app,
                 &app.state::<ZCodeIntegrationState>(),
                 &body.session_id,
                 &body.request_id,
@@ -1040,8 +1105,8 @@ async fn post_opencode_question(
         "answer",
         || {
             let state = app.state::<OpenCodeIntegrationState>();
+            crate::refresh_sessions_now(&app)?;
             let mut store = state.store.lock().map_err(|error| error.to_string())?;
-            store.drain_inbox()?;
             store.submit_question(
                 &body.plugin_instance_id,
                 &body.session_id,
@@ -1068,8 +1133,8 @@ async fn post_opencode_question_reject(
         "reject",
         || {
             let state = app.state::<OpenCodeIntegrationState>();
+            crate::refresh_sessions_now(&app)?;
             let mut store = state.store.lock().map_err(|error| error.to_string())?;
-            store.drain_inbox()?;
             store.reject_question(&body.plugin_instance_id, &body.session_id, &body.request_id)
         },
     )
@@ -1091,8 +1156,8 @@ async fn post_opencode_permission(
         &body.action,
         || {
             let state = app.state::<OpenCodeIntegrationState>();
+            crate::refresh_sessions_now(&app)?;
             let mut store = state.store.lock().map_err(|error| error.to_string())?;
-            store.drain_inbox()?;
             store.submit_permission(
                 &body.plugin_instance_id,
                 &body.session_id,
@@ -1120,8 +1185,8 @@ async fn post_opencode_gate(
         &body.action,
         || {
             let state = app.state::<OpenCodeIntegrationState>();
+            crate::refresh_sessions_now(&app)?;
             let mut store = state.store.lock().map_err(|error| error.to_string())?;
-            store.drain_inbox()?;
             store.submit_gate(
                 &body.plugin_instance_id,
                 &body.session_id,
@@ -1148,8 +1213,8 @@ async fn post_mimo_question(
         "answer",
         || {
             let state = app.state::<MimoIntegrationState>();
+            crate::refresh_sessions_now(&app)?;
             let mut store = state.store.lock().map_err(|error| error.to_string())?;
-            store.drain_inbox()?;
             store.submit_question(&body.plugin_instance_id, &body.session_id, &body.request_id, body.answers.clone())
         },
     )
@@ -1171,8 +1236,8 @@ async fn post_mimo_question_reject(
         "reject",
         || {
             let state = app.state::<MimoIntegrationState>();
+            crate::refresh_sessions_now(&app)?;
             let mut store = state.store.lock().map_err(|error| error.to_string())?;
-            store.drain_inbox()?;
             store.reject_question(&body.plugin_instance_id, &body.session_id, &body.request_id)
         },
     )
@@ -1194,8 +1259,8 @@ async fn post_mimo_permission(
         &body.action,
         || {
             let state = app.state::<MimoIntegrationState>();
+            crate::refresh_sessions_now(&app)?;
             let mut store = state.store.lock().map_err(|error| error.to_string())?;
-            store.drain_inbox()?;
             store.submit_permission(&body.plugin_instance_id, &body.session_id, &body.request_id, &body.action, body.message.clone())
         },
     )
@@ -1217,8 +1282,8 @@ async fn post_mimo_gate(
         &body.action,
         || {
             let state = app.state::<MimoIntegrationState>();
+            crate::refresh_sessions_now(&app)?;
             let mut store = state.store.lock().map_err(|error| error.to_string())?;
-            store.drain_inbox()?;
             store.submit_gate(&body.plugin_instance_id, &body.session_id, &body.review_id, &body.action)
         },
     )
@@ -1240,8 +1305,8 @@ async fn post_mimo_plan(
         if body.approved { "approve" } else { "keepPlanning" },
         || {
             let state = app.state::<MimoIntegrationState>();
+            crate::refresh_sessions_now(&app)?;
             let mut store = state.store.lock().map_err(|error| error.to_string())?;
-            store.drain_inbox()?;
             store.submit_plan(&body.plugin_instance_id, &body.session_id, &body.request_id, body.approved, body.feedback.clone())
         },
     )

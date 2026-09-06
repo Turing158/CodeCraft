@@ -7,7 +7,7 @@ use std::{
     process::{self, Child, ChildStdin, Command, Stdio},
     sync::{
         atomic::{AtomicU64, Ordering},
-        mpsc, Mutex, OnceLock,
+        mpsc,
     },
     thread,
     time::{Duration, Instant, SystemTime, UNIX_EPOCH},
@@ -44,7 +44,6 @@ pub(crate) const TIMEOUT_SAFETY_WINDOW_MS: u64 = 30_000;
 pub(crate) const OUTER_TIMEOUT_MS: u64 = INTERACTION_WAIT_TIMEOUT_MS + TIMEOUT_SAFETY_WINDOW_MS;
 const POLL_INTERVAL: Duration = Duration::from_millis(200);
 const HEARTBEAT_STALE_SECONDS: u64 = 20;
-const DETECTION_CACHE_TTL: Duration = Duration::from_secs(30);
 const APP_SERVER_START_DELAY: Duration = Duration::from_millis(750);
 const APP_SERVER_RESPONSE_TIMEOUT: Duration = Duration::from_secs(30);
 const APP_SERVER_TURN_TIMEOUT: Duration = Duration::from_secs(10 * 60);
@@ -53,8 +52,6 @@ const APP_SERVER_RETRY_DELAY: Duration = Duration::from_millis(500);
 const APP_SERVER_DELIVERY_KIND: &str = "desktop-continuous";
 const APP_SERVER_RUNTIME_MODEL_BUDGET: &str = "preflight-v1";
 static APP_SERVER_REQUEST_COUNTER: AtomicU64 = AtomicU64::new(1);
-static DETECTION_CACHE: OnceLock<Mutex<Option<(Instant, Option<(PathBuf, Option<String>)>)>>> =
-    OnceLock::new();
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Deserialize, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -148,7 +145,6 @@ pub(crate) enum ZCodeHookInstallState {
     Installed,
     Modified,
     Conflict,
-    Incompatible,
     Error,
 }
 
@@ -157,9 +153,13 @@ pub(crate) enum ZCodeHookInstallState {
 pub(crate) struct ZCodeHookStatus {
     pub(crate) state: ZCodeHookInstallState,
     pub(crate) install_path: String,
-    pub(crate) detected_path: Option<String>,
-    pub(crate) detected_version: Option<String>,
     pub(crate) error: Option<String>,
+}
+
+#[derive(Clone, Debug)]
+pub(crate) struct ZCodeInstallation {
+    pub(crate) path: PathBuf,
+    pub(crate) version: Option<String>,
 }
 
 impl ZCodeHookStatus {
@@ -445,7 +445,7 @@ pub(crate) fn submit_decision(decision: &ZCodeDecisionEnvelope) -> Result<(), St
     write_decision_file(decision_path(decision.request_id()), decision)
 }
 
-pub(crate) fn queue_plan_feedback(session_id: &str, feedback: &str) {
+pub(crate) fn queue_plan_feedback(executable: PathBuf, session_id: &str, feedback: &str) {
     let session_id = session_id.to_string();
     let feedback = feedback.trim().to_string();
     if feedback.is_empty() {
@@ -453,7 +453,7 @@ pub(crate) fn queue_plan_feedback(session_id: &str, feedback: &str) {
     }
     thread::spawn(move || {
         thread::sleep(APP_SERVER_START_DELAY);
-        if let Err(error) = send_plan_feedback(&session_id, &feedback) {
+        if let Err(error) = send_plan_feedback(&executable, &session_id, &feedback) {
             eprintln!("CodeCraft could not return ZCode plan feedback: {error}");
         }
     });
@@ -681,13 +681,12 @@ impl AppServerClient {
     }
 }
 
-fn send_plan_feedback(session_id: &str, feedback: &str) -> Result<(), AppServerError> {
-    let executable = detect_zcode_installation()
-        .map(|(path, _)| path)
-        .ok_or_else(|| {
-            AppServerError::Protocol("ZCode installation was not detected".to_string())
-        })?;
-    let mut client = AppServerClient::spawn(&executable)?;
+fn send_plan_feedback(
+    executable: &Path,
+    session_id: &str,
+    feedback: &str,
+) -> Result<(), AppServerError> {
+    let mut client = AppServerClient::spawn(executable)?;
     client.request("session/resume", json!({"sessionId": session_id}))?;
     client.request(
         "session/subscribe",
@@ -1049,17 +1048,18 @@ fn read_install_record() -> Option<InstallRecord> {
 
 pub(crate) fn status() -> Result<ZCodeHookStatus, String> {
     let path = zcode_config_path()?;
-    let installation = detect_zcode_installation();
-    let (detected_path, detected_version) = installation
-        .as_ref()
-        .map(|(path, version)| (Some(path.to_string_lossy().to_string()), version.clone()))
-        .unwrap_or((None, None));
+    status_at(&path)
+}
+
+pub(crate) fn config_exists() -> Result<bool, String> {
+    Ok(zcode_config_path()?.is_file())
+}
+
+fn status_at(path: &Path) -> Result<ZCodeHookStatus, String> {
     if !path.exists() {
         return Ok(ZCodeHookStatus {
             state: ZCodeHookInstallState::NotInstalled,
             install_path: path.to_string_lossy().to_string(),
-            detected_path,
-            detected_version,
             error: None,
         });
     }
@@ -1069,8 +1069,6 @@ pub(crate) fn status() -> Result<ZCodeHookStatus, String> {
             return Ok(ZCodeHookStatus {
                 state: ZCodeHookInstallState::Error,
                 install_path: path.to_string_lossy().to_string(),
-                detected_path,
-                detected_version,
                 error: Some(error),
             })
         }
@@ -1101,16 +1099,12 @@ pub(crate) fn status() -> Result<ZCodeHookStatus, String> {
         ZCodeHookInstallState::Conflict
     } else if count != REGISTERED_HOOKS.len() || modified || !enabled {
         ZCodeHookInstallState::Modified
-    } else if !version_is_compatible(detected_version.as_deref()) {
-        ZCodeHookInstallState::Incompatible
     } else {
         ZCodeHookInstallState::Installed
     };
     Ok(ZCodeHookStatus {
         state,
         install_path: path.to_string_lossy().to_string(),
-        detected_path,
-        detected_version,
         error: None,
     })
 }
@@ -1317,22 +1311,9 @@ fn replace_file(source: &Path, destination: &Path) -> Result<(), String> {
     fs::rename(source, destination).map_err(|error| error.to_string())
 }
 
-pub(crate) fn detect_zcode_installation() -> Option<(PathBuf, Option<String>)> {
-    let cache = DETECTION_CACHE.get_or_init(|| Mutex::new(None));
-    if let Ok(mut cache) = cache.lock() {
-        if let Some((checked_at, installation)) = cache.as_ref() {
-            if checked_at.elapsed() < DETECTION_CACHE_TTL {
-                return installation.clone();
-            }
-        }
-        let installation = detect_zcode_installation_uncached();
-        *cache = Some((Instant::now(), installation.clone()));
-        return installation;
-    }
-    detect_zcode_installation_uncached()
-}
-
-fn detect_zcode_installation_uncached() -> Option<(PathBuf, Option<String>)> {
+/// Performs external discovery only for the explicit Hook-management refresh.
+/// Runtime Hook health is determined exclusively from the configuration file.
+pub(crate) fn discover_zcode_installation() -> Option<ZCodeInstallation> {
     let mut candidates = Vec::new();
     if let Some(path) = running_zcode_path() {
         candidates.push(path);
@@ -1353,15 +1334,16 @@ fn detect_zcode_installation_uncached() -> Option<(PathBuf, Option<String>)> {
     candidates
         .into_iter()
         .find(|path| path.is_file())
-        .map(|path| {
-            let version = file_version(&path);
-            (path, version)
+        .map(|path| ZCodeInstallation {
+            version: file_version(&path),
+            path,
         })
 }
 
 #[cfg(windows)]
 fn running_zcode_path() -> Option<PathBuf> {
     let output = Command::new("powershell")
+        .creation_flags(0x0800_0000)
         .args([
             "-NoProfile",
             "-Command",
@@ -1382,6 +1364,7 @@ fn running_zcode_path() -> Option<PathBuf> {
 fn uninstall_registry_path() -> Option<PathBuf> {
     let script = "$roots=@('HKCU:\\Software\\Microsoft\\Windows\\CurrentVersion\\Uninstall','HKLM:\\Software\\Microsoft\\Windows\\CurrentVersion\\Uninstall','HKLM:\\Software\\WOW6432Node\\Microsoft\\Windows\\CurrentVersion\\Uninstall'); $app=$roots | ForEach-Object { Get-ChildItem $_ -ErrorAction SilentlyContinue } | ForEach-Object { Get-ItemProperty $_.PSPath } | Where-Object { $_.DisplayName -like 'ZCode*' } | Select-Object -First 1; if ($app.InstallLocation) { Join-Path $app.InstallLocation 'ZCode.exe' } elseif ($app.DisplayIcon) { $app.DisplayIcon -replace '^\"|\",?\\d*$|,\\d*$','' }";
     let output = Command::new("powershell")
+        .creation_flags(0x0800_0000)
         .args(["-NoProfile", "-Command", script])
         .output()
         .ok()?;
@@ -1399,6 +1382,7 @@ fn file_version(path: &Path) -> Option<String> {
     let escaped = path.to_string_lossy().replace('\'', "''");
     let script = format!("(Get-Item -LiteralPath '{escaped}').VersionInfo.ProductVersion");
     let output = Command::new("powershell")
+        .creation_flags(0x0800_0000)
         .args(["-NoProfile", "-Command", &script])
         .output()
         .ok()?;
@@ -1409,18 +1393,6 @@ fn file_version(path: &Path) -> Option<String> {
 #[cfg(not(windows))]
 fn file_version(_path: &Path) -> Option<String> {
     None
-}
-
-fn version_is_compatible(version: Option<&str>) -> bool {
-    let Some(version) = version else {
-        return false;
-    };
-    let parts = version
-        .split('.')
-        .take(3)
-        .map(|part| part.parse::<u64>().unwrap_or_default())
-        .collect::<Vec<_>>();
-    parts.as_slice() >= &[3, 10, 1]
 }
 
 #[cfg(test)]
@@ -1750,10 +1722,24 @@ mod tests {
     }
 
     #[test]
-    fn supported_version_starts_at_3_10_1() {
-        assert!(!version_is_compatible(Some("3.10.0")));
-        assert!(version_is_compatible(Some("3.10.1")));
-        assert!(version_is_compatible(Some("3.11.0.1")));
-        assert!(!version_is_compatible(None));
+    fn complete_hook_config_is_installed_without_external_version_metadata() {
+        let directory = env::temp_dir().join(format!(
+            "codecraft-zcode-status-test-{}-{}",
+            process::id(),
+            now_ms()
+        ));
+        fs::create_dir_all(&directory).unwrap();
+        let path = directory.join("config.json");
+        let executable = env::current_exe().unwrap();
+        let mut root = json!({});
+        merge_hooks(&mut root, &executable, true).unwrap();
+        fs::write(&path, serde_json::to_vec(&root).unwrap()).unwrap();
+
+        assert_eq!(
+            status_at(&path).unwrap().state,
+            ZCodeHookInstallState::Installed
+        );
+
+        fs::remove_dir_all(directory).unwrap();
     }
 }

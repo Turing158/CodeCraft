@@ -3,6 +3,7 @@ use std::{
     io::Write,
     path::{Path, PathBuf},
     process,
+    sync::{Mutex, OnceLock},
     time::{SystemTime, UNIX_EPOCH},
 };
 
@@ -20,6 +21,9 @@ const PLUGIN_FILE_NAME: &str = "codecraft-opencode-plugin.js";
 const MANIFEST_FILE_NAME: &str = ".codecraft-opencode-plugin.json";
 const BUNDLED_PLUGIN: &str = include_str!("../opencode-plugin/codecraft-opencode-plugin.js");
 const INSTANCE_STALE_MS: u64 = 20_000;
+const RUNNING_VERSION_CACHE_TTL_MS: u64 = 2_000;
+static RUNNING_VERSION_CACHE: OnceLock<Mutex<Option<(std::time::Instant, Vec<String>)>>> =
+    OnceLock::new();
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -291,6 +295,14 @@ pub(crate) fn sync_approval_mode(approval_mode: ApprovalMode) -> Result<(), Stri
 }
 
 fn current_running_versions() -> Vec<String> {
+    let cache = RUNNING_VERSION_CACHE.get_or_init(|| Mutex::new(None));
+    if let Ok(cache) = cache.lock() {
+        if let Some((created_at, versions)) = cache.as_ref() {
+            if created_at.elapsed().as_millis() <= RUNNING_VERSION_CACHE_TTL_MS as u128 {
+                return versions.clone();
+            }
+        }
+    }
     let now = now_ms();
     let mut versions = Vec::new();
     let Ok(entries) = fs::read_dir(instances_dir()) else {
@@ -313,6 +325,9 @@ fn current_running_versions() -> Vec<String> {
         }
     }
     versions.sort();
+    if let Ok(mut cache) = cache.lock() {
+        *cache = Some((std::time::Instant::now(), versions.clone()));
+    }
     versions
 }
 

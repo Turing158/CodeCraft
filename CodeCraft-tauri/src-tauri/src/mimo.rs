@@ -1,6 +1,7 @@
 use std::{
     collections::HashMap,
     fs,
+    sync::{Mutex, OnceLock},
     time::{SystemTime, UNIX_EPOCH},
 };
 
@@ -8,15 +9,24 @@ use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 use uuid::Uuid;
 
-use super::mimo_hook;
+use super::{inbox_limits, mimo_hook};
 
 const MAX_ENVELOPE_BYTES: u64 = 256 * 1024;
-const MAX_INBOX_FILES: usize = 500;
+const MAX_INBOX_FILES: usize = 100;
+const MAX_INBOX_FILES_TOTAL: usize = 10_000;
+const INBOX_FILE_TTL_MS: u128 = 24 * 60 * 60 * 1_000;
+const MAX_SESSIONS: usize = 100;
+const MAX_PENDING_REVIEWS: usize = 64;
+const IDLE_SESSION_TTL_MS: u64 = 30 * 60 * 1_000;
+const SESSION_TTL_MS: u64 = 24 * 60 * 60 * 1_000;
 const INSTANCE_STALE_MS: u64 = 20_000;
 const MAX_ACTIVITIES: usize = 40;
 const MAX_OUTPUTS: usize = 24;
 const RESOLVED_REVIEW_TTL_MS: u64 = 10 * 60 * 1000;
 const MAX_RESOLVED_REVIEWS: usize = 2048;
+const ACTIVE_INSTANCES_CACHE_TTL_MS: u64 = 1_000;
+static ACTIVE_INSTANCES_CACHE: OnceLock<Mutex<Option<(std::time::Instant, Vec<MimoInstance>)>>> =
+    OnceLock::new();
 
 fn now_ms() -> u64 {
     SystemTime::now()
@@ -226,6 +236,7 @@ pub(crate) struct MimoInstance {
 pub(crate) struct MimoSnapshot {
     pub(crate) connected: bool,
     pub(crate) integration_error: Option<String>,
+    pub(crate) version: u64,
     pub(crate) sessions: Vec<MimoSession>,
     pub(crate) instances: Vec<MimoInstance>,
 }
@@ -264,6 +275,8 @@ pub(crate) struct MimoStore {
     sessions: HashMap<String, MimoSession>,
     resolved_reviews: HashMap<String, u64>,
     integration_error: Option<String>,
+    version: u64,
+    last_instance_ids: Vec<String>,
 }
 
 impl MimoStore {
@@ -450,10 +463,15 @@ impl MimoStore {
                         submission_error: None,
                     }
                 };
-                let session = self.session_mut(plugin_instance_id, session_id, captured_at, cwd);
-                session.status = MimoSessionStatus::WaitingForInput;
-                session.updated_at = captured_at;
-                upsert_review(session, review);
+                let accepted = {
+                    let session = self.session_mut(plugin_instance_id, session_id, captured_at, cwd);
+                    session.status = MimoSessionStatus::WaitingForInput;
+                    session.updated_at = captured_at;
+                    upsert_review(session, review)
+                };
+                if !accepted {
+                    self.integration_error = Some("Mimo 待审批请求超过上限，等待用户处理".to_string());
+                }
             }
             "question.replied"
             | "question.rejected"
@@ -509,10 +527,15 @@ impl MimoStore {
                 if self.is_resolved(plugin_instance_id, request_id) {
                     return;
                 }
-                let session = self.session_mut(plugin_instance_id, session_id, captured_at, cwd);
-                session.status = MimoSessionStatus::WaitingForApproval;
-                session.updated_at = captured_at;
-                upsert_review(session, review);
+                let accepted = {
+                    let session = self.session_mut(plugin_instance_id, session_id, captured_at, cwd);
+                    session.status = MimoSessionStatus::WaitingForApproval;
+                    session.updated_at = captured_at;
+                    upsert_review(session, review)
+                };
+                if !accepted {
+                    self.integration_error = Some("Mimo 待审批请求超过上限，等待用户处理".to_string());
+                }
             }
             "session.status" => {
                 let properties = payload.get("properties").unwrap_or(payload);
@@ -599,10 +622,19 @@ impl MimoStore {
             submission_error: None,
         };
         self.forget_resolution(plugin_instance_id, review_id);
-        let session = self.session_mut(plugin_instance_id, session_id, captured_at, cwd);
-        session.status = MimoSessionStatus::WaitingForApproval;
-        session.updated_at = captured_at;
-        upsert_review(session, review);
+        let accepted = {
+            let session = self.session_mut(plugin_instance_id, session_id, captured_at, cwd);
+            session.status = MimoSessionStatus::WaitingForApproval;
+            session.updated_at = captured_at;
+            upsert_review(session, review)
+        };
+        if !accepted {
+            self.integration_error = Some("Mimo 待审批请求超过上限，等待用户处理".to_string());
+        }
+        let session = self
+            .sessions
+            .get_mut(&Self::session_key(plugin_instance_id, session_id))
+            .expect("session inserted above");
         session.activities.push(MimoActivity {
             id: string_field(payload, "callID")
                 .unwrap_or(review_id)
@@ -807,20 +839,48 @@ impl MimoStore {
         }
     }
 
-    pub(crate) fn drain_inbox(&mut self) -> Result<(), String> {
+    pub(crate) fn drain_inbox(&mut self) -> Result<Vec<MimoInstance>, String> {
         let instances = active_instances();
         let directory = mimo_hook::inbox_dir();
         fs::create_dir_all(&directory).map_err(|error| error.to_string())?;
         let mut files = fs::read_dir(&directory)
             .map_err(|error| error.to_string())?
             .flatten()
+            .take(MAX_INBOX_FILES_TOTAL.saturating_add(MAX_INBOX_FILES))
             .filter(|entry| {
                 entry.path().extension().and_then(|value| value.to_str()) == Some("json")
             })
             .collect::<Vec<_>>();
         files.sort_by_key(|entry| entry.file_name());
-        for entry in files.into_iter().take(MAX_INBOX_FILES) {
-            let path = entry.path();
+        let paths = inbox_limits::limit_paths(
+            files.into_iter().map(|entry| entry.path()).collect(),
+            MAX_INBOX_FILES_TOTAL,
+            |path| {
+                let Ok(bytes) = fs::read(path) else {
+                    return false;
+                };
+                let Ok(value) = serde_json::from_slice::<Value>(&bytes) else {
+                    return false;
+                };
+                value
+                    .get("payload")
+                    .and_then(|payload| payload.get("eventType"))
+                    .and_then(Value::as_str)
+                    .is_some_and(|event| event.ends_with(".asked"))
+            },
+        );
+        let mut changed = false;
+        let now = SystemTime::now();
+        for path in paths.into_iter().take(MAX_INBOX_FILES) {
+            let stale = fs::metadata(&path)
+                .and_then(|metadata| metadata.modified())
+                .ok()
+                .and_then(|modified| now.duration_since(modified).ok())
+                .is_some_and(|age| age.as_millis() > INBOX_FILE_TTL_MS);
+            if stale {
+                let _ = fs::remove_file(&path);
+                continue;
+            }
             let result = (|| {
                 let metadata = fs::metadata(&path).map_err(|error| error.to_string())?;
                 if metadata.len() > MAX_ENVELOPE_BYTES {
@@ -836,19 +896,31 @@ impl MimoStore {
                 Ok(())
             })();
             let _ = fs::remove_file(&path);
+            changed = true;
             if let Err(error) = result {
                 self.integration_error = Some(error);
             }
         }
-        Ok(())
+        self.trim_sessions();
+        if changed {
+            self.version = self.version.wrapping_add(1);
+        }
+        Ok(instances)
     }
 
     pub(crate) fn snapshot(
         &mut self,
         hook_error: Option<String>,
     ) -> Result<MimoSnapshot, String> {
-        self.drain_inbox()?;
-        let instances = active_instances();
+        let instances = self.drain_inbox()?;
+        let instance_ids = instances
+            .iter()
+            .map(|instance| instance.plugin_instance_id.clone())
+            .collect::<Vec<_>>();
+        if self.last_instance_ids != instance_ids {
+            self.last_instance_ids = instance_ids;
+            self.version = self.version.wrapping_add(1);
+        }
         let active_ids = instances
             .iter()
             .map(|instance| instance.plugin_instance_id.as_str())
@@ -865,9 +937,46 @@ impl MimoStore {
         Ok(MimoSnapshot {
             connected: integration_error.is_none() && !instances.is_empty(),
             integration_error,
+            version: self.version,
             sessions,
             instances,
         })
+    }
+
+    pub(crate) fn active_session_count(&self) -> usize {
+        self.sessions
+            .values()
+            .filter(|session| session.is_active())
+            .count()
+    }
+
+    fn trim_sessions(&mut self) {
+        let now = now_ms();
+        self.sessions.retain(|_, session| {
+            if !session.pending_reviews.is_empty() {
+                return true;
+            }
+            let age = now.saturating_sub(session.updated_at);
+            age <= SESSION_TTL_MS
+                && (!matches!(
+                    session.status,
+                    MimoSessionStatus::Idle | MimoSessionStatus::Stopped
+                ) || age <= IDLE_SESSION_TTL_MS)
+        });
+        if self.sessions.len() <= MAX_SESSIONS {
+            return;
+        }
+        let excess = self.sessions.len() - MAX_SESSIONS;
+        let mut candidates = self
+            .sessions
+            .iter()
+            .filter(|(_, session)| session.pending_reviews.is_empty())
+            .map(|(key, session)| (key.clone(), session.updated_at))
+            .collect::<Vec<_>>();
+        candidates.sort_by_key(|(_, updated_at)| *updated_at);
+        for (key, _) in candidates.into_iter().take(excess) {
+            self.sessions.remove(&key);
+        }
     }
 
     fn submit(
@@ -1046,6 +1155,14 @@ impl MimoStore {
 }
 
 fn active_instances() -> Vec<MimoInstance> {
+    let cache = ACTIVE_INSTANCES_CACHE.get_or_init(|| Mutex::new(None));
+    if let Ok(cache) = cache.lock() {
+        if let Some((created_at, instances)) = cache.as_ref() {
+            if created_at.elapsed().as_millis() <= ACTIVE_INSTANCES_CACHE_TTL_MS as u128 {
+                return instances.clone();
+            }
+        }
+    }
     let now = now_ms();
     let mut instances = Vec::new();
     let Ok(entries) = fs::read_dir(mimo_hook::instances_dir()) else {
@@ -1087,17 +1204,23 @@ fn active_instances() -> Vec<MimoInstance> {
         });
     }
     instances.sort_by(|left, right| right.heartbeat.cmp(&left.heartbeat));
+    if let Ok(mut cache) = cache.lock() {
+        *cache = Some((std::time::Instant::now(), instances.clone()));
+    }
     instances
 }
 
-fn upsert_review(session: &mut MimoSession, review: MimoReview) {
+fn upsert_review(session: &mut MimoSession, review: MimoReview) -> bool {
     if let Some(existing) = session
         .pending_reviews
         .iter_mut()
         .find(|existing| existing.review_id() == review.review_id())
     {
         *existing = review;
-        return;
+        return true;
+    }
+    if session.pending_reviews.len() >= MAX_PENDING_REVIEWS {
+        return false;
     }
     session.pending_reviews.push(review);
     session.pending_reviews.sort_by_key(|review| match review {
@@ -1106,6 +1229,7 @@ fn upsert_review(session: &mut MimoSession, review: MimoReview) {
         | MimoReview::StrictToolGate { captured_at, .. }
         | MimoReview::Plan { captured_at, .. } => *captured_at,
     });
+    true
 }
 
 fn cap_vec<T>(items: &mut Vec<T>, limit: usize) {

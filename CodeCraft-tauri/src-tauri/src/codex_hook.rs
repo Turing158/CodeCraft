@@ -25,7 +25,14 @@ use serde_json::{json, Value};
 use super::{
     approval_policy,
     codex::{parse_user_input_questions, CodexApprovalDecision, CodexEvent},
+    inbox_limits,
 };
+
+const MAX_INBOX_FILES_PER_PASS: usize = 100;
+const MAX_INBOX_FILES_TOTAL: usize = 10_000;
+const INBOX_FILE_TTL_MS: u128 = 24 * 60 * 60 * 1_000;
+const MAX_ROLLOUT_SEARCH_DEPTH: usize = 16;
+const MAX_ROLLOUT_SEARCH_ENTRIES: usize = 4_096;
 
 pub(crate) const HOOK_ARGUMENT: &str = "--codecraft-codex-hook";
 pub(crate) const HOOK_EVENTS: [&str; 11] = [
@@ -618,10 +625,40 @@ pub(crate) fn drain_inbox_events() -> Result<Vec<CodexEvent>, String> {
         .map(|entry| entry.path())
         .filter(|path| path.extension().and_then(|value| value.to_str()) == Some("json"))
         .collect::<Vec<_>>();
-    paths.sort();
+    let now = SystemTime::now();
+    paths.retain(|path| {
+        let stale = fs::metadata(path)
+            .and_then(|metadata| metadata.modified())
+            .ok()
+            .and_then(|modified| now.duration_since(modified).ok())
+            .is_some_and(|age| age.as_millis() > INBOX_FILE_TTL_MS);
+        if stale {
+            let _ = fs::remove_file(path);
+        }
+        !stale
+    });
+    paths = inbox_limits::limit_paths(paths, MAX_INBOX_FILES_TOTAL, |path| {
+        let Ok(text) = fs::read_to_string(path) else {
+            return false;
+        };
+        let Ok(value) = serde_json::from_str::<Value>(&text) else {
+            return false;
+        };
+        let payload = value.get("payload").unwrap_or(&value);
+        matches!(
+            string_field(payload, "hook_event_name").as_deref(),
+            Some("PermissionRequest")
+        ) || (string_field(payload, "hook_event_name").as_deref() == Some("PreToolUse")
+            && payload
+                .get("tool_name")
+                .and_then(Value::as_str)
+                .is_some_and(|tool| tool.eq_ignore_ascii_case("request_user_input")))
+            || string_field(payload, "hook_event_name").as_deref() == Some("Stop")
+                && plan_text_from_payload(payload).is_some()
+    });
 
     let mut events = Vec::new();
-    for path in paths {
+    for path in paths.into_iter().take(MAX_INBOX_FILES_PER_PASS) {
         let parsed = fs::read_to_string(&path)
             .ok()
             .and_then(|text| serde_json::from_str::<HookEnvelope>(&text).ok())
@@ -802,12 +839,21 @@ fn codex_home_dir() -> PathBuf {
         .unwrap_or_else(|| PathBuf::from(".codex"))
 }
 
-fn find_codex_rollout_in(directory: &Path, suffix: &str) -> Option<PathBuf> {
+fn find_codex_rollout_in(
+    directory: &Path,
+    suffix: &str,
+    depth: usize,
+    remaining: &mut usize,
+) -> Option<PathBuf> {
+    if depth > MAX_ROLLOUT_SEARCH_DEPTH || *remaining == 0 {
+        return None;
+    }
     let entries = fs::read_dir(directory).ok()?;
     for entry in entries.flatten() {
+        *remaining = remaining.saturating_sub(1);
         let path = entry.path();
         if path.is_dir() {
-            if let Some(found) = find_codex_rollout_in(&path, suffix) {
+            if let Some(found) = find_codex_rollout_in(&path, suffix, depth + 1, remaining) {
                 return Some(found);
             }
         } else if path
@@ -826,7 +872,13 @@ fn find_codex_rollout(session_id: &str) -> Option<PathBuf> {
         return None;
     }
     let suffix = format!("-{session_id}.jsonl");
-    find_codex_rollout_in(&codex_home_dir().join("sessions"), &suffix)
+    let mut remaining = MAX_ROLLOUT_SEARCH_ENTRIES;
+    find_codex_rollout_in(
+        &codex_home_dir().join("sessions"),
+        &suffix,
+        0,
+        &mut remaining,
+    )
 }
 
 fn plan_text_from_rollout_file(

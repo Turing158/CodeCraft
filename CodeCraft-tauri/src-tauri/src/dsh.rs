@@ -8,6 +8,8 @@ pub(crate) const PROTOCOL: &str = "codecraft-dsh-bridge";
 pub(crate) const PROTOCOL_VERSION: u32 = 1;
 const HEARTBEAT_STALE_MS: u64 = 15_000;
 const MAX_SESSIONS: usize = 100;
+const IDLE_SESSION_TTL_MS: u64 = 30 * 60 * 1_000;
+const SESSION_TTL_MS: u64 = 24 * 60 * 60 * 1_000;
 const MAX_ACTIVITIES: usize = 100;
 const MAX_OUTPUTS: usize = 100;
 
@@ -108,7 +110,7 @@ pub(crate) struct DshInstance {
     pub(crate) capabilities: DshCapabilities,
 }
 
-#[derive(Clone, Copy, Debug, Serialize)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub(crate) enum DshSessionStatus {
     Working,
@@ -230,6 +232,7 @@ impl DshSession {
 pub(crate) struct DshSnapshot {
     pub(crate) connected: bool,
     pub(crate) integration_error: Option<String>,
+    pub(crate) version: u64,
     pub(crate) bridge_instance_id: Option<String>,
     pub(crate) sessions: Vec<DshSession>,
     pub(crate) instances: Vec<DshInstance>,
@@ -271,6 +274,7 @@ pub(crate) struct DshStore {
     pending: HashMap<String, PendingRequest>,
     integration_error: Option<String>,
     bridge_instance_id: Option<String>,
+    version: u64,
 }
 
 impl DshStore {
@@ -333,7 +337,7 @@ impl DshStore {
     pub(crate) fn ingest(&mut self, envelope: &DshEnvelope) -> Result<(), String> {
         envelope.validate()?;
         self.ingest_instance(envelope);
-        match envelope.message_type.as_str() {
+        let result = match envelope.message_type.as_str() {
             "heartbeat" => Ok(()),
             "shutdown" => {
                 self.instances.remove(&envelope.plugin_instance_id);
@@ -350,7 +354,11 @@ impl DshStore {
             "event" => self.ingest_event(envelope),
             "request" => self.ingest_request(envelope),
             _ => Err("Unsupported DSH message".to_string()),
+        };
+        if result.is_ok() {
+            self.version = self.version.wrapping_add(1);
         }
+        result
     }
 
     fn ingest_event(&mut self, envelope: &DshEnvelope) -> Result<(), String> {
@@ -800,6 +808,12 @@ impl DshStore {
 
     pub(crate) fn snapshot(&mut self) -> DshSnapshot {
         let now = now_ms();
+        let previous_instance_count = self.instances.len();
+        let previous_statuses = self
+            .sessions
+            .iter()
+            .map(|(key, session)| (key.clone(), session.status))
+            .collect::<HashMap<_, _>>();
         self.instances
             .retain(|_, instance| now.saturating_sub(instance.heartbeat) <= HEARTBEAT_STALE_MS);
         let active_instances = self.instances.keys().cloned().collect::<Vec<_>>();
@@ -811,18 +825,67 @@ impl DshStore {
                 session.status = DshSessionStatus::Stopped;
             }
         }
+        self.trim_sessions(now);
+        if previous_instance_count != self.instances.len()
+            || self.sessions.iter().any(|(key, session)| {
+                previous_statuses.get(key).copied() != Some(session.status)
+            })
+        {
+            self.version = self.version.wrapping_add(1);
+        }
         let mut sessions = self.sessions.values().cloned().collect::<Vec<_>>();
         sessions.sort_by(|left, right| right.updated_at.cmp(&left.updated_at));
-        sessions.truncate(MAX_SESSIONS);
         let mut instances = self.instances.values().cloned().collect::<Vec<_>>();
         instances.sort_by(|left, right| right.heartbeat.cmp(&left.heartbeat));
         DshSnapshot {
             connected: self.integration_error.is_none() && !instances.is_empty(),
             integration_error: self.integration_error.clone(),
+            version: self.version,
             bridge_instance_id: self.bridge_instance_id.clone(),
             sessions,
             instances,
         }
+    }
+
+    pub(crate) fn active_session_count(&self) -> usize {
+        self.sessions
+            .values()
+            .filter(|session| session.is_active())
+            .count()
+    }
+
+    fn trim_sessions(&mut self, now: u64) {
+        self.sessions.retain(|_, session| {
+            if session.question.is_some() || session.permission.is_some() || session.plan.is_some() {
+                return true;
+            }
+            let age = now.saturating_sub(session.updated_at);
+            age <= SESSION_TTL_MS
+                && (!matches!(
+                    session.status,
+                    DshSessionStatus::Idle | DshSessionStatus::Stopped
+                ) || age <= IDLE_SESSION_TTL_MS)
+        });
+        if self.sessions.len() <= MAX_SESSIONS {
+            return;
+        }
+        let excess = self.sessions.len() - MAX_SESSIONS;
+        let mut candidates = self
+            .sessions
+            .iter()
+            .filter(|(_, session)| {
+                session.question.is_none()
+                    && session.permission.is_none()
+                    && session.plan.is_none()
+            })
+            .map(|(key, session)| (key.clone(), session.updated_at))
+            .collect::<Vec<_>>();
+        candidates.sort_by_key(|(_, updated_at)| *updated_at);
+        for (key, _) in candidates.into_iter().take(excess) {
+            self.sessions.remove(&key);
+        }
+        self.pending
+            .retain(|_, request| self.sessions.contains_key(&session_store_key(&request.plugin_instance_id, &request.session_id)));
     }
 }
 

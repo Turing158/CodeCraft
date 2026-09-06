@@ -10,6 +10,7 @@ use serde::{Deserialize, Serialize};
 pub(crate) struct HookInstallConfig {
     pub claude_code: bool,
     pub codex: bool,
+    pub gemini_cli: bool,
     pub open_code: bool,
     pub mimo: bool,
     pub pi: bool,
@@ -22,6 +23,7 @@ impl Default for HookInstallConfig {
         Self {
             claude_code: false,
             codex: false,
+            gemini_cli: false,
             open_code: false,
             mimo: false,
             pi: false,
@@ -70,6 +72,7 @@ mod tests {
         let config = HookInstallConfig::default();
         assert!(!config.claude_code);
         assert!(!config.codex);
+        assert!(!config.gemini_cli);
         assert!(!config.open_code);
         assert!(!config.mimo);
         assert!(!config.pi);
@@ -82,6 +85,7 @@ mod tests {
         let config: HookInstallConfig = serde_json::from_str(r#"{"codex":true}"#).unwrap();
         assert!(!config.claude_code);
         assert!(config.codex);
+        assert!(!config.gemini_cli);
         assert!(!config.open_code);
         assert!(!config.mimo);
         assert!(!config.pi);

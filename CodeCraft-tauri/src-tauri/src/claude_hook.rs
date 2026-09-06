@@ -10,7 +10,7 @@ use std::{
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 
-use super::approval_policy;
+use super::{approval_policy, inbox_limits};
 
 const HOOK_ARGUMENT: &str = "--codecraft-claude-hook";
 const REGISTERED_HOOKS: [(&str, Option<&str>); 10] = [
@@ -26,6 +26,11 @@ const REGISTERED_HOOKS: [(&str, Option<&str>); 10] = [
     ("PermissionDenied", None),
 ];
 const SESSION_TTL_MS: u64 = 24 * 60 * 60 * 1_000;
+const IDLE_SESSION_TTL_MS: u64 = 30 * 60 * 1_000;
+const MAX_SESSIONS: usize = 100;
+const MAX_INBOX_FILES_PER_PASS: usize = 100;
+const MAX_INBOX_FILES_TOTAL: usize = 10_000;
+const INBOX_FILE_TTL_MS: u128 = 24 * 60 * 60 * 1_000;
 const MAX_ACTIVITIES: usize = 40;
 const MAX_TRANSCRIPT_BYTES: u64 = 512 * 1_024;
 const MAX_OUTPUT_ENTRIES: usize = 24;
@@ -188,6 +193,8 @@ pub(crate) struct ClaudeSession {
     outputs: Vec<ClaudeOutputEntry>,
     #[serde(skip)]
     transcript_path: Option<PathBuf>,
+    #[serde(skip)]
+    transcript_signature: Option<(SystemTime, u64)>,
 }
 
 impl ClaudeSession {
@@ -344,10 +351,12 @@ fn clear_resolved_request_id<T: PendingReview>(
 #[derive(Default)]
 pub(crate) struct ClaudeSessionStore {
     sessions: HashMap<String, ClaudeSession>,
+    version: u64,
 }
 
 impl ClaudeSessionStore {
     pub(crate) fn drain_inbox(&mut self) -> Result<(), String> {
+        let mut changed = false;
         let inbox = hook_inbox_dir();
         if inbox.exists() {
             let mut event_paths = fs::read_dir(&inbox)
@@ -356,12 +365,45 @@ impl ClaudeSessionStore {
                 .map(|entry| entry.path())
                 .filter(|path| path.extension().and_then(|value| value.to_str()) == Some("json"))
                 .collect::<Vec<_>>();
-            event_paths.sort();
+            let now = SystemTime::now();
+            event_paths.retain(|path| {
+                let stale = fs::metadata(path)
+                    .and_then(|metadata| metadata.modified())
+                    .ok()
+                    .and_then(|modified| now.duration_since(modified).ok())
+                    .is_some_and(|age| age.as_millis() > INBOX_FILE_TTL_MS);
+                if stale {
+                    let _ = fs::remove_file(path);
+                }
+                !stale
+            });
+            event_paths = inbox_limits::limit_paths(event_paths, MAX_INBOX_FILES_TOTAL, |path| {
+                let Ok(contents) = fs::read_to_string(path) else {
+                    return false;
+                };
+                let Ok(value) = serde_json::from_str::<Value>(&contents) else {
+                    return false;
+                };
+                let payload = value.get("payload").unwrap_or(&value);
+                let event = string_field(payload, "hook_event_name");
+                event.as_deref() == Some("PermissionRequest")
+                    || (event.as_deref() == Some("PreToolUse")
+                        && payload
+                            .get("tool_name")
+                            .and_then(Value::as_str)
+                            .is_some_and(|tool| {
+                                tool.eq_ignore_ascii_case("askuserquestion")
+                                    || tool.eq_ignore_ascii_case("exitplanmode")
+                            }))
+                    || (event.as_deref() == Some("Stop")
+                        && plan_request_from_payload(payload).is_some())
+            });
 
-            for path in event_paths {
+            for path in event_paths.into_iter().take(MAX_INBOX_FILES_PER_PASS) {
                 if let Ok(contents) = fs::read_to_string(&path) {
                     if let Ok(envelope) = serde_json::from_str::<HookEnvelope>(&contents) {
                         self.apply_event(&envelope.payload, envelope.captured_at);
+                        changed = true;
                     }
                 }
 
@@ -370,14 +412,61 @@ impl ClaudeSessionStore {
         }
 
         for session in self.sessions.values_mut() {
-            session.refresh_transcript();
+            if session.transcript_signature.is_none()
+                || session.is_active()
+                || session.question.is_some()
+                || session.permission.is_some()
+                || session.plan.is_some()
+            {
+                changed |= session.refresh_transcript();
+            }
         }
 
         let stale_before = unix_time_ms().saturating_sub(SESSION_TTL_MS);
-        self.sessions
-            .retain(|_, session| session.updated_at >= stale_before);
+        let mut removable = self
+            .sessions
+            .iter()
+            .filter(|(_, session)| {
+                if session.question.is_some() || session.permission.is_some() || session.plan.is_some() {
+                    return false;
+                }
+                let age = unix_time_ms().saturating_sub(session.updated_at);
+                session.updated_at < stale_before
+                    || (matches!(session.status, ClaudeSessionStatus::Idle | ClaudeSessionStatus::Stopped)
+                        && age > IDLE_SESSION_TTL_MS)
+            })
+            .map(|(id, session)| (id.clone(), session.updated_at))
+            .collect::<Vec<_>>();
+        for (id, _) in removable.drain(..) {
+            self.sessions.remove(&id);
+        }
+        if self.sessions.len() > MAX_SESSIONS {
+            let excess = self.sessions.len() - MAX_SESSIONS;
+            let mut candidates = self
+                .sessions
+                .iter()
+                .filter(|(_, session)| {
+                    session.question.is_none()
+                        && session.permission.is_none()
+                        && session.plan.is_none()
+                })
+                .map(|(id, session)| (id.clone(), session.updated_at))
+                .collect::<Vec<_>>();
+            candidates.sort_by_key(|(_, updated_at)| *updated_at);
+            for (id, _) in candidates.into_iter().take(excess) {
+                self.sessions.remove(&id);
+            }
+        }
+
+        if changed {
+            self.version = self.version.wrapping_add(1);
+        }
 
         Ok(())
+    }
+
+    pub(crate) fn version(&self) -> u64 {
+        self.version
     }
 
     pub(crate) fn sessions(&self) -> Vec<ClaudeSession> {
@@ -390,7 +479,15 @@ impl ClaudeSessionStore {
         sessions
     }
 
+    pub(crate) fn active_session_count(&self) -> usize {
+        self.sessions
+            .values()
+            .filter(|session| session.is_active())
+            .count()
+    }
+
     pub(crate) fn clear_permission(&mut self, request_id: &str) {
+        let mut changed = false;
         for session in self.sessions.values_mut() {
             if session
                 .permission
@@ -399,11 +496,16 @@ impl ClaudeSessionStore {
                 .unwrap_or(false)
             {
                 session.permission = None;
+                changed = true;
             }
+        }
+        if changed {
+            self.version = self.version.wrapping_add(1);
         }
     }
 
     pub(crate) fn clear_plan(&mut self, request_id: &str) {
+        let mut changed = false;
         for session in self.sessions.values_mut() {
             if session
                 .plan
@@ -412,7 +514,11 @@ impl ClaudeSessionStore {
                 .unwrap_or(false)
             {
                 session.plan = None;
+                changed = true;
             }
+        }
+        if changed {
+            self.version = self.version.wrapping_add(1);
         }
     }
 
@@ -466,6 +572,7 @@ impl ClaudeSessionStore {
                 activities: Vec::new(),
                 outputs: Vec::new(),
                 transcript_path: incoming_transcript_path.clone(),
+                transcript_signature: None,
             });
 
         session.status = status;
@@ -492,8 +599,11 @@ impl ClaudeSessionStore {
         if let Some(title) = incoming_title {
             session.title = title;
         }
-        if incoming_transcript_path.is_some() {
-            session.transcript_path = incoming_transcript_path;
+        if let Some(path) = incoming_transcript_path {
+            if session.transcript_path.as_ref() != Some(&path) {
+                session.transcript_signature = None;
+            }
+            session.transcript_path = Some(path);
         }
         session.apply_activity(payload, captured_at);
     }
@@ -546,10 +656,20 @@ impl ClaudeSession {
         }
     }
 
-    fn refresh_transcript(&mut self) {
+    fn refresh_transcript(&mut self) -> bool {
         let Some(path) = self.transcript_path.as_deref() else {
-            return;
+            return false;
         };
+        let Ok(metadata) = fs::metadata(path) else {
+            return false;
+        };
+        let signature = (
+            metadata.modified().unwrap_or(UNIX_EPOCH),
+            metadata.len(),
+        );
+        if self.transcript_signature == Some(signature) {
+            return false;
+        }
         if let Ok(snapshot) = read_transcript_snapshot(path) {
             self.outputs = snapshot.outputs;
             bind_pending_tool_use_id(&mut self.question, &snapshot.request_tool_use_ids);
@@ -558,7 +678,10 @@ impl ClaudeSession {
             for tool_use_id in snapshot.resolved_tool_use_ids {
                 self.clear_resolved_tool_use_id(&tool_use_id);
             }
+            self.transcript_signature = Some(signature);
+            return true;
         }
+        false
     }
 
     fn clear_resolved_tool_use_id(&mut self, tool_use_id: &str) {
@@ -1843,6 +1966,7 @@ mod tests {
                 activities: Vec::new(),
                 outputs: Vec::new(),
                 transcript_path: None,
+                transcript_signature: None,
             }]
         );
     }
