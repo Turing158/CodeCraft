@@ -680,11 +680,16 @@ button {
   flex-direction: column;
   gap: 0;
   padding: 0;
-  overflow: hidden;
+  overflow-x: hidden;
+  overflow-y: auto;
+  overscroll-behavior: contain;
   border: 1px solid var(--surface-border-hover);
   border-radius: 6px;
   background: var(--surface-background);
   box-shadow: 0 10px 28px rgba(0, 0, 0, 0.32);
+  scrollbar-gutter: stable;
+  scrollbar-color: rgba(226, 232, 240, 0.24) transparent;
+  scrollbar-width: thin;
   opacity: 0;
   transition:
     height 180ms ease,
@@ -809,6 +814,14 @@ button {
 
 .session-product__mark[data-product-kind="pi"] img,
 .session-product__option-mark[data-product-kind="pi"] img {
+  filter: invert(1);
+  opacity: 0.92;
+}
+
+.session-product__mark[data-product-kind="gemini"] img,
+.session-product__option-mark[data-product-kind="gemini"] img,
+.session-product__mark[data-product-kind="kimi"] img,
+.session-product__option-mark[data-product-kind="kimi"] img {
   filter: invert(1);
   opacity: 0.92;
 }
@@ -4397,6 +4410,20 @@ button {
   color: #b8c2ce;
 }
 
+.kimi-open-terminal {
+  line-height: 1.4;
+  overflow-wrap: anywhere;
+}
+
+#question-open-kimi {
+  flex: 2 1 0;
+}
+
+.kimi-open-terminal:disabled {
+  cursor: wait;
+  opacity: 0.7;
+}
+
 .permission-shell {
   display: flex;
   max-height: 100vh;
@@ -4686,7 +4713,8 @@ button {
 }
 
 #plan-open-codex,
-#plan-open-zcode {
+#plan-open-zcode,
+#plan-open-kimi {
   grid-column: 1 / -1;
   min-height: 44px;
   align-items: center;
@@ -5053,7 +5081,15 @@ button {
 :root[data-theme="light"]
   .session-product__option-mark[data-product-kind="pi"]
   img,
-:root[data-theme="light"] .session-source-card__mark--pi img {
+:root[data-theme="light"] .session-source-card__mark--pi img,
+:root[data-theme="light"] .session-product__mark[data-product-kind="gemini"] img,
+:root[data-theme="light"]
+  .session-product__option-mark[data-product-kind="gemini"]
+  img,
+:root[data-theme="light"] .session-product__mark[data-product-kind="kimi"] img,
+:root[data-theme="light"]
+  .session-product__option-mark[data-product-kind="kimi"]
+  img {
   filter: none;
 }
 

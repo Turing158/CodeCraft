@@ -270,12 +270,23 @@ fn snapshot_value(app: &tauri::AppHandle) -> Value {
             }
         }
     }
+    if let Some(kimi) = sessions.get_mut("kimi") {
+        if let Some(items) = kimi.get_mut("sessions").and_then(Value::as_array_mut) {
+            for session in items {
+                if let Some(object) = session.as_object_mut() {
+                    object.remove("terminalBinding");
+                    object.remove("processInstanceId");
+                }
+            }
+        }
+    }
     // Per-agent install state drives which agent cards the console shows. The
     // desktop panel already relies on this list for its hook settings, so the
     // LAN console reads the same source of truth.
     let integrations = crate::hook_statuses(
         &app.state::<CodexIntegrationState>(),
         &app.state::<GeminiIntegrationState>(),
+        &app.state::<crate::KimiIntegrationState>(),
         &app.state::<OpenCodeIntegrationState>(),
         &app.state::<MimoIntegrationState>(),
         &app.state::<DshIntegrationState>(),
@@ -304,6 +315,7 @@ fn snapshot_value(app: &tauri::AppHandle) -> Value {
         "claude": sessions.get("claude").cloned().unwrap_or(Value::Null),
         "codex": sessions.get("codex").cloned().unwrap_or(Value::Null),
         "gemini": sessions.get("gemini").cloned().unwrap_or(Value::Null),
+        "kimi": sessions.get("kimi").cloned().unwrap_or(Value::Null),
         "opencode": sessions.get("opencode").cloned().unwrap_or(Value::Null),
         "mimo": sessions.get("mimo").cloned().unwrap_or(Value::Null),
         "pi": sessions.get("pi").cloned().unwrap_or(Value::Null),
@@ -319,7 +331,7 @@ fn snapshot_value(app: &tauri::AppHandle) -> Value {
 
 fn snapshot_version_fingerprint(snapshot: &Value) -> u64 {
     let mut hash = 0xcbf29ce484222325_u64;
-    for source in ["claude", "codex", "gemini", "opencode", "mimo", "pi", "dsh", "zcode"] {
+    for source in ["claude", "codex", "gemini", "kimi", "opencode", "mimo", "pi", "dsh", "zcode"] {
         if let Some(version) = snapshot
             .get(source)
             .and_then(|value| value.get("version"))

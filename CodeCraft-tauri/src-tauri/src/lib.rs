@@ -3,7 +3,7 @@ use std::{
     env,
     fs::{self, OpenOptions},
     io::Write,
-    path::Path,
+    path::{Path, PathBuf},
     sync::{
         atomic::{AtomicBool, AtomicU64, AtomicUsize, Ordering},
         mpsc::{self, Receiver, SyncSender},
@@ -29,6 +29,10 @@ mod dsh;
 mod dsh_hook;
 mod gemini;
 mod gemini_hook;
+mod kimi;
+mod kimi_hook;
+mod kimi_wire;
+mod kimi_focus;
 mod gemini_focus;
 mod hook_config;
 mod inbox_limits;
@@ -49,6 +53,7 @@ mod zcode_hook;
 pub use claude_hook::capture_claude_hook;
 pub use codex_hook::capture_codex_hook;
 pub use gemini_hook::capture_gemini_hook;
+pub use kimi_hook::capture_kimi_hook;
 pub use zcode_hook::capture_zcode_hook;
 
 const PANEL_WIDTH: f64 = 500.0;
@@ -261,6 +266,13 @@ struct GeminiIntegrationState {
 }
 
 #[derive(Default)]
+pub(crate) struct KimiIntegrationState {
+    store: Mutex<kimi::KimiStore>,
+    wire: Mutex<kimi_wire::KimiWireStore>,
+    hook_error: Mutex<Option<String>>,
+}
+
+#[derive(Default)]
 struct OpenCodeIntegrationState {
     store: Mutex<opencode::OpenCodeStore>,
     hook_error: Mutex<Option<String>>,
@@ -334,6 +346,7 @@ pub(crate) struct AllSessionSnapshots {
     pub(crate) claude: ClaudeSessionSnapshot,
     pub(crate) codex: codex::CodexSnapshot,
     pub(crate) gemini: gemini::GeminiSnapshot,
+    pub(crate) kimi: kimi::KimiSnapshot,
     pub(crate) opencode: opencode::OpenCodeSnapshot,
     pub(crate) mimo: mimo::MimoSnapshot,
     pub(crate) pi: pi::PiSnapshot,
@@ -347,6 +360,7 @@ struct ActiveSessionCounts {
     claude: usize,
     codex: usize,
     gemini: usize,
+    kimi: usize,
     opencode: usize,
     mimo: usize,
     pi: usize,
@@ -412,6 +426,7 @@ enum HookAgentId {
     ClaudeCode,
     Codex,
     GeminiCli,
+    KimiCode,
     OpenCode,
     Mimo,
     Pi,
@@ -425,6 +440,7 @@ impl hook_config::HookInstallConfig {
             HookAgentId::ClaudeCode => self.claude_code,
             HookAgentId::Codex => self.codex,
             HookAgentId::GeminiCli => self.gemini_cli,
+            HookAgentId::KimiCode => self.kimi_code,
             HookAgentId::OpenCode => self.open_code,
             HookAgentId::Mimo => self.mimo,
             HookAgentId::Pi => self.pi,
@@ -438,6 +454,7 @@ impl hook_config::HookInstallConfig {
             HookAgentId::ClaudeCode => self.claude_code = enabled,
             HookAgentId::Codex => self.codex = enabled,
             HookAgentId::GeminiCli => self.gemini_cli = enabled,
+            HookAgentId::KimiCode => self.kimi_code = enabled,
             HookAgentId::OpenCode => self.open_code = enabled,
             HookAgentId::Mimo => self.mimo = enabled,
             HookAgentId::Pi => self.pi = enabled,
@@ -453,6 +470,7 @@ impl HookAgentId {
             Self::ClaudeCode => "claude",
             Self::Codex => "codex",
             Self::GeminiCli => "geminiCli",
+            Self::KimiCode => "kimiCode",
             Self::OpenCode => "opencode",
             Self::Mimo => "mimo",
             Self::Pi => "pi",
@@ -466,6 +484,7 @@ impl HookAgentId {
             Self::ClaudeCode => "Claude Code",
             Self::Codex => "Codex",
             Self::GeminiCli => "Gemini CLI",
+            Self::KimiCode => "Kimi Code",
             Self::OpenCode => "OpenCode",
             Self::Mimo => "Mimo",
             Self::Pi => "PI",
@@ -544,6 +563,12 @@ fn agent_is_installed(
     }
     if matches!(agent, HookAgentId::GeminiCli) {
         return Ok(command_is_installed("gemini") || command_is_installed("gemini.cmd"));
+    }
+    if matches!(agent, HookAgentId::KimiCode) {
+        let home = env::var_os("USERPROFILE").or_else(|| env::var_os("HOME"));
+        return Ok(command_is_installed("kimi")
+            || command_is_installed("kimi.exe")
+            || home.map(|value| PathBuf::from(value).join(".kimi-code/bin/kimi.exe").is_file()).unwrap_or(false));
     }
     Ok(command_is_installed(agent.command()))
 }
@@ -632,6 +657,7 @@ fn save_hook_installation_state(agent: HookAgentId, enabled: bool) -> Result<(),
 pub(crate) fn hook_statuses(
     state: &CodexIntegrationState,
     gemini_state: &GeminiIntegrationState,
+    kimi_state: &KimiIntegrationState,
     opencode_state: &OpenCodeIntegrationState,
     mimo_state: &MimoIntegrationState,
     dsh_state: &DshIntegrationState,
@@ -646,7 +672,7 @@ pub(crate) fn hook_statuses(
             }
         }
     }
-    let statuses = hook_statuses_unlocked(state, gemini_state, opencode_state, mimo_state, dsh_state, zcode_state)?;
+    let statuses = hook_statuses_unlocked(state, gemini_state, kimi_state, opencode_state, mimo_state, dsh_state, zcode_state)?;
     if let Ok(mut cache) = cache.lock() {
         *cache = Some((Instant::now(), statuses.clone()));
     }
@@ -656,6 +682,7 @@ pub(crate) fn hook_statuses(
 fn hook_statuses_unlocked(
     state: &CodexIntegrationState,
     gemini_state: &GeminiIntegrationState,
+    kimi_state: &KimiIntegrationState,
     opencode_state: &OpenCodeIntegrationState,
     mimo_state: &MimoIntegrationState,
     dsh_state: &DshIntegrationState,
@@ -709,6 +736,18 @@ fn hook_statuses_unlocked(
                 .lock()
                 .map_err(|error| error.to_string())?
                 .clone(),
+        },
+        HookIntegrationStatus {
+            id: HookAgentId::KimiCode,
+            name: HookAgentId::KimiCode.display_name(),
+            agent_installed: agent_is_installed(HookAgentId::KimiCode, zcode_state)?,
+            hook_installed: kimi_hook::installed()?,
+            install_state: None,
+            install_path: None,
+            bundled_version: Some("0.41.0".to_string()),
+            installed_version: None,
+            running_versions: Vec::new(),
+            error: kimi_state.hook_error.lock().map_err(|error| error.to_string())?.clone(),
         },
         HookIntegrationStatus {
             id: HookAgentId::OpenCode,
@@ -2109,6 +2148,7 @@ pub(crate) fn all_sessions_snapshot(
     let claude = claude_snapshot(&app.state::<ClaudeIntegrationState>())?;
     let codex = codex_snapshot(&app.state::<CodexIntegrationState>())?;
     let gemini = gemini_snapshot(&app.state::<GeminiIntegrationState>())?;
+    let kimi = kimi_snapshot(&app.state::<KimiIntegrationState>())?;
     let opencode = opencode_snapshot(&app.state::<OpenCodeIntegrationState>())?;
     let mimo = mimo_snapshot(&app.state::<MimoIntegrationState>())?;
     let pi = pi_snapshot(&app.state::<PiIntegrationState>())?;
@@ -2118,6 +2158,7 @@ pub(crate) fn all_sessions_snapshot(
         claude,
         codex,
         gemini,
+        kimi,
         opencode,
         mimo,
         pi,
@@ -2145,6 +2186,12 @@ fn active_session_counts(
             .active_session_count(),
         gemini: app
             .state::<GeminiIntegrationState>()
+            .store
+            .lock()
+            .map_err(|error| error.to_string())?
+            .active_session_count(),
+        kimi: app
+            .state::<KimiIntegrationState>()
             .store
             .lock()
             .map_err(|error| error.to_string())?
@@ -2219,6 +2266,7 @@ async fn list_hook_integrations(
     tauri::async_runtime::spawn_blocking(move || {
         let state = app.state::<CodexIntegrationState>();
         let gemini_state = app.state::<GeminiIntegrationState>();
+        let kimi_state = app.state::<KimiIntegrationState>();
         let opencode_state = app.state::<OpenCodeIntegrationState>();
         let mimo_state = app.state::<MimoIntegrationState>();
         let dsh_state = app.state::<DshIntegrationState>();
@@ -2226,6 +2274,7 @@ async fn list_hook_integrations(
         hook_statuses(
             &state,
             &gemini_state,
+            &kimi_state,
             &opencode_state,
             &mimo_state,
             &dsh_state,
@@ -2244,6 +2293,7 @@ async fn refresh_hook_integrations(
         let installation = zcode_hook::discover_zcode_installation();
         let state = app.state::<CodexIntegrationState>();
         let gemini_state = app.state::<GeminiIntegrationState>();
+        let kimi_state = app.state::<KimiIntegrationState>();
         let opencode_state = app.state::<OpenCodeIntegrationState>();
         let mimo_state = app.state::<MimoIntegrationState>();
         let dsh_state = app.state::<DshIntegrationState>();
@@ -2256,6 +2306,7 @@ async fn refresh_hook_integrations(
         hook_statuses(
             &state,
             &gemini_state,
+            &kimi_state,
             &opencode_state,
             &mimo_state,
             &dsh_state,
@@ -2951,6 +3002,7 @@ async fn install_agent_hook(agent: HookAgentId, app: tauri::AppHandle) -> Result
         let claude_state = app.state::<ClaudeIntegrationState>();
         let codex_state = app.state::<CodexIntegrationState>();
         let gemini_state = app.state::<GeminiIntegrationState>();
+        let kimi_state = app.state::<KimiIntegrationState>();
         let opencode_state = app.state::<OpenCodeIntegrationState>();
         let mimo_state = app.state::<MimoIntegrationState>();
         let pi_state = app.state::<PiIntegrationState>();
@@ -2996,6 +3048,12 @@ async fn install_agent_hook(agent: HookAgentId, app: tauri::AppHandle) -> Result
                     .lock()
                     .map_err(|error| error.to_string())?
                     .set_integration_error(None);
+            }
+            HookAgentId::KimiCode => {
+                kimi_hook::install(&executable)?;
+                save_hook_installation_state(agent, true)?;
+                *kimi_state.hook_error.lock().map_err(|error| error.to_string())? = None;
+                kimi_state.store.lock().map_err(|error| error.to_string())?.set_integration_error(None);
             }
             HookAgentId::OpenCode => {
                 let status = opencode_hook::install()?;
@@ -3051,6 +3109,7 @@ async fn uninstall_agent_hook(agent: HookAgentId, app: tauri::AppHandle) -> Resu
         let claude_state = app.state::<ClaudeIntegrationState>();
         let codex_state = app.state::<CodexIntegrationState>();
         let gemini_state = app.state::<GeminiIntegrationState>();
+        let kimi_state = app.state::<KimiIntegrationState>();
         let opencode_state = app.state::<OpenCodeIntegrationState>();
         let mimo_state = app.state::<MimoIntegrationState>();
         let pi_state = app.state::<PiIntegrationState>();
@@ -3100,6 +3159,20 @@ async fn uninstall_agent_hook(agent: HookAgentId, app: tauri::AppHandle) -> Resu
                     .map_err(|error| error.to_string())?;
                 store.clear();
                 store.set_integration_error(Some(message));
+            }
+            HookAgentId::KimiCode => {
+                kimi_hook::uninstall()?;
+                save_hook_installation_state(agent, false)?;
+                let message = "Kimi Code Hook 未安装".to_string();
+                *kimi_state.hook_error.lock().map_err(|error| error.to_string())? = Some(message.clone());
+                let mut store = kimi_state.store.lock().map_err(|error| error.to_string())?;
+                store.clear();
+                store.set_integration_error(Some(message));
+                kimi_state
+                    .wire
+                    .lock()
+                    .map_err(|error| error.to_string())?
+                    .clear();
             }
             HookAgentId::OpenCode => {
                 opencode_hook::uninstall()?;
@@ -3306,6 +3379,23 @@ fn list_gemini_sessions(app: tauri::AppHandle) -> Result<gemini::GeminiSnapshot,
 }
 
 #[tauri::command]
+fn list_kimi_sessions(app: tauri::AppHandle) -> Result<kimi::KimiSnapshot, String> {
+    Ok(cached_all_sessions_snapshot(&app)?.kimi)
+}
+
+#[tauri::command]
+fn focus_kimi_session(
+    app: tauri::AppHandle,
+    session_id: String,
+) -> Result<kimi_focus::KimiFocusResult, String> {
+    let snapshot = cached_all_sessions_snapshot(&app)?.kimi;
+    let Some(session) = snapshot.sessions.into_iter().find(|session| session.id == session_id) else {
+        return Ok(kimi_focus::KimiFocusResult::NotFound);
+    };
+    Ok(kimi_focus::focus_session(&session))
+}
+
+#[tauri::command]
 fn focus_gemini_session(
     app: tauri::AppHandle,
     session_id: String,
@@ -3335,6 +3425,34 @@ fn gemini_snapshot(state: &GeminiIntegrationState) -> Result<gemini::GeminiSnaps
         .lock()
         .map_err(|error| error.to_string())?
         .clone();
+    store.set_integration_error(error);
+    Ok(store.snapshot())
+}
+
+fn kimi_snapshot(state: &KimiIntegrationState) -> Result<kimi::KimiSnapshot, String> {
+    let installed = kimi_hook::installed()?;
+    let mut store = state.store.lock().map_err(|error| error.to_string())?;
+    if !installed {
+        let _ = kimi_hook::drain_inbox_events();
+        store.clear();
+        state
+            .wire
+            .lock()
+            .map_err(|error| error.to_string())?
+            .clear();
+        store.set_integration_error(Some("Kimi Code Hook 未安装".to_string()));
+        return Ok(store.snapshot());
+    }
+    for event in kimi_hook::drain_inbox_events()? {
+        store.apply(event);
+    }
+    let wire_interactions = state
+        .wire
+        .lock()
+        .map_err(|error| error.to_string())?
+        .refresh()?;
+    store.sync_wire_interactions(&wire_interactions);
+    let error = state.hook_error.lock().map_err(|error| error.to_string())?.clone();
     store.set_integration_error(error);
     Ok(store.snapshot())
 }
@@ -3922,6 +4040,7 @@ fn watch_tray_and_minimal_mode_sounds(app: tauri::AppHandle) {
                         .count()
                         + snapshot.codex.sessions.iter().filter(|session| session.is_active()).count()
                         + snapshot.gemini.sessions.iter().filter(|session| session.is_active()).count()
+                        + snapshot.kimi.sessions.iter().filter(|session| session.is_active()).count()
                         + snapshot.opencode.sessions.iter().filter(|session| session.is_active()).count()
                         + snapshot.mimo.sessions.iter().filter(|session| session.is_active()).count()
                         + snapshot.pi.sessions.iter().filter(|session| !matches!(session.status, pi::PiSessionStatus::Idle | pi::PiSessionStatus::Stopped)).count()
@@ -3974,6 +4093,7 @@ pub fn run() {
         .manage(ClaudeIntegrationState::default())
         .manage(CodexIntegrationState::default())
         .manage(GeminiIntegrationState::default())
+        .manage(KimiIntegrationState::default())
         .manage(OpenCodeIntegrationState::default())
         .manage(MimoIntegrationState::default())
         .manage(PiIntegrationState::default())
@@ -4378,6 +4498,7 @@ pub fn run() {
             take_open_settings_request,
             focus_codex_window,
             focus_gemini_session,
+            focus_kimi_session,
             focus_zcode_window,
             get_approval_settings,
             set_approval_settings,
@@ -4400,6 +4521,7 @@ pub fn run() {
             dsh_respond_question,
             dsh_respond_plan,
             list_zcode_sessions,
+            list_kimi_sessions,
             zcode_respond_approval,
             zcode_respond_question,
             zcode_respond_plan,

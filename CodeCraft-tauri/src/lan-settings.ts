@@ -89,7 +89,7 @@ export const lanStateDescriptor = (status: LanStatusView): LanStateDescriptor =>
   if (status.running) {
     return {
       state: "running",
-      label: status.allowApprovals ? "运行中 · 可审批" : "运行中 · 只读",
+      label: status.allowApprovals ? "运行中 · 可审批" : "运行中 · 仅查看",
     };
   }
   return { state: "stopped", label: "未运行" };
@@ -153,7 +153,7 @@ export const APPROVALS_RISK_HINT =
 export const lanReadOnlyHint = (status: LanStatusView): string =>
   status.allowApprovals
     ? "网页可以提交 Claude 的权限、问题与计划决定，以及 Codex 的审批。"
-    : "网页当前只读，只能查看会话内容。";
+    : "网页当前仅供查看会话内容。";
 
 /**
  * The port and the token define the listening socket and the credential that

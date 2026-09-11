@@ -63,6 +63,12 @@ import {
   type GeminiSession,
   type GeminiSnapshot,
 } from "../../src/gemini-sessions";
+import {
+  kimiSessionKey,
+  kimiStatusLabel,
+  type KimiSession,
+  type KimiSnapshot,
+} from "../../src/kimi-sessions";
 
 export type ConsoleSource =
   | "claude"
@@ -72,7 +78,8 @@ export type ConsoleSource =
   | "pi"
   | "dsh"
   | "zcode"
-  | "gemini";
+  | "gemini"
+  | "kimi";
 
 export type PendingKind = "permission" | "question" | "plan";
 
@@ -126,6 +133,9 @@ export interface ConsolePending {
   gemini?: {
     sessionId: string;
   };
+  kimi?: {
+    sessionId: string;
+  };
 }
 
 export interface ConsoleEntry {
@@ -172,6 +182,7 @@ export interface RawSnapshot {
   dsh?: DshSnapshot | null;
   zcode?: ZCodeSnapshot | null;
   gemini?: GeminiSnapshot | null;
+  kimi?: KimiSnapshot | null;
   integrations?: RawHookIntegration[] | null;
 }
 
@@ -254,6 +265,24 @@ const emptyGemini: GeminiSnapshot = {
   interactions: [],
   navigationCapability: "unsupported",
   fallbackAction: "openGeminiOnHost",
+};
+const emptyKimi: KimiSnapshot = {
+  connected: false,
+  integrationError: null,
+  version: 0,
+  sessions: [],
+  interactions: [],
+  navigationCapability: "unsupported",
+  fallbackAction: "openKimiOnHost",
+  capabilities: {
+    canObserve: true,
+    canApproveTools: false,
+    canAnswerQuestions: false,
+    canApprovePlans: false,
+    canStreamOutput: false,
+    readOnly: true,
+    reason: "Kimi Code Hook 已连接",
+  },
 };
 
 // Codex questions and plans arrive from an external terminal, so the console can
@@ -571,6 +600,57 @@ const geminiPending = (session: GeminiSession): ConsolePending | null => {
   };
 };
 
+const kimiPending = (session: KimiSession): ConsolePending | null => {
+  if (session.status === "idle" || session.status === "stopped") return null;
+  const interaction = session.pendingInteractions
+    .filter((item) => item.resolved !== true && (item.status === "observed" || item.status === "updated"))
+    .sort((left, right) => left.capturedAt - right.capturedAt)[0];
+  if (!interaction) return null;
+  if (interaction.kind === "askUser") {
+    return {
+      kind: "question", requestId: interaction.observationId, readOnly: true,
+      kimi: { sessionId: session.id },
+      question: {
+        id: interaction.observationId,
+        questions: (interaction.questions.length ? interaction.questions : [{ question: interaction.detail }]).map((raw) => {
+          const item = isRecord(raw) ? raw : {};
+          return {
+            header: typeof item.header === "string" ? item.header : interaction.title,
+            question: typeof item.question === "string" ? item.question : interaction.detail,
+            options: Array.isArray(item.options) ? item.options.flatMap((option) => isRecord(option) && typeof option.label === "string" ? [{ label: option.label, description: null }] : []) : [],
+            multiSelect: item.multiSelect === true, allowOther: false, allowChat: false, readOnly: true,
+          };
+        }),
+      },
+    };
+  }
+  if (interaction.kind === "exitPlanMode") {
+    return {
+      kind: "plan", requestId: interaction.observationId, readOnly: true,
+      kimi: { sessionId: session.id },
+      plan: {
+        id: interaction.observationId, toolName: interaction.title,
+        plan: [interaction.plan ?? interaction.detail, interaction.planReadError].filter(Boolean).join("\n\n"),
+        cwd: session.cwd, capturedAt: interaction.capturedAt,
+      },
+    };
+  }
+  return {
+    kind: "permission",
+    requestId: interaction.observationId,
+    readOnly: true,
+    permission: {
+      id: interaction.observationId,
+      toolName: interaction.toolName ?? interaction.title,
+      summary: interaction.detail,
+      cwd: session.cwd,
+      canAlwaysAllow: false,
+      capturedAt: interaction.capturedAt,
+    },
+    kimi: { sessionId: session.id },
+  };
+};
+
 const sourceFromHookId = (id: string | undefined): ConsoleSource | undefined => {
   if (id === "claudeCode") return "claude";
   if (id === "codex") return "codex";
@@ -580,6 +660,7 @@ const sourceFromHookId = (id: string | undefined): ConsoleSource | undefined => 
   if (id === "deepSeekHarness") return "dsh";
   if (id === "zCode") return "zcode";
   if (id === "geminiCli") return "gemini";
+  if (id === "kimiCode") return "kimi";
   return undefined;
 };
 
@@ -598,7 +679,9 @@ const integrationName = (source: ConsoleSource): string =>
             ? "DeepSeek Harness"
             : source === "zcode"
               ? "ZCode"
-              : "Gemini CLI";
+              : source === "gemini"
+                ? "Gemini CLI"
+                : "Kimi Code";
 
 type SessionCounts = Record<ConsoleSource, number>;
 
@@ -715,6 +798,20 @@ const geminiEntry = (session: GeminiSession): ConsoleEntry => ({
   pending: geminiPending(session),
 });
 
+const kimiEntry = (session: KimiSession): ConsoleEntry => ({
+  key: kimiSessionKey(session),
+  source: "kimi",
+  sessionId: session.id,
+  title: session.title,
+  status: session.status,
+  statusLabel: kimiStatusLabel(session.status),
+  cwd: session.cwd,
+  updatedAt: session.updatedAt,
+  activities: session.activities.map((activity) => ({ id: activity.id, tool: activity.tool, summary: activity.summary, status: activity.status, updatedAt: activity.updatedAt })),
+  outputs: session.outputs.map((output) => ({ id: output.id, text: output.text })),
+  pending: kimiPending(session),
+});
+
 const codexEntry = (
   session: CodexSession,
   interactions: CodexInteraction[],
@@ -778,6 +875,9 @@ export const mergeSnapshot = (raw: RawSnapshot): ConsoleSnapshot => {
   const gemini = isRecord(raw.gemini)
     ? { ...emptyGemini, ...(raw.gemini as GeminiSnapshot) }
     : emptyGemini;
+  const kimi = isRecord(raw.kimi)
+    ? { ...emptyKimi, ...(raw.kimi as KimiSnapshot) }
+    : emptyKimi;
 
   const entries = [
     ...claude.sessions.map(claudeEntry),
@@ -788,6 +888,7 @@ export const mergeSnapshot = (raw: RawSnapshot): ConsoleSnapshot => {
     ...dsh.sessions.map(dshEntry),
     ...zcode.sessions.map(zcodeEntry),
     ...gemini.sessions.map(geminiEntry),
+    ...kimi.sessions.map(kimiEntry),
   ].sort(compareEntries);
 
   const counts: SessionCounts = {
@@ -799,6 +900,7 @@ export const mergeSnapshot = (raw: RawSnapshot): ConsoleSnapshot => {
     dsh: dsh.sessions.length,
     zcode: zcode.sessions.length,
     gemini: gemini.sessions.length,
+    kimi: kimi.sessions.length,
   };
 
   return {
@@ -891,6 +993,15 @@ const buildIntegrations = (
         agentInstalled: true,
         hookInstalled: true,
       },
+      ...(isRecord(raw.kimi) ? [{
+        source: "kimi" as const,
+        name: integrationName("kimi"),
+        connected: kimiConnected(raw),
+        error: integrationError(raw, "kimi"),
+        sessionCount: counts.kimi,
+        agentInstalled: true,
+        hookInstalled: true,
+      }] : []),
     ];
   }
 
@@ -912,7 +1023,9 @@ const buildIntegrations = (
                 ? dshConnected(raw)
                 : source === "zcode"
                   ? zcodeConnected(raw)
-                  : geminiConnected(raw);
+                  : source === "gemini"
+                    ? geminiConnected(raw)
+                    : kimiConnected(raw);
     return [
       {
         source,
@@ -943,6 +1056,8 @@ const zcodeConnected = (raw: RawSnapshot): boolean =>
   isRecord(raw.zcode) ? raw.zcode.connected === true : false;
 const geminiConnected = (raw: RawSnapshot): boolean =>
   isRecord(raw.gemini) ? raw.gemini.connected === true : false;
+const kimiConnected = (raw: RawSnapshot): boolean =>
+  isRecord(raw.kimi) ? raw.kimi.connected === true : false;
 
 const integrationError = (raw: RawSnapshot, source: ConsoleSource): string | null => {
   const value =
@@ -974,9 +1089,13 @@ const integrationError = (raw: RawSnapshot, source: ConsoleSource): string | nul
                 ? isRecord(raw.zcode)
                   ? raw.zcode.integrationError
                   : null
-                : isRecord(raw.gemini)
-                  ? raw.gemini.integrationError
-                  : null;
+                : source === "gemini"
+                  ? isRecord(raw.gemini)
+                    ? raw.gemini.integrationError
+                    : null
+                  : isRecord(raw.kimi)
+                    ? raw.kimi.integrationError
+                    : null;
   return (value ?? null) as string | null;
 };
 
@@ -1012,9 +1131,7 @@ const PENDING_LABELS: Record<PendingKind, string> = {
 };
 
 export const pendingLabel = (pending: ConsolePending): string =>
-  pending.readOnly
-    ? PENDING_LABELS[pending.kind] + " · 只读"
-    : PENDING_LABELS[pending.kind];
+  PENDING_LABELS[pending.kind];
 
 /**
  * Whether the console may submit this request: remote approvals must be on and

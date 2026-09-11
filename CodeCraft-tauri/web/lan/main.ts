@@ -310,7 +310,7 @@ const syncConnectionInfo = () => {
   connectionInfo.textContent =
     "状态：" +
     connectionLabel(connection) +
-    (snapshot.allowApprovals ? " · 可远程审批" : " · 只读");
+    (snapshot.allowApprovals ? " · 可远程审批" : " · 仅查看");
 };
 
 const dispatchConnection = (event: ConnectionEvent) => {
@@ -524,6 +524,8 @@ const updateSessionCardView = (view: SessionCardView, entry: ConsoleEntry) => {
           ? "OpenCode"
           : entry.source === "pi"
             ? "PI"
+            : entry.source === "kimi"
+              ? "Kimi Code"
             : "DeepSeek Harness",
     motion,
   );
@@ -747,9 +749,11 @@ const renderReview = (entry: ConsoleEntry | undefined) => {
   if (!actionable) {
     reviewNotice.textContent = entry.source === "gemini"
       ? "Gemini 交互只能在运行 Gemini 的设备上处理；网页仅供查看。请使用该设备的 CodeCraft 桌面端或原终端。"
+      : entry.source === "kimi"
+      ? "请在运行 Kimi 的设备上处理。"
       : pending.readOnly
       ? "此请求来自外部 Codex 会话，只能在原终端或 Codex 界面完成，网页仅供查看。"
-      : "桌面端未开启远程审批，网页当前为只读。";
+      : "桌面端未开启远程审批，网页当前仅供查看。";
   }
 
   if (entry.source === "gemini" && pending.gemini) {
@@ -1058,6 +1062,8 @@ const renderDetail = () => {
           ? "OpenCode"
           : entry.source === "pi"
             ? "PI"
+            : entry.source === "kimi"
+              ? "Kimi Code"
             : "DeepSeek Harness",
     entry.cwd ? "目录：" + entry.cwd : undefined,
     "更新于 " + formatSessionTime(entry.updatedAt),

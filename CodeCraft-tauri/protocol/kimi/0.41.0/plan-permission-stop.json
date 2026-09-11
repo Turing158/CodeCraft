@@ -1,0 +1,184 @@
+[
+  {
+    "captured_at": 1,
+    "payload": {
+      "client_type": "kimi_code_cli",
+      "cwd": "C:/fixture",
+      "hook_event_name": "SessionStart",
+      "model": "fixture",
+      "pid": 100,
+      "process_created_at": 10,
+      "profile": "agent",
+      "session_id": "fixture-session",
+      "source": "startup"
+    }
+  },
+  {
+    "captured_at": 2,
+    "payload": {
+      "client_type": "kimi_code_cli",
+      "cwd": "C:/fixture",
+      "hook_event_name": "UserPromptSubmit",
+      "pid": 100,
+      "process_created_at": 10,
+      "prompt": [
+        {
+          "text": "Enter plan mode, write a plan to its plan file, then call ExitPlanMode.",
+          "type": "text"
+        }
+      ],
+      "session_id": "fixture-session",
+      "session_title": "Enter plan mode, write a plan to its plan file, then call ExitPlanMode."
+    }
+  },
+  {
+    "captured_at": 3,
+    "payload": {
+      "client_type": "kimi_code_cli",
+      "cwd": "C:/fixture",
+      "hook_event_name": "TurnStarted",
+      "origin_kind": "user",
+      "pid": 100,
+      "process_created_at": 10,
+      "prompt": "Enter plan mode, write a plan to its plan file, then call ExitPlanMode.",
+      "session_id": "fixture-session",
+      "session_title": "Enter plan mode, write a plan to its plan file, then call ExitPlanMode.",
+      "turn_id": 0
+    }
+  },
+  {
+    "captured_at": 4,
+    "payload": {
+      "client_type": "kimi_code_cli",
+      "cwd": "C:/fixture",
+      "hook_event_name": "PreToolUse",
+      "pid": 100,
+      "process_created_at": 10,
+      "session_id": "fixture-session",
+      "session_title": "Enter plan mode, write a plan to its plan file, then call ExitPlanMode.",
+      "tool_call_id": "fixture-plan-1",
+      "tool_input": {},
+      "tool_name": "EnterPlanMode"
+    }
+  },
+  {
+    "captured_at": 5,
+    "payload": {
+      "client_type": "kimi_code_cli",
+      "cwd": "C:/fixture",
+      "hook_event_name": "PostToolUse",
+      "pid": 100,
+      "process_created_at": 10,
+      "session_id": "fixture-session",
+      "session_title": "Enter plan mode, write a plan to its plan file, then call ExitPlanMode.",
+      "tool_call_id": "fixture-plan-1",
+      "tool_input": {},
+      "tool_name": "EnterPlanMode",
+      "tool_output": "Plan mode is now active. Your workflow:\n\nPlan file: C:/fixture/sessions/fixture-session/agents/main/plans/fixture-plan.md\n\n1. Use read-only tools (Read, Grep, Glob) to investigate the codebase. Use Bash only when needed.\n2. Design a concrete, step-by-step plan.\n3. Write the plan to the plan file with Write or Edit.\n4. When the plan is ready, call ExitPlanMode for user approval.\n\nDo NOT edit files other than the plan file while plan mode is active.\nUse Bash only when needed; Bash follows the normal permission mode and rules."
+    }
+  },
+  {
+    "captured_at": 6,
+    "payload": {
+      "client_type": "kimi_code_cli",
+      "cwd": "C:/fixture",
+      "hook_event_name": "PostToolUse",
+      "pid": 100,
+      "process_created_at": 10,
+      "session_id": "fixture-session",
+      "session_title": "Enter plan mode, write a plan to its plan file, then call ExitPlanMode.",
+      "tool_call_id": "fixture-plan-2",
+      "tool_input": {
+        "content": "# Fixture plan\n\n1. Read fixture.txt.\n2. Report the result.\n",
+        "path": "C:/fixture/sessions/fixture-session/agents/main/plans/fixture-plan.md"
+      },
+      "tool_name": "Write",
+      "tool_output": "Wrote 59 bytes to C:/fixture/sessions/fixture-session/agents/main/plans/fixture-plan.md"
+    }
+  },
+  {
+    "captured_at": 7,
+    "payload": {
+      "client_type": "kimi_code_cli",
+      "cwd": "C:/fixture",
+      "hook_event_name": "PreToolUse",
+      "pid": 100,
+      "process_created_at": 10,
+      "session_id": "fixture-session",
+      "session_title": "Enter plan mode, write a plan to its plan file, then call ExitPlanMode.",
+      "tool_call_id": "fixture-plan-3",
+      "tool_input": {},
+      "tool_name": "ExitPlanMode"
+    }
+  },
+  {
+    "captured_at": 8,
+    "payload": {
+      "client_type": "kimi_code_cli",
+      "cwd": "C:/fixture",
+      "display": {
+        "kind": "plan_review",
+        "path": "C:/fixture/sessions/fixture-session/agents/main/plans/fixture-plan.md",
+        "plan": "# Fixture plan\n\n1. Read fixture.txt.\n2. Report the result.\n"
+      },
+      "hook_event_name": "PermissionResult",
+      "pid": 100,
+      "process_created_at": 10,
+      "session_id": "fixture-session",
+      "session_title": "Enter plan mode, write a plan to its plan file, then call ExitPlanMode.",
+      "tool_call_id": "fixture-plan-3",
+      "tool_input": {},
+      "tool_name": "ExitPlanMode",
+      "turn_id": 0
+    }
+  },
+  {
+    "captured_at": 9,
+    "payload": {
+      "client_type": "kimi_code_cli",
+      "cwd": "C:/fixture",
+      "display": {
+        "kind": "plan_review",
+        "path": "C:/fixture/sessions/fixture-session/agents/main/plans/fixture-plan.md",
+        "plan": "# Fixture plan\n\n1. Read fixture.txt.\n2. Report the result.\n"
+      },
+      "hook_event_name": "PermissionRequest",
+      "pid": 100,
+      "process_created_at": 10,
+      "session_id": "fixture-session",
+      "session_title": "Enter plan mode, write a plan to its plan file, then call ExitPlanMode.",
+      "tool_call_id": "fixture-plan-3",
+      "tool_input": {},
+      "tool_name": "ExitPlanMode",
+      "turn_id": 0
+    }
+  },
+  {
+    "captured_at": 10,
+    "payload": {
+      "client_type": "kimi_code_cli",
+      "cwd": "C:/fixture",
+      "hook_event_name": "Stop",
+      "pid": 100,
+      "process_created_at": 10,
+      "session_id": "fixture-session",
+      "session_title": "Enter plan mode, write a plan to its plan file, then call ExitPlanMode."
+    }
+  },
+  {
+    "captured_at": 11,
+    "payload": {
+      "client_type": "kimi_code_cli",
+      "cwd": "C:/fixture",
+      "hook_event_name": "PostToolUse",
+      "pid": 100,
+      "process_created_at": 10,
+      "session_id": "fixture-session",
+      "session_title": "Enter plan mode, write a plan to its plan file, then call ExitPlanMode.",
+      "tool_call_id": "fixture-plan-3",
+      "tool_input": {},
+      "tool_name": "ExitPlanMode",
+      "tool_output": "Exited plan mode. Plan mode deactivated. All tools are now available.\nPlan saved to: C:/fixture/sessions/fixture-session/agents/main/plans/fixture-plan.md\n\n## Approved Plan:\n# Fixture plan\n\n1. Read fixture.txt.\n2. Report the result.\n"
+    }
+  }
+]

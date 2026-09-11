@@ -1,0 +1,8 @@
+[
+  {"captured_at":1,"payload":{"hook_event_name":"SessionStart","session_id":"fixture-session","cwd":"C:/fixture","client_type":"kimi_code_cli","pid":100,"process_created_at":10,"model":"fixture","profile":"agent","source":"startup"}},
+  {"captured_at":2,"payload":{"hook_event_name":"UserPromptSubmit","session_id":"fixture-session","cwd":"C:/fixture","client_type":"kimi_code_cli","pid":100,"process_created_at":10,"prompt":[{"type":"text","text":"Read fixture.txt once, then finish."}]}},
+  {"captured_at":3,"payload":{"hook_event_name":"TurnStarted","session_id":"fixture-session","cwd":"C:/fixture","client_type":"kimi_code_cli","pid":100,"process_created_at":10,"prompt":"Read fixture.txt once, then finish.","origin_kind":"user","turn_id":0}},
+  {"captured_at":4,"payload":{"hook_event_name":"PreToolUse","session_id":"fixture-session","cwd":"C:/fixture","client_type":"kimi_code_cli","pid":100,"process_created_at":10,"tool_name":"Read","tool_call_id":"fixture-read-1","tool_input":{"path":"C:/fixture/fixture.txt"}}},
+  {"captured_at":5,"payload":{"hook_event_name":"PostToolUse","session_id":"fixture-session","cwd":"C:/fixture","client_type":"kimi_code_cli","pid":100,"process_created_at":10,"tool_name":"Read","tool_call_id":"fixture-read-1","tool_input":{"path":"C:/fixture/fixture.txt"},"tool_output":"1\tcodecraft-kimi-fixture"}},
+  {"captured_at":6,"payload":{"hook_event_name":"Stop","session_id":"fixture-session","cwd":"C:/fixture","client_type":"kimi_code_cli","pid":100,"process_created_at":10}}
+]

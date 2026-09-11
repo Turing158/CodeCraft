@@ -25,6 +25,13 @@ fn main() {
         return;
     }
 
+    if std::env::args_os().any(|argument| argument == "--codecraft-kimi-hook") {
+        if let Err(error) = codecraft_tauri_lib::capture_kimi_hook() {
+            eprintln!("CodeCraft could not capture the Kimi hook: {error}");
+        }
+        return;
+    }
+
     if std::env::args_os().any(|argument| argument == "--codecraft-claude-hook") {
         if let Err(error) = codecraft_tauri_lib::capture_claude_hook() {
             eprintln!("CodeCraft could not capture the Claude Code hook: {error}");

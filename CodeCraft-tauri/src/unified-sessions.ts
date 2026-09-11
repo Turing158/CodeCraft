@@ -47,6 +47,12 @@ import {
   type GeminiSession,
   type GeminiSessionStatus,
 } from "./gemini-sessions";
+import {
+  kimiSessionKey,
+  kimiStatusLabel,
+  type KimiSession,
+  type KimiSessionStatus,
+} from "./kimi-sessions";
 
 export type UnifiedSession =
   | ClaudeSession
@@ -56,7 +62,8 @@ export type UnifiedSession =
   | DshSession
   | ZCodeSession
   | MimoSession
-  | GeminiSession;
+  | GeminiSession
+  | KimiSession;
 
 const CODEX_VISUAL_STATUS: Record<CodexSessionStatus, ClaudeSessionStatus> = {
   working: "working",
@@ -125,6 +132,15 @@ const GEMINI_VISUAL_STATUS: Record<GeminiSessionStatus, ClaudeSessionStatus> = {
   idle: "idle",
   stopped: "stopped",
 };
+const KIMI_VISUAL_STATUS: Record<KimiSessionStatus, ClaudeSessionStatus> = {
+  working: "working",
+  waitingForInput: "waiting",
+  toolRunning: "working",
+  toolCompleted: "working",
+  toolFailed: "toolFailed",
+  idle: "idle",
+  stopped: "stopped",
+};
 
 const LIVE_STATUS_RANK: Record<ClaudeSessionStatus, number> = {
   working: 0,
@@ -157,11 +173,13 @@ export const isZCodeSession = (
 export const isMimoSession = (session: UnifiedSession): session is MimoSession =>
   "pendingReviews" in session && "source" in session && session.source === "mimo";
 export const isGeminiSession = (session: UnifiedSession): session is GeminiSession =>
-  "pendingInteractions" in session && "integrationStatus" in session;
+  "pendingInteractions" in session && "integrationStatus" in session && !("kimiSessionId" in session);
+export const isKimiSession = (session: UnifiedSession): session is KimiSession =>
+  "kimiSessionId" in session;
 
 export const unifiedSessionSource = (
   session: UnifiedSession,
-): "claude" | "codex" | "opencode" | "pi" | "dsh" | "zcode" | "mimo" | "gemini" =>
+): "claude" | "codex" | "opencode" | "pi" | "dsh" | "zcode" | "mimo" | "gemini" | "kimi" =>
   isCodexSession(session)
     ? "codex"
     : isOpenCodeSession(session)
@@ -176,7 +194,9 @@ export const unifiedSessionSource = (
               ? "mimo"
               : isGeminiSession(session)
                 ? "gemini"
-                : "claude";
+                : isKimiSession(session)
+                  ? "kimi"
+                  : "claude";
 
 export const unifiedSessionKey = (session: UnifiedSession): string =>
   isOpenCodeSession(session)
@@ -191,7 +211,9 @@ export const unifiedSessionKey = (session: UnifiedSession): string =>
             ? mimoSessionKey(session)
             : isGeminiSession(session)
               ? geminiSessionKey(session)
-              : session.id;
+              : isKimiSession(session)
+                ? kimiSessionKey(session)
+                : session.id;
 
 export const unifiedSessionStatusLabel = (session: UnifiedSession): string =>
   isCodexSession(session)
@@ -208,7 +230,9 @@ export const unifiedSessionStatusLabel = (session: UnifiedSession): string =>
               ? mimoStatusLabel(session.status)
               : isGeminiSession(session)
                 ? geminiStatusLabel(session.status)
-              : sessionStatusLabel(session.status);
+                : isKimiSession(session)
+                  ? kimiStatusLabel(session.status)
+                  : sessionStatusLabel(session.status);
 
 export const unifiedSessionVisualStatus = (
   session: UnifiedSession,
@@ -227,7 +251,9 @@ export const unifiedSessionVisualStatus = (
               ? MIMO_VISUAL_STATUS[session.status]
               : isGeminiSession(session)
                 ? GEMINI_VISUAL_STATUS[session.status]
-                : session.status;
+                : isKimiSession(session)
+                  ? KIMI_VISUAL_STATUS[session.status]
+                  : session.status;
 
 export const unifiedSessionIsRunning = (session: UnifiedSession): boolean => {
   const status = unifiedSessionVisualStatus(session);
@@ -245,6 +271,7 @@ export const unifiedSessionLiveContent = (
     !isZCodeSession(session) &&
     !isMimoSession(session)
     && !isGeminiSession(session)
+    && !isKimiSession(session)
   ) {
     return sessionLiveContent(session);
   }
@@ -273,7 +300,9 @@ export const unifiedSessionLiveContent = (
                     ? zcodeSessionStatusLabel(session)
                     : isGeminiSession(session)
                       ? geminiStatusLabel(session.status)
-                      : mimoStatusLabel(session.status),
+                      : isKimiSession(session)
+                        ? kimiStatusLabel(session.status)
+                        : mimoStatusLabel(session.status),
         };
 };
 
@@ -288,6 +317,7 @@ export const unifiedSessionLiveStatusText = (
     !isZCodeSession(session) &&
     !isMimoSession(session)
     && !isGeminiSession(session)
+    && !isKimiSession(session)
   ) {
     return sessionLiveStatusText(session);
   }
@@ -309,7 +339,9 @@ export const unifiedSessionLiveStatusText = (
             ? zcodeSessionStatusLabel(session)
             : isGeminiSession(session)
               ? geminiStatusLabel(session.status)
-              : mimoStatusLabel(session.status);
+              : isKimiSession(session)
+                ? kimiStatusLabel(session.status)
+                : mimoStatusLabel(session.status);
 };
 
 export const hasUnifiedWorkingSession = (

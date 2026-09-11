@@ -1,0 +1,122 @@
+[
+  {
+    "captured_at": 1,
+    "payload": {
+      "client_type": "kimi_code_cli",
+      "cwd": "C:/fixture",
+      "hook_event_name": "SessionStart",
+      "model": "fixture",
+      "pid": 100,
+      "process_created_at": 10,
+      "profile": "agent",
+      "session_id": "fixture-session",
+      "source": "startup"
+    }
+  },
+  {
+    "captured_at": 2,
+    "payload": {
+      "client_type": "kimi_code_cli",
+      "cwd": "C:/fixture",
+      "hook_event_name": "UserPromptSubmit",
+      "pid": 100,
+      "process_created_at": 10,
+      "prompt": [
+        {
+          "text": "Ask which output format to use with AskUserQuestion, then finish.",
+          "type": "text"
+        }
+      ],
+      "session_id": "fixture-session"
+    }
+  },
+  {
+    "captured_at": 3,
+    "payload": {
+      "client_type": "kimi_code_cli",
+      "cwd": "C:/fixture",
+      "hook_event_name": "PreToolUse",
+      "pid": 100,
+      "process_created_at": 10,
+      "session_id": "fixture-session",
+      "tool_call_id": "fixture-question-1",
+      "tool_input": {
+        "questions": [
+          {
+            "header": "Format",
+            "multi_select": false,
+            "options": [
+              {
+                "description": "Structured data",
+                "label": "JSON"
+              },
+              {
+                "description": "Plain text",
+                "label": "Text"
+              }
+            ],
+            "question": "Which output format?"
+          }
+        ]
+      },
+      "tool_name": "AskUserQuestion"
+    }
+  },
+  {
+    "captured_at": 4,
+    "payload": {
+      "client_type": "kimi_code_cli",
+      "cwd": "C:/fixture",
+      "hook_event_name": "TurnStarted",
+      "origin_kind": "user",
+      "pid": 100,
+      "process_created_at": 10,
+      "prompt": "Ask which output format to use with AskUserQuestion, then finish.",
+      "session_id": "fixture-session",
+      "turn_id": 0
+    }
+  },
+  {
+    "captured_at": 5,
+    "payload": {
+      "client_type": "kimi_code_cli",
+      "cwd": "C:/fixture",
+      "hook_event_name": "PostToolUseFailure",
+      "pid": 100,
+      "process_created_at": 10,
+      "session_id": "fixture-session",
+      "tool_call_id": "fixture-question-1",
+      "tool_input": {
+        "questions": [
+          {
+            "header": "Format",
+            "multi_select": false,
+            "options": [
+              {
+                "description": "Structured data",
+                "label": "JSON"
+              },
+              {
+                "description": "Plain text",
+                "label": "Text"
+              }
+            ],
+            "question": "Which output format?"
+          }
+        ]
+      },
+      "tool_name": "AskUserQuestion"
+    }
+  },
+  {
+    "captured_at": 6,
+    "payload": {
+      "client_type": "kimi_code_cli",
+      "cwd": "C:/fixture",
+      "hook_event_name": "Stop",
+      "pid": 100,
+      "process_created_at": 10,
+      "session_id": "fixture-session"
+    }
+  }
+]

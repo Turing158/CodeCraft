@@ -20,6 +20,7 @@ tauri-build = { version = "2", features = [] }
 [dependencies]
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
+toml = "0.8"
 tauri = { version = "2", features = ["tray-icon", "custom-protocol"] }
 tauri-plugin-single-instance = "2"
 axum = { version = "0.8.9", default-features = false, features = ["http1", "json", "tokio", "query"] }
@@ -28,8 +29,10 @@ tokio-stream = { version = "0.1.19", default-features = false, features = ["sync
 uuid = { version = "1.24.0", features = ["v4"] }
 qrcode = { version = "0.14.1", default-features = false, features = ["svg"] }
 sha2 = "0.10"
+regex = "1"
 url = "2.5.8"
 rodio = { version = "0.22.2", default-features = false, features = ["playback", "vorbis", "wav", "mp3", "flac"] }
 
 [target.'cfg(windows)'.dependencies]
+windows-sys = { version = "0.61", features = ["Win32_System_Diagnostics_ToolHelp", "Win32_System_Threading", "Win32_Foundation"] }
 windows = { version = "0.61", features = ["Win32_Graphics_Gdi", "Win32_Storage_FileSystem", "Win32_System_Console", "Win32_System_Threading", "Win32_System_ProcessStatus", "Win32_UI_WindowsAndMessaging", "Win32_NetworkManagement_IpHelper", "Win32_NetworkManagement_Ndis", "Win32_Networking_WinSock", "Win32_UI_Shell"] }

@@ -113,6 +113,13 @@ import {
   type GeminiSnapshot,
 } from "./gemini-sessions";
 import {
+  kimiReviewFor,
+  kimiSessionKey,
+  type KimiReview,
+  type KimiSession,
+  type KimiSnapshot,
+} from "./kimi-sessions";
+import {
   hasUnifiedWorkingSession,
   isCodexSession,
   isOpenCodeSession,
@@ -121,6 +128,7 @@ import {
   isZCodeSession,
   isMimoSession,
   isGeminiSession,
+  isKimiSession,
   primaryUnifiedLiveSession,
   unifiedSessionKey,
   unifiedSessionIsRunning,
@@ -474,6 +482,14 @@ const zcodeIconUrl = new URL(
   "../src-tauri/icons/icon/zcode.svg?no-inline",
   import.meta.url,
 ).href;
+const geminiIconUrl = new URL(
+  "../src-tauri/icons/icon/gemini.svg?no-inline",
+  import.meta.url,
+).href;
+const kimiIconUrl = new URL(
+  "../src-tauri/icons/icon/kimi.svg?no-inline",
+  import.meta.url,
+).href;
 
 const configureThemedAgentIcon = (
   mark: HTMLElement | null | undefined,
@@ -554,6 +570,7 @@ const piSessionCard = panel?.querySelector<HTMLElement>("#pi-session-card");
 const dshSessionCard = panel?.querySelector<HTMLElement>("#dsh-session-card");
 const zcodeSessionCard = panel?.querySelector<HTMLElement>("#zcode-session-card");
 const geminiSessionCard = panel?.querySelector<HTMLElement>("#gemini-session-card");
+const kimiSessionCard = panel?.querySelector<HTMLElement>("#kimi-session-card");
 const codexSessionList = panel?.querySelector<HTMLUListElement>(
   "#codex-session-list",
 );
@@ -572,6 +589,9 @@ const zcodeSessionList = panel?.querySelector<HTMLUListElement>(
 );
 const geminiSessionList = panel?.querySelector<HTMLUListElement>(
   "#gemini-session-list",
+);
+const kimiSessionList = panel?.querySelector<HTMLUListElement>(
+  "#kimi-session-list",
 );
 const claudeConnectionStatus = panel?.querySelector<HTMLButtonElement>(
   "#claude-connection-status",
@@ -592,6 +612,9 @@ const zcodeConnectionStatus = panel?.querySelector<HTMLElement>(
 const geminiConnectionStatus = panel?.querySelector<HTMLElement>(
   "#gemini-connection-status",
 );
+const kimiConnectionStatus = panel?.querySelector<HTMLElement>(
+  "#kimi-connection-status",
+);
 const claudeSessionCardIcon = panel?.querySelector<HTMLImageElement>(
   "#claude-session-card-icon",
 );
@@ -610,6 +633,12 @@ const dshSessionCardIcon = panel?.querySelector<HTMLImageElement>(
 );
 const zcodeSessionCardIcon = panel?.querySelector<HTMLImageElement>(
   "#zcode-session-card-icon",
+);
+const geminiSessionCardIcon = panel?.querySelector<HTMLImageElement>(
+  "#gemini-session-card-icon",
+);
+const kimiSessionCardIcon = panel?.querySelector<HTMLImageElement>(
+  "#kimi-session-card-icon",
 );
 const sessionProduct = panel?.querySelector<HTMLElement>(".session-product");
 const sessionProductTrigger = panel?.querySelector<HTMLButtonElement>(
@@ -1025,6 +1054,7 @@ const questionOpenCodexButton = panel?.querySelector<HTMLButtonElement>(
 const questionOpenGeminiButton = panel?.querySelector<HTMLButtonElement>(
   "#question-open-gemini",
 );
+const questionOpenKimiButton = panel?.querySelector<HTMLButtonElement>("#question-open-kimi");
 const questionRejectButton =
   panel?.querySelector<HTMLButtonElement>("#question-reject");
 const questionNextButton =
@@ -1042,6 +1072,7 @@ const permissionSummaryText = panel?.querySelector<HTMLElement>(
   "#permission-summary-text",
 );
 const permissionCwd = panel?.querySelector<HTMLElement>("#permission-cwd");
+const permissionActionBadge = panel?.querySelector<HTMLElement>("#permission-action-badge");
 const permissionSubmitStatus = panel?.querySelector<HTMLElement>(
   "#permission-submit-status",
 );
@@ -1055,6 +1086,7 @@ const permissionDenyButton =
 const permissionOpenGeminiButton = panel?.querySelector<HTMLButtonElement>(
   "#permission-open-gemini",
 );
+const permissionOpenKimiButton = panel?.querySelector<HTMLButtonElement>("#permission-open-kimi");
 const planView = panel?.querySelector<HTMLElement>("#plan-view");
 const planBackButton = panel?.querySelector<HTMLButtonElement>("#plan-back");
 const planTool = panel?.querySelector<HTMLElement>("#plan-tool");
@@ -1081,6 +1113,7 @@ const planOpenZCodeButton =
   panel?.querySelector<HTMLButtonElement>("#plan-open-zcode");
 const planOpenGeminiButton =
   panel?.querySelector<HTMLButtonElement>("#plan-open-gemini");
+const planOpenKimiButton = panel?.querySelector<HTMLButtonElement>("#plan-open-kimi");
 
 const setSourceStatusLabel = (button: HTMLElement, label: string) => {
   const labelElement = button.querySelector<HTMLElement>(
@@ -1141,6 +1174,7 @@ if (
   !dshSessionCard ||
   !zcodeSessionCard ||
   !geminiSessionCard ||
+  !kimiSessionCard ||
   !codexSessionList ||
   !openCodeSessionList ||
   !mimoSessionList ||
@@ -1148,6 +1182,7 @@ if (
   !dshSessionList ||
   !zcodeSessionList ||
   !geminiSessionList ||
+  !kimiSessionList ||
   !claudeConnectionStatus ||
   !openCodeConnectionStatus ||
   !mimoConnectionStatus ||
@@ -1155,6 +1190,7 @@ if (
   !dshConnectionStatus ||
   !zcodeConnectionStatus ||
   !geminiConnectionStatus ||
+  !kimiConnectionStatus ||
   !claudeSessionCardIcon ||
   !codexSessionCardIcon ||
   !openCodeSessionCardIcon ||
@@ -1162,6 +1198,8 @@ if (
   !piSessionCardIcon ||
   !dshSessionCardIcon ||
   !zcodeSessionCardIcon ||
+  !geminiSessionCardIcon ||
+  !kimiSessionCardIcon ||
   !sessionProduct ||
   !sessionProductTrigger ||
   !sessionProductIcon ||
@@ -1308,6 +1346,7 @@ if (
   !questionPreviousButton ||
   !questionOpenCodexButton ||
   !questionOpenGeminiButton ||
+  !questionOpenKimiButton ||
   !questionRejectButton ||
   !questionNextButton ||
   !questionSubmitButton ||
@@ -1317,11 +1356,13 @@ if (
   !permissionTool ||
   !permissionSummaryText ||
   !permissionCwd ||
+  !permissionActionBadge ||
   !permissionSubmitStatus ||
   !permissionAllowButton ||
   !permissionAlwaysAllowButton ||
   !permissionDenyButton ||
   !permissionOpenGeminiButton ||
+  !permissionOpenKimiButton ||
   !planView ||
   !planBackButton ||
   !planTool ||
@@ -1337,7 +1378,8 @@ if (
   !planActionBadge ||
   !planOpenCodexButton ||
   !planOpenZCodeButton ||
-  !planOpenGeminiButton
+  !planOpenGeminiButton ||
+  !planOpenKimiButton
 ) {
   throw new Error("CodeCraft session panel is incomplete");
 }
@@ -1478,6 +1520,7 @@ let selectedPiSessionKey: string | undefined;
 let selectedDshSessionKey: string | undefined;
 let selectedZCodeSessionKey: string | undefined;
 let selectedGeminiSessionId: string | undefined;
+let selectedKimiSessionId: string | undefined;
 type ReviewSource =
   | "claude"
   | "codex"
@@ -1486,7 +1529,8 @@ type ReviewSource =
   | "pi"
   | "dsh"
   | "zcode"
-  | "gemini";
+  | "gemini"
+  | "kimi";
 let selectedSessionSource: ReviewSource = "claude";
 let lastRefreshError: string | undefined;
 let lastOpenCodeRefreshError: string | undefined;
@@ -1502,6 +1546,7 @@ let piSessionItems = new Map<string, HTMLLIElement>();
 let dshSessionItems = new Map<string, HTMLLIElement>();
 let zcodeSessionItems = new Map<string, HTMLLIElement>();
 let geminiSessionItems = new Map<string, HTMLLIElement>();
+let kimiSessionItems = new Map<string, HTMLLIElement>();
 interface AllSessionSnapshots {
   claude: ClaudeSessionSnapshot;
   codex: CodexSnapshot;
@@ -1511,6 +1556,7 @@ interface AllSessionSnapshots {
   dsh: DshSnapshot;
   zcode: ZCodeSnapshot;
   gemini: GeminiSnapshot;
+  kimi: KimiSnapshot;
 }
 
 interface ActiveSessionCounts {
@@ -1522,6 +1568,7 @@ interface ActiveSessionCounts {
   dsh: number;
   zcode: number;
   gemini: number;
+  kimi: number;
 }
 
 let latestActiveSessionCounts: ActiveSessionCounts = {
@@ -1533,6 +1580,7 @@ let latestActiveSessionCounts: ActiveSessionCounts = {
   dsh: 0,
   zcode: 0,
   gemini: 0,
+  kimi: 0,
 };
 
 const activeSessionCount = (sessions: Array<{ status: string }>) =>
@@ -1574,6 +1622,9 @@ let dismissedCodexInteractionId: string | undefined;
 let lastAutoRevealedCodexInteractionId: string | undefined;
 let dismissedGeminiInteractionId: string | undefined;
 let lastAutoRevealedGeminiInteractionId: string | undefined;
+const dismissedKimiReviewIds = new Set<string>();
+const revealedKimiReviewIds = new Set<string>();
+let activeKimiReview: { sessionId: string; requestId: string; kind: ReviewContentView } | undefined;
 let latestOpenCodeSnapshot: OpenCodeSnapshot = {
   connected: false,
   integrationError: null,
@@ -1626,6 +1677,24 @@ let latestGeminiSnapshot: GeminiSnapshot = {
   navigationCapability: "unsupported",
   fallbackAction: "openGeminiOnHost",
 };
+let latestKimiSnapshot: KimiSnapshot = {
+  connected: false,
+  integrationError: null,
+  version: 0,
+  sessions: [],
+  interactions: [],
+  navigationCapability: "unsupported",
+  fallbackAction: "openKimiOnHost",
+  capabilities: {
+    canObserve: true,
+    canApproveTools: false,
+    canAnswerQuestions: false,
+    canApprovePlans: false,
+    canStreamOutput: false,
+    readOnly: true,
+    reason: "Kimi Code Hook 已连接",
+  },
+};
 let displayedContentView: ContentView = "sessions";
 let requestedContentView: ContentView = "sessions";
 let questionOriginView: ContentView | undefined;
@@ -1651,6 +1720,7 @@ const soundSourcePrimed: Record<
   dsh: false,
   zcode: false,
   gemini: false,
+  kimi: false,
 };
 
 const observeSoundFrames = (
@@ -1861,7 +1931,8 @@ type SessionProductId =
   | "pi"
   | "dsh"
   | "zcode"
-  | "gemini";
+  | "gemini"
+  | "kimi";
 type SessionSourceProductId = Exclude<SessionProductId, "all">;
 type SessionProduct = {
   id: SessionProductId;
@@ -1876,7 +1947,8 @@ type SessionProduct = {
     | "pi"
     | "dsh"
     | "zcode"
-    | "gemini";
+    | "gemini"
+    | "kimi";
   iconUrl: string;
 };
 
@@ -1942,7 +2014,14 @@ const sessionProducts: SessionProduct[] = [
     triggerLabel: "Gemini CLI",
     optionLabel: "Gemini CLI",
     kind: "gemini",
-    iconUrl: codeCraftIconUrl,
+    iconUrl: geminiIconUrl,
+  },
+  {
+    id: "kimi",
+    triggerLabel: "Kimi Code",
+    optionLabel: "Kimi Code",
+    kind: "kimi",
+    iconUrl: kimiIconUrl,
   },
 ];
 const installedSessionProductIds = new Set<SessionSourceProductId>();
@@ -1950,6 +2029,8 @@ let selectedSessionProductId: SessionProductId = "all";
 const SESSION_PRODUCT_MENU_TRANSITION_MS = 180;
 const SESSION_PRODUCT_MENU_FADE_MS = 150;
 const SESSION_PRODUCT_OPTION_REORDER_MS = 180;
+const SESSION_PRODUCT_MENU_MIN_HEIGHT = 32;
+const SESSION_PRODUCT_MENU_VIEWPORT_BOTTOM_GAP = 8;
 let sessionProductMenuCloseTimer: ReturnType<typeof setTimeout> | undefined;
 let sessionProductMenuOpenFrame: number | undefined;
 let sessionProductSelectionPending = false;
@@ -2611,10 +2692,14 @@ const hasSelectedSessionDetail = () =>
             ? latestMimoSnapshot.sessions.some(
                 (session) => mimoSessionKey(session) === selectedMimoSessionKey,
               )
-            : selectedSessionSource === "gemini"
+      : selectedSessionSource === "gemini"
               ? latestGeminiSnapshot.sessions.some(
                   (session) => session.id === selectedGeminiSessionId,
                 )
+          : selectedSessionSource === "kimi"
+            ? latestKimiSnapshot.sessions.some(
+                (session) => session.id === selectedKimiSessionId,
+              )
           : latestSessions.some((session) => session.id === selectedSessionId);
 
 const returnViewForReview = (origin: ContentView | undefined) =>
@@ -3179,8 +3264,10 @@ const syncQuestionAnswerState = (
     activeQuestionSource === "codex" && state.question.readOnly === true;
   const showOpenGemini =
     activeQuestionSource === "gemini" && state.question.readOnly === true;
+  const showOpenKimi =
+    activeQuestionSource === "kimi" && state.question.readOnly === true;
   const showReject = activeQuestionSource === "opencode" || activeQuestionSource === "mimo";
-  setActionNavVisible(actions.size > 0 || showOpenCodex || showOpenGemini || showReject, animate);
+  setActionNavVisible(actions.size > 0 || showOpenCodex || showOpenGemini || showOpenKimi || showReject, animate);
   setActionButtonVisible(
     questionPreviousButton,
     actions.has("previous"),
@@ -3188,6 +3275,7 @@ const syncQuestionAnswerState = (
   );
   setActionButtonVisible(questionOpenCodexButton, showOpenCodex, animate);
   setActionButtonVisible(questionOpenGeminiButton, showOpenGemini, animate);
+  setActionButtonVisible(questionOpenKimiButton, showOpenKimi, animate);
   setActionButtonVisible(questionRejectButton, showReject, animate);
   setActionButtonVisible(questionNextButton, actions.has("next"), animate);
   setActionButtonVisible(questionSubmitButton, actions.has("submit"), animate);
@@ -3540,6 +3628,8 @@ questionBackButton.addEventListener("click", () => {
     dismissedZCodeReviewId = activeQuestionRequest.id;
   } else if (activeQuestionSource === "mimo") {
     dismissedMimoReviewId = activeQuestionRequest.id;
+  } else if (activeQuestionSource === "kimi") {
+    dismissedKimiReviewIds.add(activeQuestionRequest.id);
   } else {
     manuallyHiddenQuestionRequestId = activeQuestionRequest.id;
   }
@@ -3667,6 +3757,39 @@ const focusGeminiSession = async (sessionId: string, button: HTMLButtonElement) 
   } catch (error) {
     console.error("Unable to focus the Gemini terminal", error);
     setStatus(translate("无法定位 Gemini，请在原终端处理"), "error");
+  } finally {
+    button.disabled = false;
+  }
+};
+
+const focusKimiSession = async (button: HTMLButtonElement) => {
+  const target = activeKimiReview;
+  if (!target) return;
+  const setStatus = (message: string, state: "pending" | "success" | "error" = "pending") => {
+    if (activeKimiReview?.requestId !== target.requestId || !kimiReviewIsVisible()) return;
+    if (target.kind === "question") setQuestionSubmitStatus(message, state);
+    else if (target.kind === "permission") setPermissionSubmitStatus(message, state);
+    else setPlanSubmitStatus(message, state);
+  };
+  button.disabled = true;
+  setStatus("正在定位 Kimi Code");
+  try {
+    const result = isTauriRuntime
+      ? await invoke<string>("focus_kimi_session", { sessionId: target.sessionId })
+      : "unsupported";
+    button.dataset.focusResult = result;
+    const messages: Record<string, string> = {
+      focusedExactWindow: "已定位 Kimi Code 终端",
+      focusedSharedTerminal: "已定位终端窗口，请选择对应的 Kimi Code 标签页",
+      sessionEnded: "Kimi Code 会话已结束",
+      staleTarget: "Kimi Code 原终端已关闭或发生变化",
+      accessDenied: "无法激活 Kimi Code 终端，请在原终端处理",
+    };
+    setStatus(messages[result] ?? "无法定位 Kimi Code，请在原终端处理",
+      result === "focusedExactWindow" || result === "focusedSharedTerminal" ? "success" : "error");
+  } catch (error) {
+    console.error("Unable to focus the Kimi terminal", error);
+    setStatus("无法定位 Kimi Code，请在原终端处理", "error");
   } finally {
     button.disabled = false;
   }
@@ -3920,10 +4043,19 @@ const renderPermissionRequest = (request: ClaudePermissionRequest) => {
   permissionSubmitStatus.textContent = "";
   delete permissionSubmitStatus.dataset.state;
   const readOnlyGemini = activePermissionSource === "gemini";
-  permissionAllowButton.hidden = readOnlyGemini;
-  permissionAlwaysAllowButton.hidden = readOnlyGemini || !request.canAlwaysAllow;
-  permissionDenyButton.hidden = readOnlyGemini;
+  const readOnlyKimi = activePermissionSource === "kimi";
+  permissionActionBadge.textContent = readOnlyGemini
+    ? "在原 Gemini 中处理"
+    : readOnlyKimi
+      ? "在 Kimi Code 中处理"
+      : "点击后立即回传";
+  permissionAllowButton.hidden = readOnlyGemini || readOnlyKimi;
+  permissionAlwaysAllowButton.hidden = readOnlyGemini || readOnlyKimi || !request.canAlwaysAllow;
+  permissionDenyButton.hidden = readOnlyGemini || readOnlyKimi;
   permissionOpenGeminiButton.hidden = !readOnlyGemini;
+  permissionOpenKimiButton.hidden = !readOnlyKimi;
+  permissionView.dataset.reviewSource = activePermissionSource;
+  setPermissionButtonsDisabled(readOnlyGemini || readOnlyKimi);
 };
 
 const clearActivePermissionRequest = () => {
@@ -3940,6 +4072,7 @@ const clearActivePermissionRequest = () => {
   permissionAllowButton.hidden = false;
   permissionDenyButton.hidden = false;
   permissionOpenGeminiButton.hidden = true;
+  permissionOpenKimiButton.hidden = true;
   permissionSubmitStatus.hidden = true;
   permissionSubmitStatus.textContent = "";
   delete permissionSubmitStatus.dataset.state;
@@ -4000,7 +4133,7 @@ type PermissionDecision = "allow" | "allowAlways" | "deny";
 
 const submitPermissionDecision = async (decision: PermissionDecision) => {
   const request = activePermissionRequest;
-  if (!request) return;
+  if (!request || activePermissionSource === "kimi" || activePermissionSource === "gemini") return;
 
   const returnView = returnViewForReview(permissionOriginView);
   setPermissionButtonsDisabled(true);
@@ -4166,6 +4299,8 @@ permissionBackButton.addEventListener("click", () => {
     dismissedZCodeReviewId = activePermissionRequest.id;
   } else if (activePermissionSource === "mimo") {
     dismissedMimoReviewId = activePermissionRequest.id;
+  } else if (activePermissionSource === "kimi") {
+    dismissedKimiReviewIds.add(activePermissionRequest.id);
   } else {
     manuallyHiddenPermissionRequestId = activePermissionRequest.id;
   }
@@ -4199,6 +4334,10 @@ permissionOpenGeminiButton.addEventListener("click", () => {
   void focusGeminiSession(selectedGeminiSessionId, permissionOpenGeminiButton);
 });
 
+permissionOpenKimiButton.addEventListener("click", () => {
+  if (activePermissionSource === "kimi") void focusKimiSession(permissionOpenKimiButton);
+});
+
 const syncPlanSourceControls = () => {
   const isCodexPlan = activePlanSource === "codex";
   const isClaudePlan = activePlanSource === "claude";
@@ -4206,6 +4345,7 @@ const syncPlanSourceControls = () => {
   const isZCodePlan = activePlanSource === "zcode";
   const isMimoPlan = activePlanSource === "mimo";
   const isGeminiPlan = activePlanSource === "gemini";
+  const isKimiPlan = activePlanSource === "kimi";
   const isFeedbackPlan = isDshPlan || isZCodePlan || isMimoPlan;
   planView.dataset.planSource = activePlanSource;
   planAutoButton.hidden = !isClaudePlan && !isFeedbackPlan;
@@ -4215,10 +4355,11 @@ const syncPlanSourceControls = () => {
   planOpenCodexButton.hidden = !isCodexPlan;
   planOpenZCodeButton.hidden = !isZCodePlan;
   planOpenGeminiButton.hidden = !isGeminiPlan;
-  planAutoButton.disabled = isGeminiPlan;
-  planAutoRememberButton.disabled = isGeminiPlan;
-  planCustomInput.disabled = isGeminiPlan;
-  planCustomSubmitButton.disabled = isGeminiPlan;
+  planOpenKimiButton.hidden = !isKimiPlan;
+  planAutoButton.disabled = isGeminiPlan || isKimiPlan;
+  planAutoRememberButton.disabled = isGeminiPlan || isKimiPlan;
+  planCustomInput.disabled = isGeminiPlan || isKimiPlan;
+  planCustomSubmitButton.disabled = isGeminiPlan || isKimiPlan;
   const zcodeOpenLabel = translate("前往 ZCode 处理");
   const geminiOpenLabel = translate("前往 Gemini 处理");
   planOpenZCodeButton.querySelector("span")!.textContent = zcodeOpenLabel;
@@ -4251,7 +4392,9 @@ const syncPlanSourceControls = () => {
         : "允许 DeepSeek Harness 退出计划模式"
       : "以自动模式执行此计划";
   }
-  planActionBadge.textContent = isGeminiPlan
+  planActionBadge.textContent = isKimiPlan
+    ? "在 Kimi Code 中处理"
+    : isGeminiPlan
     ? translate("在原 Gemini 中处理")
     : isCodexPlan
     ? "在原 Codex 中选择"
@@ -4287,6 +4430,7 @@ const renderPlanRequest = (
 
   renderedPlanRequestId = request.id;
   activePlanRequest = request;
+  setPlanSubmitStatus(undefined);
   planTool.textContent = request.toolName;
   planTool.title = request.toolName;
   planSummaryText.innerHTML = renderPlanMarkdown(request.plan);
@@ -4349,7 +4493,7 @@ type PlanExecutionMode = "auto";
 
 const submitPlanDecision = async (mode: PlanExecutionMode, note?: string) => {
   const request = activePlanRequest;
-  if (!request || activePlanSource === "codex" || activePlanSource === "gemini") return;
+  if (!request || activePlanSource === "codex" || activePlanSource === "gemini" || activePlanSource === "kimi") return;
 
   const returnView = returnViewForReview(planOriginView);
   setPlanButtonsDisabled(true);
@@ -4419,6 +4563,8 @@ planBackButton.addEventListener("click", () => {
     dismissedMimoReviewId = activePlanRequest.id;
   } else if (activePlanSource === "gemini") {
     manuallyHiddenPlanRequestId = activePlanRequest.id;
+  } else if (activePlanSource === "kimi") {
+    dismissedKimiReviewIds.add(activePlanRequest.id);
   } else {
     manuallyHiddenPlanRequestId = activePlanRequest.id;
   }
@@ -4469,6 +4615,14 @@ questionOpenGeminiButton.addEventListener("click", () => {
   void focusGeminiSession(selectedGeminiSessionId, questionOpenGeminiButton);
 });
 
+planOpenKimiButton.addEventListener("click", () => {
+  if (activePlanSource === "kimi") void focusKimiSession(planOpenKimiButton);
+});
+
+questionOpenKimiButton.addEventListener("click", () => {
+  if (activeQuestionSource === "kimi") void focusKimiSession(questionOpenKimiButton);
+});
+
 planOpenZCodeButton.addEventListener("click", () => {
   if (activePlanSource !== "zcode") return;
   void focusZCodeWindow(planOpenZCodeButton);
@@ -4505,6 +4659,34 @@ const sessionProductOptionButtons = () =>
       ".session-product__option",
     ),
   );
+
+const sessionProductMenuAvailableHeight = () => {
+  const interfaceScale = currentInterfaceScale();
+  const menuTop = sessionProduct.getBoundingClientRect().top;
+  const sessionViewBottom = sessionView.getBoundingClientRect().bottom;
+  const visibleBottom = Math.min(window.innerHeight, sessionViewBottom);
+  const availableHeight =
+    (visibleBottom - menuTop) / interfaceScale -
+    SESSION_PRODUCT_MENU_VIEWPORT_BOTTOM_GAP;
+  return Math.max(SESSION_PRODUCT_MENU_MIN_HEIGHT, Math.floor(availableHeight));
+};
+
+const syncSessionProductMenuHeight = () => {
+  const optionCount = sessionProductOptionButtons().length;
+  if (optionCount === 0) return;
+
+  const contentHeight = optionCount * 30 + 2;
+  sessionProductMenu.style.setProperty(
+    "--session-product-menu-height",
+    `${Math.min(contentHeight, sessionProductMenuAvailableHeight())}px`,
+  );
+};
+
+const focusSessionProductOption = (option: HTMLButtonElement | undefined) => {
+  if (!option) return;
+  option.focus({ preventScroll: true });
+  option.scrollIntoView({ block: "nearest" });
+};
 
 const updateSessionProductTrigger = () => {
   const product = selectedSessionProduct();
@@ -4567,10 +4749,7 @@ const renderSessionProductMenu = () => {
   });
 
   sessionProductMenu.replaceChildren(...options);
-  sessionProductMenu.style.setProperty(
-    "--session-product-menu-height",
-    `${orderedProducts.length * 30 + 2}px`,
-  );
+  syncSessionProductMenuHeight();
 };
 
 const syncSessionProductWidth = () => {
@@ -4665,6 +4844,9 @@ const syncProductVisibility = () => {
   const showGemini =
     installedSessionProductIds.has("gemini") &&
     (selectedSessionProductId === "all" || selectedSessionProductId === "gemini");
+  const showKimi =
+    installedSessionProductIds.has("kimi") &&
+    (selectedSessionProductId === "all" || selectedSessionProductId === "kimi");
   claudeSessionCard.hidden = !showClaude;
   codexSessionCard.hidden = !showCodex;
   openCodeSessionCard.hidden = !showOpenCode;
@@ -4673,6 +4855,7 @@ const syncProductVisibility = () => {
   dshSessionCard.hidden = !showDsh;
   zcodeSessionCard.hidden = !showZCode;
   geminiSessionCard.hidden = !showGemini;
+  kimiSessionCard.hidden = !showKimi;
   sessionSourceCards.dataset.filter = selectedSessionProductId;
   renderSessionSummary();
 };
@@ -4688,6 +4871,7 @@ const sessionProductIdForHookAgent = (
   if (id === "deepSeekHarness") return "dsh";
   if (id === "zCode") return "zcode";
   if (id === "geminiCli") return "gemini";
+  if (id === "kimiCode") return "kimi";
   return undefined;
 };
 
@@ -4780,9 +4964,9 @@ const openSessionProductMenu = (focusIndex = 0) => {
     sessionProductMenu.dataset.open = "true";
   });
   const options = sessionProductOptionButtons();
-  options[Math.max(0, Math.min(focusIndex, options.length - 1))]?.focus({
-    preventScroll: true,
-  });
+  focusSessionProductOption(
+    options[Math.max(0, Math.min(focusIndex, options.length - 1))],
+  );
 };
 
 sessionProductTrigger.addEventListener("click", () => {
@@ -4832,7 +5016,7 @@ sessionProductMenu.addEventListener("keydown", (event) => {
         : event.key === "ArrowDown"
           ? (currentIndex + 1) % options.length
           : (currentIndex - 1 + options.length) % options.length;
-  options[nextIndex]?.focus({ preventScroll: true });
+  focusSessionProductOption(options[nextIndex]);
 });
 
 document.addEventListener("pointerdown", (event) => {
@@ -4886,6 +5070,18 @@ configureThemedAgentIcon(
   zcodeSessionCardIcon.closest<HTMLElement>(".session-source-card__mark"),
   zcodeSessionCardIcon,
   zcodeIconUrl,
+);
+geminiSessionCardIcon.src = geminiIconUrl;
+configureThemedAgentIcon(
+  geminiSessionCardIcon.closest<HTMLElement>(".session-source-card__mark"),
+  geminiSessionCardIcon,
+  geminiIconUrl,
+);
+kimiSessionCardIcon.src = kimiIconUrl;
+configureThemedAgentIcon(
+  kimiSessionCardIcon.closest<HTMLElement>(".session-source-card__mark"),
+  kimiSessionCardIcon,
+  kimiIconUrl,
 );
 
 claudeConnectionStatus.addEventListener("click", () => {
@@ -4960,6 +5156,7 @@ function* latestUnifiedSessions(): Generator<UnifiedSession> {
   yield* latestDshSnapshot.sessions;
   yield* latestZCodeSnapshot.sessions;
   yield* latestGeminiSnapshot.sessions;
+  yield* latestKimiSnapshot.sessions;
 }
 
 const collapsedPanelHeight = () =>
@@ -5138,6 +5335,7 @@ const renderSessionDetail = (session: UnifiedSession) => {
     session.title,
     session.activities,
     session.outputs,
+    isKimiSession(session) ? session.pendingInteractions : null,
     isOpenCodeSession(session) ? session.pendingReviews : null,
     isMimoSession(session) ? session.pendingReviews : null,
     isPiSession(session) ? [session.question, session.permission] : null,
@@ -5234,6 +5432,30 @@ const renderSessionDetail = (session: UnifiedSession) => {
     sessionOutput.replaceChildren(...outputEntries);
   }
 
+  if (isKimiSession(session)) {
+    for (const observation of session.pendingInteractions) {
+      const entry = document.createElement("article");
+      entry.className = "output-entry markdown-content";
+      const heading = document.createElement("strong");
+      heading.textContent = observation.title;
+      const detail = document.createElement("p");
+      detail.textContent = observation.detail;
+      entry.append(heading, detail);
+      if (observation.kind === "askUser") {
+        for (const raw of observation.questions) {
+          const question = document.createElement("pre");
+          question.textContent = typeof raw === "string" ? raw : JSON.stringify(raw, null, 2);
+          entry.append(question);
+        }
+      }
+      if (observation.plan || observation.planReadError) {
+        const plan = document.createElement("div");
+        plan.innerHTML = renderMarkdown(observation.plan ?? observation.planReadError ?? "");
+        entry.append(plan);
+      }
+      sessionOutput.append(entry);
+    }
+  }
   if (outputWasAtEnd) {
     sessionOutput.scrollTop = sessionOutput.scrollHeight;
   }
@@ -5668,6 +5890,33 @@ const setSelectedGeminiSession = (sessionId: string) => {
   sessionDetailBack.focus({ preventScroll: true });
 };
 
+const setSelectedKimiSession = (sessionId: string) => {
+  const session = latestKimiSnapshot.sessions.find((item) => item.id === sessionId);
+  if (!session) return;
+  selectedKimiSessionId = sessionId;
+  selectedSessionSource = "kimi";
+  selectedSessionId = undefined;
+  selectedCodexSessionId = undefined;
+  selectedOpenCodeSessionKey = undefined;
+  selectedMimoSessionKey = undefined;
+  selectedPiSessionKey = undefined;
+  selectedDshSessionKey = undefined;
+  selectedZCodeSessionKey = undefined;
+  selectedGeminiSessionId = undefined;
+  for (const button of kimiSessionList.querySelectorAll<HTMLButtonElement>(".session-button")) {
+    button.setAttribute("aria-pressed", String(button.dataset.sessionId === sessionId));
+  }
+  const review = kimiReviewFor(session);
+  if (review) {
+    dismissedKimiReviewIds.delete(review.request.id);
+    renderKimiReview(review, session, false);
+    return;
+  }
+  renderSessionDetail(session);
+  switchContentView("detail");
+  sessionDetailBack.focus({ preventScroll: true });
+};
+
 const renderSessionSummary = () => {
   const activeCounts: Record<SessionSourceProductId, number> = {
     "claude-code": latestActiveSessionCounts.claude,
@@ -5678,6 +5927,7 @@ const renderSessionSummary = () => {
     zcode: latestActiveSessionCounts.zcode,
     mimo: latestActiveSessionCounts.mimo,
     gemini: latestActiveSessionCounts.gemini,
+    kimi: latestActiveSessionCounts.kimi,
   };
   const connectionStates: Record<SessionSourceProductId, boolean> = {
     "claude-code": latestClaudeSnapshot.connected,
@@ -5688,6 +5938,7 @@ const renderSessionSummary = () => {
     zcode: latestZCodeSnapshot.connected,
     mimo: latestMimoSnapshot.connected,
     gemini: latestGeminiSnapshot.connected,
+    kimi: latestKimiSnapshot.connected,
   };
   const selectedSources =
     selectedSessionProductId === "all"
@@ -6427,6 +6678,133 @@ const refreshGeminiSessions = async () => {
   }
 };
 
+const renderKimiReview = (review: KimiReview, session: KimiSession, autoReveal: boolean) => {
+  const reviewOrigin = requestedContentView === "question" ? questionOriginView
+    : requestedContentView === "permission" ? permissionOriginView
+    : requestedContentView === "plan" ? planOriginView : undefined;
+  const previousOrigin = reviewOrigin === "question" || reviewOrigin === "permission" || reviewOrigin === "plan"
+    ? "sessions" : reviewOrigin;
+  const replacingReview = requestedContentView === "question" || requestedContentView === "permission" || requestedContentView === "plan";
+  selectedKimiSessionId = session.id;
+  selectedSessionSource = "kimi";
+  activeKimiReview = { sessionId: session.id, requestId: review.request.id, kind: review.kind };
+  const signature = JSON.stringify(review.request);
+  const view = review.kind === "question" ? questionView : review.kind === "permission" ? permissionView : planView;
+  const changed = view.dataset.kimiRequest !== signature;
+  if (changed) {
+    if (review.kind === "question") renderedQuestionRequestId = undefined;
+    else if (review.kind === "permission") renderedPermissionRequestId = undefined;
+    else renderedPlanRequestId = undefined;
+    view.dataset.kimiRequest = signature;
+  }
+  if (review.kind === "question") {
+    clearActivePermissionRequest();
+    clearActivePlanRequest();
+    if (activeQuestionSource !== "kimi" || activeQuestionRequest?.id !== review.request.id) {
+      clearActiveQuestionRequest();
+    }
+    activeQuestionSource = "kimi";
+    renderQuestionRequest(review.request);
+  } else if (review.kind === "permission") {
+    clearActiveQuestionRequest();
+    clearActivePlanRequest();
+    activePermissionSource = "kimi";
+    renderPermissionRequest(review.request);
+    setPermissionButtonsDisabled(true);
+    if (changed) setPermissionSubmitStatus("请在 Kimi Code 中处理");
+  } else {
+    clearActiveQuestionRequest();
+    clearActivePermissionRequest();
+    renderPlanRequest(review.request, "kimi");
+  }
+  if (requestedContentView !== review.kind) {
+    rememberReviewOrigin(review.kind);
+    switchContentView(review.kind);
+  }
+  if (replacingReview) {
+    if (review.kind === "question") questionOriginView = previousOrigin ?? "sessions";
+    else if (review.kind === "permission") permissionOriginView = previousOrigin ?? "sessions";
+    else planOriginView = previousOrigin ?? "sessions";
+  }
+  revealedKimiReviewIds.add(review.request.id);
+  if (autoReveal && collapseExpandSettings.approvalAutoExpand) void revealPanelForAttention();
+};
+
+const kimiReviewIsVisible = () =>
+  (requestedContentView === "question" && activeQuestionSource === "kimi") ||
+  (requestedContentView === "permission" && activePermissionSource === "kimi") ||
+  (requestedContentView === "plan" && activePlanSource === "kimi");
+
+const renderKimiSnapshot = (snapshot: KimiSnapshot) => {
+  snapshot = {
+    ...snapshot,
+    sessions: filterAutoCleanedSessions(
+      filterDismissedSessions(snapshot.sessions, dismissedSessionKeys, kimiSessionKey, unifiedSessionIsRunning),
+      sessionCleanupSettings,
+    ),
+  };
+  latestKimiSnapshot = snapshot;
+  latestActiveSessionCounts.kimi = activeSessionCount(snapshot.sessions);
+  setSourceStatusLabel(kimiConnectionStatus, snapshot.connected ? "Hook 正常" : "等待 Kimi");
+  kimiConnectionStatus.dataset.connected = String(snapshot.connected);
+  kimiConnectionStatus.title = snapshot.connected
+    ? "Kimi Code Hook 已连接"
+    : (snapshot.integrationError ?? "在设置中安装 Kimi Code Hook");
+  if (!snapshot.sessions.some((session) => session.id === selectedKimiSessionId)) {
+    selectedKimiSessionId = undefined;
+    if (selectedSessionSource === "kimi") {
+      renderedDetailSignature = undefined;
+      if (requestedContentView === "detail") switchContentView("sessions");
+    }
+  }
+  renderUnifiedSessionList(kimiSessionList, snapshot.sessions, kimiSessionItems);
+  const selected = snapshot.sessions.find((session) => session.id === selectedKimiSessionId);
+  if (selectedSessionSource === "kimi" && requestedContentView === "detail" && selected) {
+    renderSessionDetail(selected);
+  }
+  renderSessionSummary();
+  syncCollapsedSessionState();
+  const pending = snapshot.sessions.flatMap((session) => {
+    const review = kimiReviewFor(session);
+    return review ? [{ session, review }] : [];
+  }).sort((left, right) => left.session.startedAt - right.session.startedAt);
+  const ids = new Set(pending.map(({ review }) => review.request.id));
+  for (const id of dismissedKimiReviewIds) if (!ids.has(id)) dismissedKimiReviewIds.delete(id);
+  for (const id of revealedKimiReviewIds) if (!ids.has(id)) revealedKimiReviewIds.delete(id);
+  if (activeKimiReview && !ids.has(activeKimiReview.requestId)) {
+    const visible = kimiReviewIsVisible();
+    const origin = activeKimiReview.kind === "question" ? questionOriginView
+      : activeKimiReview.kind === "permission" ? permissionOriginView : planOriginView;
+    if (activeQuestionSource === "kimi") clearActiveQuestionRequest();
+    if (activePermissionSource === "kimi") clearActivePermissionRequest();
+    if (activePlanSource === "kimi") clearActivePlanRequest();
+    activeKimiReview = undefined;
+    if (visible) {
+      questionOriginView = undefined;
+      permissionOriginView = undefined;
+      planOriginView = undefined;
+      const returnView = returnViewForReview(origin);
+      switchContentView(returnView === "detail" && !hasSelectedSessionDetail() ? "sessions" : returnView);
+    }
+  }
+  const current = kimiReviewIsVisible()
+    ? pending.find(({ review }) => review.request.id === activeKimiReview?.requestId)
+    : undefined;
+  const next = current ?? pending.find(({ review }) =>
+    !dismissedKimiReviewIds.has(review.request.id) && !revealedKimiReviewIds.has(review.request.id));
+  if (next) renderKimiReview(next.review, next.session, !revealedKimiReviewIds.has(next.review.request.id));
+};
+
+const refreshKimiSessions = async () => {
+  if (!isTauriRuntime) return;
+  try {
+    renderKimiSnapshot(await invoke<KimiSnapshot>("list_kimi_sessions"));
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    renderKimiSnapshot({ ...latestKimiSnapshot, connected: false, integrationError: message, sessions: [], interactions: [] });
+  }
+};
+
 const refreshOpenCodeSessions = async () => {
   if (refreshingOpenCodeSessions || !isTauriRuntime) return;
   refreshingOpenCodeSessions = true;
@@ -6459,6 +6837,7 @@ sessionDetailBack.addEventListener("click", () => {
   selectedDshSessionKey = undefined;
   selectedZCodeSessionKey = undefined;
   renderedDetailSignature = undefined;
+  selectedKimiSessionId = undefined;
   switchContentView("sessions");
 });
 
@@ -6692,6 +7071,7 @@ const updateInterfaceSettings = (nextSettings: Partial<InterfaceSettings>) => {
   applyInterfaceSettings();
   syncInterfaceControls();
   cardSizeAnimator.refresh();
+  syncSessionProductMenuHeight();
   scheduleNativeInterfaceLayout();
 };
 
@@ -7214,7 +7594,9 @@ type HookAgentId =
   | "mimo"
   | "pi"
   | "deepSeekHarness"
-  | "zCode";
+  | "zCode"
+  | "geminiCli"
+  | "kimiCode";
 type HookIntegrationStatus = {
   id: HookAgentId;
   name: string;
@@ -7279,6 +7661,12 @@ const browserHookIntegrations: HookIntegrationStatus[] = [
     hookInstalled: false,
     installPath: "D:\\software\\ZCode\\ZCode.exe",
     installedVersion: "3.10.1",
+  },
+  {
+    id: "kimiCode",
+    name: "Kimi Code",
+    agentInstalled: true,
+    hookInstalled: false,
   },
 ];
 
@@ -7376,6 +7764,8 @@ const syncHookRefreshButton = () => {
 };
 
 const hookIconUrl = (id: HookAgentId) => {
+  if (id === "geminiCli") return geminiIconUrl;
+  if (id === "kimiCode") return kimiIconUrl;
   if (id === "claudeCode") return claudeCodeIconUrl;
   if (id === "openCode") return openCodeIconUrl;
   if (id === "mimo") return mimoIconUrl;
@@ -7395,6 +7785,7 @@ const syncMimoHookStatus = () => {
 };
 
 const hookIntegrationDetail = (status: HookIntegrationStatus): string => {
+  if (status.id === "kimiCode") return "CodeCraft 会话同步 Hook";
   if (status.id === "zCode") {
     const version = status.installedVersion ?? status.runningVersions?.[0];
     return (
@@ -7430,7 +7821,11 @@ const createHookAgentButton = (status: HookIntegrationStatus) => {
             ? "dsh"
             : status.id === "zCode"
               ? "zcode"
-              : "codex";
+              : status.id === "geminiCli"
+                ? "gemini"
+                : status.id === "kimiCode"
+                  ? "kimi"
+                  : "codex";
   mark.setAttribute("aria-hidden", "true");
   const iconUrl = hookIconUrl(status.id);
   const image = document.createElement("img");
@@ -9016,7 +9411,9 @@ const createSessionButton = (session: UnifiedSession): HTMLLIElement => {
               : isMimoSession(session)
                   ? mimoSessionKey(session) === selectedMimoSessionKey
                   : isGeminiSession(session)
-                    ? session.id === selectedGeminiSessionId
+                  ? session.id === selectedGeminiSessionId
+                  : isKimiSession(session)
+                    ? session.id === selectedKimiSessionId
                   : session.id === selectedSessionId,
     ),
   );
@@ -9036,6 +9433,8 @@ const createSessionButton = (session: UnifiedSession): HTMLLIElement => {
                 ? setSelectedMimoSession(mimoSessionKey(session))
                 : isGeminiSession(session)
                   ? setSelectedGeminiSession(session.id)
+                  : isKimiSession(session)
+                    ? setSelectedKimiSession(session.id)
                 : setSelectedSession(session.id),
   );
 
@@ -9411,6 +9810,7 @@ const refreshAllSessions = async () => {
       dsh: activeSessionCount(bundle.dsh.sessions),
       zcode: activeSessionCount(bundle.zcode.sessions),
       gemini: activeSessionCount(bundle.gemini.sessions),
+      kimi: activeSessionCount(bundle.kimi.sessions),
     };
     if (snapshotNeedsRender("claude", bundle.claude, latestClaudeSnapshot)) {
       renderSessionSnapshot(bundle.claude);
@@ -9436,6 +9836,9 @@ const refreshAllSessions = async () => {
     if (snapshotNeedsRender("gemini", bundle.gemini, latestGeminiSnapshot)) {
       renderGeminiSnapshot(bundle.gemini);
     }
+    if (snapshotNeedsRender("kimi", bundle.kimi, latestKimiSnapshot)) {
+      renderKimiSnapshot(bundle.kimi);
+    }
     latestActiveSessionCounts = {
       claude: activeSessionCount(latestSessions),
       codex: activeSessionCount(latestCodexSnapshot.sessions),
@@ -9445,6 +9848,7 @@ const refreshAllSessions = async () => {
       dsh: activeSessionCount(latestDshSnapshot.sessions),
       zcode: activeSessionCount(latestZCodeSnapshot.sessions),
       gemini: activeSessionCount(latestGeminiSnapshot.sessions),
+      kimi: activeSessionCount(latestKimiSnapshot.sessions),
     };
     renderSessionSummary();
   } catch (error: unknown) {
@@ -9458,6 +9862,7 @@ const refreshAllSessions = async () => {
       refreshDshSessions(),
       refreshZCodeSessions(),
       refreshGeminiSessions(),
+      refreshKimiSessions(),
     ]);
   } finally {
     refreshingAllSessions = false;
@@ -9525,6 +9930,7 @@ panelContentMutationObserver.observe(panelBody, {
 });
 
 window.addEventListener("resize", () => {
+  syncSessionProductMenuHeight();
   refreshQuestionPreviewClippedState();
   refreshPlanPreviewClippedState();
 });
@@ -9571,7 +9977,8 @@ const dismissSessionFromList = (data: CodeCraftContextData | undefined) => {
     data.sessionSource === "pi" ||
       data.sessionSource === "dsh" ||
       data.sessionSource === "zcode" ||
-      data.sessionSource === "mimo"
+      data.sessionSource === "mimo" ||
+      data.sessionSource === "kimi"
       ? sessionKey
       : `${data.sessionSource}:${sessionKey}`,
   );
@@ -9584,7 +9991,8 @@ const dismissSessionFromList = (data: CodeCraftContextData | undefined) => {
     (data.sessionSource === "pi" && selectedPiSessionKey === sessionKey) ||
     (data.sessionSource === "dsh" && selectedDshSessionKey === sessionKey) ||
     (data.sessionSource === "zcode" && selectedZCodeSessionKey === sessionKey) ||
-    (data.sessionSource === "mimo" && selectedMimoSessionKey === sessionKey)
+    (data.sessionSource === "mimo" && selectedMimoSessionKey === sessionKey) ||
+    (data.sessionSource === "kimi" && selectedKimiSessionId === data.sessionId)
   ) {
     selectedSessionId = undefined;
     selectedCodexSessionId = undefined;
@@ -9641,6 +10049,11 @@ const dismissSessionFromList = (data: CodeCraftContextData | undefined) => {
       sessions: latestDshSnapshot.sessions.filter(
         (session) => dshSessionKey(session) !== sessionKey,
       ),
+    });
+  } else if (data.sessionSource === "kimi") {
+    renderKimiSnapshot({
+      ...latestKimiSnapshot,
+      sessions: latestKimiSnapshot.sessions.filter((session) => session.id !== data.sessionId),
     });
   } else {
     renderZCodeSnapshot({
@@ -9705,7 +10118,8 @@ const contextMenu = new ContextMenuController<CodeCraftContextData>(
           sessionSource === "mimo" ||
           sessionSource === "pi" ||
           sessionSource === "dsh" ||
-          sessionSource === "zcode")
+          sessionSource === "zcode" ||
+          sessionSource === "kimi")
       ) {
         return {
           kind: "session",
@@ -9904,6 +10318,7 @@ if (isTauriRuntime) {
   const previewQuestionEnabled = previewParameters.has("previewQuestion");
   const previewPlanEnabled = previewParameters.has("previewPlan");
   const previewCodexPlanEnabled = previewParameters.has("previewCodexPlan");
+  const previewKimi = previewParameters.get("previewKimi");
   const requestedPreviewQuestionCount = Number(
     previewParameters.get("previewQuestionCount") ?? "4",
   );
@@ -10128,6 +10543,36 @@ if (isTauriRuntime) {
         ]
       : [],
   });
+  if (previewKimi === "question" || previewKimi === "permission" || previewKimi === "plan") {
+    const now = Date.now();
+    const interaction: KimiSession["pendingInteractions"][number] = {
+      observationId: "preview-kimi-observation",
+      interactionKey: "preview-kimi:call",
+      kind: previewKimi === "question" ? "askUser" : previewKimi === "plan" ? "exitPlanMode" : "shell",
+      status: "observed",
+      title: previewKimi === "question" ? "Kimi 请求输入" : previewKimi === "plan" ? "Kimi 计划观察" : "Kimi Shell 活动",
+      detail: "git diff --stat",
+      toolName: previewKimi === "question" ? "AskUserQuestion" : previewKimi === "plan" ? "ExitPlanMode" : "Shell",
+      toolCallId: "preview-kimi-call",
+      toolInput: null,
+      questions: [{ header: "修改范围", question: "这次需要更新哪些文件？", options: [{ label: "仅 README.md" }, { label: "同时更新示例" }] },
+        { header: "输出语言", question: "文档使用哪种语言？", options: [{ label: "中文" }, { label: "英文" }] }],
+      planFilename: null,
+      plan: "# 更新项目文档\n\n1. 阅读 README.md 和相关示例。\n2. 补充安装与运行步骤。\n3. 检查命令和路径是否准确。",
+      planReadError: null,
+      capturedAt: now,
+      truncated: false,
+      navigationAvailable: false,
+    };
+    renderHookIntegrations(browserHookIntegrations.map((status) => status.id === "kimiCode" ? { ...status, hookInstalled: true } : status), false);
+    renderKimiSnapshot({ ...latestKimiSnapshot, connected: true, version: 1,
+      interactions: [interaction],
+      sessions: [{ id: "preview-kimi", kimiSessionId: "preview-kimi", integrationSessionKey: "preview-kimi",
+        hookInstallId: null, clientType: "kimi_code_cli", title: "Kimi Code", cwd: "C:\\work\\CodeCraft",
+        status: previewKimi === "question" ? "waitingForInput" : "toolRunning", startedAt: now, updatedAt: now,
+        endedAt: null, activities: [], outputs: [], pendingInteractions: [interaction], terminalBinding: null, integrationStatus: "running" }],
+    });
+  }
   if (previewCodexPlanEnabled) {
     renderCodexSnapshot({
       connected: true,
@@ -10158,7 +10603,7 @@ if (isTauriRuntime) {
             "# 实行计划",
             "",
             "1. 从 Stop Hook 中识别结构化计划内容",
-            "2. 将计划作为只读交互写入 Codex 会话状态",
+            "2. 将计划写入 Codex 会话状态",
             "3. 在共享计划视图中展示 Markdown 正文",
             "4. 通过“前往 Codex”切换到对应终端或桌面任务",
           ].join("\n"),

@@ -11,6 +11,7 @@ pub(crate) struct HookInstallConfig {
     pub claude_code: bool,
     pub codex: bool,
     pub gemini_cli: bool,
+    pub kimi_code: bool,
     pub open_code: bool,
     pub mimo: bool,
     pub pi: bool,
@@ -24,6 +25,7 @@ impl Default for HookInstallConfig {
             claude_code: false,
             codex: false,
             gemini_cli: false,
+            kimi_code: false,
             open_code: false,
             mimo: false,
             pi: false,
@@ -73,6 +75,7 @@ mod tests {
         assert!(!config.claude_code);
         assert!(!config.codex);
         assert!(!config.gemini_cli);
+        assert!(!config.kimi_code);
         assert!(!config.open_code);
         assert!(!config.mimo);
         assert!(!config.pi);
@@ -86,6 +89,7 @@ mod tests {
         assert!(!config.claude_code);
         assert!(config.codex);
         assert!(!config.gemini_cli);
+        assert!(!config.kimi_code);
         assert!(!config.open_code);
         assert!(!config.mimo);
         assert!(!config.pi);

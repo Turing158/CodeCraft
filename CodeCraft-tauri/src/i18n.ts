@@ -81,8 +81,8 @@ const ENGLISH: Record<string, string> = {
   "计划文件：": "Plan file: ",
   "Gemini 交互只能在运行 Gemini 的设备上处理；网页仅供查看。请使用该设备的 CodeCraft 桌面端或原终端。":
     "Gemini interactions must be handled on the device running Gemini. This page is view-only; use CodeCraft Desktop or the original terminal on that device.",
-  "Gemini Hook 只读观察，不提供审批、回答或输入注入。":
-    "The Gemini Hook is read-only observation; it cannot approve, answer, or inject terminal input.",
+  "Gemini Hook 仅观察，不提供审批、回答或输入注入。":
+    "The Gemini Hook only observes; it cannot approve, answer, or inject terminal input.",
   "计划文件不可读取": "The plan file cannot be read",
   "本地预览，可能与 Gemini 实际变更不同":
     "Local preview; it may differ from Gemini's actual change",
@@ -366,8 +366,8 @@ const ENGLISH: Record<string, string> = {
   "关闭时网页只能查看；开启后拿到令牌的人可以代你决定。":
     "When off, the web console is read-only. When on, token holders can decide for you.",
   允许网页提交决定: "Allow decisions from the web",
-  "Codex 的问题与计划仍然只读，只能在原终端完成。":
-    "Codex questions and plans remain read-only and must be completed in the original terminal.",
+  "Codex 的问题与计划需要在原终端完成。":
+    "Codex questions and plans must be completed in the original terminal.",
   记录远程决定: "Log remote decisions",
   "写入 lan-audit.log，标记来源为局域网。":
     "Write to lan-audit.log and mark the source as LAN.",
@@ -492,7 +492,7 @@ const ENGLISH: Record<string, string> = {
   请先为该事件选择音频文件: "Choose an audio file for this event first",
   启动失败: "Failed to start",
   "运行中 · 可审批": "Running · approvals enabled",
-  "运行中 · 只读": "Running · read-only",
+  "运行中 · 仅查看": "Running · view-only",
   "端口需要是 1024–65535 之间的整数":
     "Port must be an integer from 1024 to 65535",
   "端口需要在 1024–65535 之间": "Port must be between 1024 and 65535",
@@ -505,8 +505,8 @@ const ENGLISH: Record<string, string> = {
     "Web decisions are enabled: token holders can allow tool calls for you.",
   "网页可以提交 Claude 的权限、问题与计划决定，以及 Codex 的审批。":
     "The web console can submit Claude permissions, questions, and plans, plus Codex approvals.",
-  "网页当前只读，只能查看会话内容。":
-    "The web console is read-only and can only view session content.",
+  "网页当前仅供查看会话内容。":
+    "The web console can only view session content.",
   "服务运行中，端口与令牌暂不可修改。关闭服务后即可调整。":
     "Port and token cannot be changed while the service is running. Turn it off first.",
   "此问题来自外部 Codex 会话，请在原终端或 Codex 桌面任务中完成回答。":

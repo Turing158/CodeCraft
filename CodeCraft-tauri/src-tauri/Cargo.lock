@@ -549,6 +549,7 @@ version = "0.1.1"
 dependencies = [
  "axum",
  "qrcode",
+ "regex",
  "rodio",
  "serde",
  "serde_json",
@@ -558,9 +559,11 @@ dependencies = [
  "tauri-plugin-single-instance",
  "tokio",
  "tokio-stream",
+ "toml 0.8.2",
  "url",
  "uuid",
  "windows",
+ "windows-sys 0.61.2",
 ]
 
 [[package]]
