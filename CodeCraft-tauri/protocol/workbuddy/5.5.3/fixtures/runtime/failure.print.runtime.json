@@ -1,0 +1,163 @@
+{
+  "schemaVersion": 1,
+  "evidenceKind": "real-bundled-cli-with-deterministic-local-model",
+  "scenario": "failure",
+  "transport": "print",
+  "desktopUiValidated": false,
+  "protocolFrozen": false,
+  "provenance": {
+    "capturedAt": "2026-09-12T08:40:44.362Z",
+    "entrySha256": "44bb8a78f45071b8df629ccc9865472c02d0f08c0cd4144f858615173c50fe46",
+    "bundleSha256": "ab94eef203e30ac65330b269fc61526ee82d38bf75ed05bc18f28ecd365ba4d6",
+    "cliVersions": [
+      "2.137.1"
+    ],
+    "entry": "<WORKBUDDY_INSTALL>/resources/app.asar.unpacked/cli/bin/codebuddy",
+    "originalCaptureSha256": "a7e47072b1cd730c62fe21a137db18faa56f4fe6c2b164c2e2fc1c3a094254b6",
+    "isolatedSettings": true,
+    "localModelOnly": true
+  },
+  "policy": {
+    "tool": "Read",
+    "args": {
+      "file_path": "<WORKSPACE>/missing.txt"
+    },
+    "decision": "allow"
+  },
+  "result": {
+    "exitCode": 0,
+    "promptCompleted": true,
+    "verifierTimedOut": false,
+    "toolCallSentByLocalModel": true,
+    "workspaceFiles": [
+      "input.txt"
+    ],
+    "nativePermissionRequests": 0,
+    "hookEventOrder": [
+      "SessionStart",
+      "UserPromptSubmit",
+      "PreToolUse",
+      "PostToolUse",
+      "Stop"
+    ]
+  },
+  "nativeRequests": [],
+  "toolResults": [
+    {
+      "toolUseId": "call_codecraft_fixture_001",
+      "isError": false,
+      "rawResponse": {
+        "is_error": true,
+        "tool_error_code": "1001"
+      },
+      "text": "<tool_use_error>File does not exist. Did you mean input.txt?</tool_use_error>"
+    }
+  ],
+  "hooks": [
+    {
+      "input": {
+        "session_id": "native-session-1",
+        "transcript_path": "<TRANSCRIPT_1>",
+        "hook_event_name": "SessionStart",
+        "source": "startup",
+        "agent_type": "cli",
+        "permission_mode": "default",
+        "client": "CLI",
+        "version": "2.137.1",
+        "model": "fixture-model"
+      },
+      "response": {},
+      "originalSha256": "58ba1e9fb44a1ad9905d08b371c06be1ac3bdb4d9b3ce50ef470def8eebeaf16"
+    },
+    {
+      "input": {
+        "session_id": "native-session-1",
+        "transcript_path": "<TRANSCRIPT_1>",
+        "cwd": "<WORKSPACE>",
+        "hook_event_name": "UserPromptSubmit",
+        "prompt": "Run the single isolated CodeCraft protocol fixture tool call, then stop.",
+        "agent_type": "cli",
+        "permission_mode": "default",
+        "client": "CLI",
+        "version": "2.137.1",
+        "model": "fixture-model"
+      },
+      "response": {},
+      "originalSha256": "fa8c5e650d519e3c903d44eee60ee3bb8af8dec4efc352e274e9e34306d7fd20"
+    },
+    {
+      "input": {
+        "session_id": "native-session-1",
+        "transcript_path": "<TRANSCRIPT_1>",
+        "cwd": "<WORKSPACE>",
+        "hook_event_name": "PreToolUse",
+        "tool_name": "Read",
+        "tool_input": {
+          "file_path": "<WORKSPACE>/missing.txt"
+        },
+        "call_id": "call_codecraft_fixture_001",
+        "tool_use_id": "call_codecraft_fixture_001",
+        "agent_type": "cli",
+        "permission_mode": "default",
+        "client": "CLI",
+        "version": "2.137.1",
+        "generation_id": "<RUNTIME_ID>",
+        "model": "fixture-model"
+      },
+      "response": {
+        "hookSpecificOutput": {
+          "hookEventName": "PreToolUse",
+          "permissionDecision": "allow",
+          "permissionDecisionReason": "CodeCraft isolated protocol verification"
+        }
+      },
+      "originalSha256": "e8f5fdcc81c1e10f0cce6f4fb3e54a584636b918b98ff2ab79c0c156953d0ac3"
+    },
+    {
+      "input": {
+        "session_id": "native-session-1",
+        "transcript_path": "<TRANSCRIPT_1>",
+        "cwd": "<WORKSPACE>",
+        "hook_event_name": "PostToolUse",
+        "tool_name": "Read",
+        "tool_input": {
+          "file_path": "<WORKSPACE>/missing.txt"
+        },
+        "tool_response": {
+          "is_error": true,
+          "tool_error_code": "1001"
+        },
+        "call_id": "call_codecraft_fixture_001",
+        "tool_use_id": "call_codecraft_fixture_001",
+        "agent_type": "cli",
+        "permission_mode": "default",
+        "client": "CLI",
+        "version": "2.137.1",
+        "generation_id": "<RUNTIME_ID>",
+        "model": "fixture-model"
+      },
+      "response": {},
+      "originalSha256": "5dc7cf924db042bcefe4469f5498a939e15f067515330ccc5c6c37913eec8342"
+    },
+    {
+      "input": {
+        "session_id": "native-session-1",
+        "transcript_path": "<TRANSCRIPT_1>",
+        "cwd": "<WORKSPACE>",
+        "hook_event_name": "Stop",
+        "stop_hook_active": false,
+        "agent_type": "cli",
+        "last_assistant_message": "CodeCraft fixture completed.",
+        "background_tasks": [],
+        "session_crons": [],
+        "permission_mode": "default",
+        "client": "CLI",
+        "version": "2.137.1",
+        "generation_id": "<RUNTIME_ID>",
+        "model": "fixture-model"
+      },
+      "response": {},
+      "originalSha256": "bd97a929c7d53467489a7f5aaafa5bf3d7de896b70436a86a0615096f2f1369f"
+    }
+  ]
+}

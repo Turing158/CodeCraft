@@ -1,0 +1,158 @@
+{
+  "schemaVersion": 1,
+  "evidenceKind": "real-bundled-cli-with-deterministic-local-model",
+  "scenario": "question-multiple",
+  "transport": "acp",
+  "desktopUiValidated": false,
+  "protocolFrozen": false,
+  "provenance": {
+    "capturedAt": "2026-09-12T08:40:59.028Z",
+    "entrySha256": "44bb8a78f45071b8df629ccc9865472c02d0f08c0cd4144f858615173c50fe46",
+    "bundleSha256": "ab94eef203e30ac65330b269fc61526ee82d38bf75ed05bc18f28ecd365ba4d6",
+    "cliVersions": [
+      "2.137.1"
+    ],
+    "entry": "<WORKBUDDY_INSTALL>/resources/app.asar.unpacked/cli/bin/codebuddy",
+    "originalCaptureSha256": "03cf7051a21a334616299441ee12c7b4196900b5ec9442596ef26d78acde3f2b",
+    "isolatedSettings": true,
+    "localModelOnly": true
+  },
+  "policy": {
+    "tool": "AskUserQuestion",
+    "args": {
+      "questions": [
+        {
+          "header": "Mode",
+          "question": "Which mode?",
+          "options": [
+            {
+              "label": "Read",
+              "description": "Observe"
+            },
+            {
+              "label": "Full",
+              "description": "Verify"
+            }
+          ],
+          "multiSelect": true
+        }
+      ]
+    },
+    "decision": "allow",
+    "modifiedInput": {
+      "answers": {
+        "Which mode?": "Read, Full"
+      }
+    }
+  },
+  "result": {
+    "exitCode": null,
+    "promptCompleted": true,
+    "verifierTimedOut": false,
+    "toolCallSentByLocalModel": true,
+    "workspaceFiles": [
+      "input.txt"
+    ],
+    "nativePermissionRequests": 1,
+    "hookEventOrder": [
+      "UserPromptSubmit",
+      "SessionStart",
+      "Stop"
+    ]
+  },
+  "nativeRequests": [
+    {
+      "method": "session/request_permission",
+      "sessionId": "native-session-1",
+      "toolName": "AskUserQuestion",
+      "input": {
+        "questions": [
+          {
+            "header": "Mode",
+            "question": "Which mode?",
+            "options": [
+              {
+                "label": "Read",
+                "description": "Observe"
+              },
+              {
+                "label": "Full",
+                "description": "Verify"
+              }
+            ],
+            "multiSelect": true
+          }
+        ]
+      },
+      "options": [
+        {
+          "kind": "allow_always",
+          "name": "Always Allow",
+          "optionId": "allow_always"
+        },
+        {
+          "kind": "allow_once",
+          "name": "Allow",
+          "optionId": "allow"
+        },
+        {
+          "kind": "reject_once",
+          "name": "Reject",
+          "optionId": "reject"
+        }
+      ],
+      "verifierResponse": "reject_once_or_cancelled; no approval or answer supplied"
+    }
+  ],
+  "toolResults": [],
+  "hooks": [
+    {
+      "input": {
+        "session_id": "native-session-1",
+        "transcript_path": "<TRANSCRIPT_1>",
+        "cwd": "<WORKSPACE>",
+        "hook_event_name": "UserPromptSubmit",
+        "prompt": "Run the single isolated CodeCraft protocol fixture tool call, then stop.",
+        "permission_mode": "default",
+        "client": "CLI",
+        "version": "2.137.1",
+        "model": "fixture-model"
+      },
+      "response": {},
+      "originalSha256": "2e233d5e592031ad0b02b2e9b76a98b3919d7b5dde548317dd09c52abc057f3f"
+    },
+    {
+      "input": {
+        "session_id": "native-session-1",
+        "transcript_path": "<TRANSCRIPT_1>",
+        "hook_event_name": "SessionStart",
+        "source": "startup",
+        "permission_mode": "default",
+        "client": "CLI",
+        "version": "2.137.1",
+        "model": "fixture-model"
+      },
+      "response": {},
+      "originalSha256": "e92d890142e9a5fad9f7a3497e887dd9ebcd6b4993152e40e182436221631fab"
+    },
+    {
+      "input": {
+        "session_id": "native-session-1",
+        "transcript_path": "<TRANSCRIPT_1>",
+        "cwd": "<WORKSPACE>",
+        "hook_event_name": "Stop",
+        "stop_hook_active": false,
+        "agent_type": "cli",
+        "background_tasks": [],
+        "session_crons": [],
+        "permission_mode": "default",
+        "client": "CLI",
+        "version": "2.137.1",
+        "generation_id": "<RUNTIME_ID>",
+        "model": "fixture-model"
+      },
+      "response": {},
+      "originalSha256": "275d644076aa9eeaf57f5687c67e7b2788978773e0ba2c8e42b62a6ef9954839"
+    }
+  ]
+}

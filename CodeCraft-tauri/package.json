@@ -7,6 +7,8 @@
     "dev": "vite",
     "build": "tsc && vite build && vite build --config vite.lan.config.ts",
     "test": "vitest run",
+    "test:workbuddy-plugin": "node --test scripts/verify-workbuddy-plugin.mjs",
+    "test:workbuddy-fixtures": "node --test scripts/verify-workbuddy-fixtures.mjs",
     "preview": "vite preview",
     "tauri": "tauri",
     "package:single-exe": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/package-single-exe.ps1",

@@ -10,11 +10,25 @@ lerna-debug.log*
 node_modules
 dist
 dist-ssr
+.workbuddy-verification/
+# WorkBuddy historical notes and unused protocol examples
+/protocol/workbuddy/5.5.3/P0-decision.md
+/protocol/workbuddy/5.5.3/implementation-status.md
+/protocol/workbuddy/5.5.3/fixtures/ask-user-question.synthetic.json
+/protocol/workbuddy/5.5.3/fixtures/exit-plan-mode.synthetic.json
+/protocol/workbuddy/5.5.3/fixtures/post-tool-use-failure.json
+/protocol/workbuddy/5.5.3/fixtures/pre-tool-use.json
+/protocol/workbuddy/5.5.3/fixtures/session-start.json
+
 artifacts
 *.local
 *.test
 *.test.*
 !src/kimi-sessions.test.ts
+!src/workbuddy-sessions.test.ts
+!src/workbuddy-plugin.test.ts
+!src/workbuddy-hook-status.test.ts
+!web/lan/workbuddy-snapshot.test.ts
 
 
 # Rust and Tauri generated output
@@ -51,3 +65,4 @@ src-tauri/icons/icon/*
 !src-tauri/icons/icon/mimo.svg
 !src-tauri/icons/icon/gemini.svg
 !src-tauri/icons/icon/kimi.svg
+!src-tauri/icons/icon/workbuddy.svg

@@ -1,0 +1,153 @@
+{
+  "schemaVersion": 1,
+  "evidenceKind": "real-bundled-cli-with-deterministic-local-model",
+  "scenario": "fallback",
+  "transport": "print",
+  "desktopUiValidated": false,
+  "protocolFrozen": false,
+  "provenance": {
+    "capturedAt": "2026-09-12T08:40:22.770Z",
+    "entrySha256": "44bb8a78f45071b8df629ccc9865472c02d0f08c0cd4144f858615173c50fe46",
+    "bundleSha256": "ab94eef203e30ac65330b269fc61526ee82d38bf75ed05bc18f28ecd365ba4d6",
+    "cliVersions": [
+      "2.137.1"
+    ],
+    "entry": "<WORKBUDDY_INSTALL>/resources/app.asar.unpacked/cli/bin/codebuddy",
+    "originalCaptureSha256": "e8612132334f0626028341b9002e55863388c99f9a7bd96e3abfa2458f3e520b",
+    "isolatedSettings": true,
+    "localModelOnly": true
+  },
+  "policy": {
+    "tool": "Write",
+    "args": {
+      "file_path": "<WORKSPACE>/fallback.txt",
+      "content": "requires native approval\n"
+    }
+  },
+  "result": {
+    "exitCode": 0,
+    "promptCompleted": true,
+    "verifierTimedOut": false,
+    "toolCallSentByLocalModel": true,
+    "workspaceFiles": [
+      "input.txt"
+    ],
+    "nativePermissionRequests": 0,
+    "hookEventOrder": [
+      "SessionStart",
+      "UserPromptSubmit",
+      "PreToolUse",
+      "PermissionDenied",
+      "Stop"
+    ]
+  },
+  "nativeRequests": [],
+  "toolResults": [
+    {
+      "toolUseId": "call_codecraft_fixture_001",
+      "isError": false,
+      "rawResponse": null,
+      "text": "Error: Permission to use Write has been denied because this tool requires approval but permission prompts are not available in non-interactive mode. IMPORTANT: You *may* attempt to accomplish this action using other tools that might naturally be used to accomplish this goal. But you *should not* attempt to work around this denial in malicious ways. You should only try to work around this restriction in reasonable ways that do not attempt to bypass the intent behind this denial. If you believe this capability is essential to complete the user's request, STOP and explain to the user what you were trying to do and why you need this permission. Let the user decide how to proceed. To allow this tool, the user can either: (1) re-run with codebuddy -p -y \"<prompt>\" or codebuddy -p --permission-mode bypassPermissions \"<prompt>\" to bypass all permission checks, or (2) add \"Write\" to the \"permissions.allow\" list in settings to permanently allow this tool."
+    }
+  ],
+  "hooks": [
+    {
+      "input": {
+        "session_id": "native-session-1",
+        "transcript_path": "<TRANSCRIPT_1>",
+        "hook_event_name": "SessionStart",
+        "source": "startup",
+        "agent_type": "cli",
+        "permission_mode": "default",
+        "client": "CLI",
+        "version": "2.137.1",
+        "model": "fixture-model"
+      },
+      "response": {},
+      "originalSha256": "bb100d7dc97a6eb91963e7213a343341c6937a19ae4f99134ca5fc293acc6312"
+    },
+    {
+      "input": {
+        "session_id": "native-session-1",
+        "transcript_path": "<TRANSCRIPT_1>",
+        "cwd": "<WORKSPACE>",
+        "hook_event_name": "UserPromptSubmit",
+        "prompt": "Run the single isolated CodeCraft protocol fixture tool call, then stop.",
+        "agent_type": "cli",
+        "permission_mode": "default",
+        "client": "CLI",
+        "version": "2.137.1",
+        "model": "fixture-model"
+      },
+      "response": {},
+      "originalSha256": "289912c717dc0bc3ca73ec81affd50e4c46509372d44e9b25e724434ab1ccee8"
+    },
+    {
+      "input": {
+        "session_id": "native-session-1",
+        "transcript_path": "<TRANSCRIPT_1>",
+        "cwd": "<WORKSPACE>",
+        "hook_event_name": "PreToolUse",
+        "tool_name": "Write",
+        "tool_input": {
+          "file_path": "<WORKSPACE>/fallback.txt",
+          "content": "requires native approval\n"
+        },
+        "call_id": "call_codecraft_fixture_001",
+        "tool_use_id": "call_codecraft_fixture_001",
+        "agent_type": "cli",
+        "permission_mode": "default",
+        "client": "CLI",
+        "version": "2.137.1",
+        "generation_id": "<RUNTIME_ID>",
+        "model": "fixture-model"
+      },
+      "response": {},
+      "originalSha256": "af1abef43802b9161eb04b38602cc1e2acd7b0dd5ab010f18dc6d4830a733c1f"
+    },
+    {
+      "input": {
+        "session_id": "native-session-1",
+        "transcript_path": "<TRANSCRIPT_1>",
+        "cwd": "<WORKSPACE>",
+        "hook_event_name": "PermissionDenied",
+        "tool_name": "Write",
+        "tool_input": {
+          "file_path": "<WORKSPACE>/fallback.txt",
+          "content": "requires native approval\n"
+        },
+        "reason": "Permission to use Write has been denied because this tool requires approval but permission prompts are not available in non-interactive mode. IMPORTANT: You *may* attempt to accomplish this action using other tools that might naturally be used to accomplish this goal. But you *should not* attempt to work around this denial in malicious ways. You should only try to work around this restriction in reasonable ways that do not attempt to bypass the intent behind this denial. If you believe this capability is essential to complete the user's request, STOP and explain to the user what you were trying to do and why you need this permission. Let the user decide how to proceed. To allow this tool, the user can either: (1) re-run with codebuddy -p -y \"<prompt>\" or codebuddy -p --permission-mode bypassPermissions \"<prompt>\" to bypass all permission checks, or (2) add \"Write\" to the \"permissions.allow\" list in settings to permanently allow this tool.",
+        "agent_type": "cli",
+        "call_id": "call_codecraft_fixture_001",
+        "tool_use_id": "call_codecraft_fixture_001",
+        "permission_mode": "default",
+        "client": "CLI",
+        "version": "2.137.1",
+        "generation_id": "<RUNTIME_ID>",
+        "model": "fixture-model"
+      },
+      "response": {},
+      "originalSha256": "5d24e8a2eb349e5531e4f915e82acafa1f08b0462096821ee4be4a704ce23b0b"
+    },
+    {
+      "input": {
+        "session_id": "native-session-1",
+        "transcript_path": "<TRANSCRIPT_1>",
+        "cwd": "<WORKSPACE>",
+        "hook_event_name": "Stop",
+        "stop_hook_active": false,
+        "agent_type": "cli",
+        "last_assistant_message": "CodeCraft fixture completed.",
+        "background_tasks": [],
+        "session_crons": [],
+        "permission_mode": "default",
+        "client": "CLI",
+        "version": "2.137.1",
+        "generation_id": "<RUNTIME_ID>",
+        "model": "fixture-model"
+      },
+      "response": {},
+      "originalSha256": "0487f90ac4d6dfb0a3e68d1889c2de5b6ea74341f2e1ae405e52d7b400eb8bf8"
+    }
+  ]
+}

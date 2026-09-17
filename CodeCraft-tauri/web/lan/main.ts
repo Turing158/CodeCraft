@@ -242,6 +242,10 @@ function syncSegmented(container: HTMLElement, value: string, key: string) {
 /* ---------- layout ---------- */
 
 const syncLayout = () => {
+  if (findEntry(snapshot, selectedKey)?.source === "workbuddy") {
+    selectedKey = undefined;
+    view = "list";
+  }
   const hasSelection = Boolean(findEntry(snapshot, selectedKey));
   if (
     shouldAutoSelectFirst(
@@ -250,7 +254,7 @@ const syncLayout = () => {
       filteredEntries().length,
     )
   ) {
-    selectedKey = filteredEntries()[0]?.key;
+    selectedKey = filteredEntries().find((entry) => entry.source !== "workbuddy")?.key;
     questionRequestId = undefined;
     renderedReviewSignature = undefined;
     renderSessionList();
@@ -505,13 +509,20 @@ const createSessionCardView = (key: string): SessionCardView => {
 
   row.append(source, title, time);
   card.append(row, status, pending);
-  card.addEventListener("click", () => selectEntry(key, "detail"));
+  card.addEventListener("click", () => {
+    if (findEntry(snapshot, key)?.source === "workbuddy") return;
+    selectEntry(key, "detail");
+  });
   item.append(card);
 
   return { item, card, source, title, time, status, pending };
 };
 
 const updateSessionCardView = (view: SessionCardView, entry: ConsoleEntry) => {
+  const workbuddy = entry.source === "workbuddy";
+  view.card.disabled = workbuddy;
+  view.card.setAttribute("aria-disabled", String(workbuddy));
+  view.card.title = workbuddy ? "WorkBuddy 会话详情已禁用" : "打开会话详情";
   view.card.dataset.pending = String(entry.pending !== null);
   view.card.setAttribute("aria-current", String(entry.key === selectedKey));
   swapText(
@@ -524,9 +535,11 @@ const updateSessionCardView = (view: SessionCardView, entry: ConsoleEntry) => {
           ? "OpenCode"
           : entry.source === "pi"
             ? "PI"
-            : entry.source === "kimi"
-              ? "Kimi Code"
-            : "DeepSeek Harness",
+      : entry.source === "kimi"
+        ? "Kimi Code"
+        : entry.source === "workbuddy"
+          ? "WorkBuddy"
+        : "DeepSeek Harness",
     motion,
   );
   swapText(view.title, entry.title, motion);
@@ -751,6 +764,8 @@ const renderReview = (entry: ConsoleEntry | undefined) => {
       ? "Gemini 交互只能在运行 Gemini 的设备上处理；网页仅供查看。请使用该设备的 CodeCraft 桌面端或原终端。"
       : entry.source === "kimi"
       ? "请在运行 Kimi 的设备上处理。"
+      : entry.source === "workbuddy"
+      ? "WorkBuddy 会话仅供查看，请在运行 WorkBuddy 的设备上处理。"
       : pending.readOnly
       ? "此请求来自外部 Codex 会话，只能在原终端或 Codex 界面完成，网页仅供查看。"
       : "桌面端未开启远程审批，网页当前仅供查看。";
@@ -760,6 +775,14 @@ const renderReview = (entry: ConsoleEntry | undefined) => {
     reviewActions.append(
       actionButton("前往 Gemini 处理", "primary", () => {
         showToast("请在运行 Gemini 的设备上打开 CodeCraft 桌面端或原终端处理。", "info");
+      }),
+    );
+  }
+
+  if (entry.source === "workbuddy" && pending.workbuddy) {
+    reviewActions.append(
+      actionButton("前往WorkBuddy中处理", "primary", () => {
+        showToast("请在运行 WorkBuddy 的设备上打开 WorkBuddy，或使用 CodeCraft 桌面端切换到 WorkBuddy 处理。", "info");
       }),
     );
   }
@@ -1064,7 +1087,9 @@ const renderDetail = () => {
             ? "PI"
             : entry.source === "kimi"
               ? "Kimi Code"
-            : "DeepSeek Harness",
+              : entry.source === "workbuddy"
+                ? "WorkBuddy"
+                : "DeepSeek Harness",
     entry.cwd ? "目录：" + entry.cwd : undefined,
     "更新于 " + formatSessionTime(entry.updatedAt),
   ]
@@ -1077,6 +1102,7 @@ const renderDetail = () => {
 };
 
 const selectEntry = (key: string, nextView: ConsoleView) => {
+  if (findEntry(snapshot, key)?.source === "workbuddy") return;
   const changed = key !== selectedKey;
   selectedKey = key;
   const previousView = view;
@@ -1106,7 +1132,9 @@ const applySnapshot = (raw: unknown) => {
   }
 
   // Surface a new request without stealing the screen from an active review.
-  const pendingEntry = visible.find((entry) => entry.pending !== null);
+  const pendingEntry = visible.find(
+    (entry) => entry.source !== "workbuddy" && entry.pending !== null,
+  );
   if (
     pendingEntry?.pending &&
     pendingEntry.pending.requestId !== autoRevealedRequestId &&

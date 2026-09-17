@@ -1,0 +1,191 @@
+{
+  "schemaVersion": 1,
+  "evidenceKind": "real-bundled-cli-with-deterministic-local-model",
+  "scenario": "tool-ask",
+  "transport": "print",
+  "desktopUiValidated": false,
+  "protocolFrozen": false,
+  "provenance": {
+    "capturedAt": "2026-09-12T08:40:15.526Z",
+    "entrySha256": "44bb8a78f45071b8df629ccc9865472c02d0f08c0cd4144f858615173c50fe46",
+    "bundleSha256": "ab94eef203e30ac65330b269fc61526ee82d38bf75ed05bc18f28ecd365ba4d6",
+    "cliVersions": [
+      "2.137.1"
+    ],
+    "entry": "<WORKBUDDY_INSTALL>/resources/app.asar.unpacked/cli/bin/codebuddy",
+    "originalCaptureSha256": "2aa58542b90f8375e4d66dbf9fd385587ca007ae04fe52b05aac5dc69e59a970",
+    "isolatedSettings": true,
+    "localModelOnly": true
+  },
+  "policy": {
+    "tool": "Write",
+    "args": {
+      "file_path": "<WORKSPACE>/ask.txt",
+      "content": "must wait for native approval\n"
+    },
+    "decision": "ask"
+  },
+  "result": {
+    "exitCode": 0,
+    "promptCompleted": true,
+    "verifierTimedOut": false,
+    "toolCallSentByLocalModel": true,
+    "workspaceFiles": [
+      "ask.txt",
+      "input.txt"
+    ],
+    "nativePermissionRequests": 0,
+    "hookEventOrder": [
+      "SessionStart",
+      "UserPromptSubmit",
+      "PreToolUse",
+      "PreToolUse",
+      "PostToolUse",
+      "Stop"
+    ]
+  },
+  "nativeRequests": [],
+  "toolResults": [
+    {
+      "toolUseId": "call_codecraft_fixture_001",
+      "isError": false,
+      "rawResponse": null,
+      "text": "Successfully created and wrote to new file: <CAPTURE_ROOT>\\workspace\\ask.txt"
+    }
+  ],
+  "hooks": [
+    {
+      "input": {
+        "session_id": "native-session-1",
+        "transcript_path": "<TRANSCRIPT_1>",
+        "hook_event_name": "SessionStart",
+        "source": "startup",
+        "agent_type": "cli",
+        "permission_mode": "default",
+        "client": "CLI",
+        "version": "2.137.1",
+        "model": "fixture-model"
+      },
+      "response": {},
+      "originalSha256": "e0129ca54343607926a710bcb17ea1f1efb50bcd5dd073b41d4611286f34f04f"
+    },
+    {
+      "input": {
+        "session_id": "native-session-1",
+        "transcript_path": "<TRANSCRIPT_1>",
+        "cwd": "<WORKSPACE>",
+        "hook_event_name": "UserPromptSubmit",
+        "prompt": "Run the single isolated CodeCraft protocol fixture tool call, then stop.",
+        "agent_type": "cli",
+        "permission_mode": "default",
+        "client": "CLI",
+        "version": "2.137.1",
+        "model": "fixture-model"
+      },
+      "response": {},
+      "originalSha256": "2f1a964b61e5db996ac24f4bb61ec73bbcaa2aff89dcc05f1a16aba6398dbfcc"
+    },
+    {
+      "input": {
+        "session_id": "native-session-1",
+        "transcript_path": "<TRANSCRIPT_1>",
+        "cwd": "<WORKSPACE>",
+        "hook_event_name": "PreToolUse",
+        "tool_name": "Write",
+        "tool_input": {
+          "file_path": "<WORKSPACE>/ask.txt",
+          "content": "must wait for native approval\n"
+        },
+        "call_id": "call_codecraft_fixture_001",
+        "tool_use_id": "call_codecraft_fixture_001",
+        "agent_type": "cli",
+        "permission_mode": "default",
+        "client": "CLI",
+        "version": "2.137.1",
+        "generation_id": "<RUNTIME_ID>",
+        "model": "fixture-model"
+      },
+      "response": {
+        "hookSpecificOutput": {
+          "hookEventName": "PreToolUse",
+          "permissionDecision": "ask",
+          "permissionDecisionReason": "CodeCraft isolated protocol verification"
+        }
+      },
+      "originalSha256": "45c555089e957d96139098d66a978094888c91c7d6a533ea721f531288cacbff"
+    },
+    {
+      "input": {
+        "session_id": "native-session-1",
+        "transcript_path": "<TRANSCRIPT_1>",
+        "cwd": "<WORKSPACE>",
+        "hook_event_name": "PreToolUse",
+        "tool_name": "Write",
+        "tool_input": {
+          "file_path": "<WORKSPACE>/ask.txt",
+          "content": "must wait for native approval\n"
+        },
+        "call_id": "call_codecraft_fixture_001",
+        "tool_use_id": "call_codecraft_fixture_001",
+        "agent_type": "cli",
+        "permission_mode": "default",
+        "client": "CLI",
+        "version": "2.137.1",
+        "generation_id": "<RUNTIME_ID>",
+        "model": "fixture-model"
+      },
+      "response": {
+        "hookSpecificOutput": {
+          "hookEventName": "PreToolUse",
+          "permissionDecision": "ask",
+          "permissionDecisionReason": "CodeCraft isolated protocol verification"
+        }
+      },
+      "originalSha256": "45c555089e957d96139098d66a978094888c91c7d6a533ea721f531288cacbff"
+    },
+    {
+      "input": {
+        "session_id": "native-session-1",
+        "transcript_path": "<TRANSCRIPT_1>",
+        "cwd": "<WORKSPACE>",
+        "hook_event_name": "PostToolUse",
+        "tool_name": "Write",
+        "tool_input": {
+          "file_path": "<WORKSPACE>/ask.txt",
+          "content": "must wait for native approval\n"
+        },
+        "tool_response": "Successfully created and wrote to new file: <CAPTURE_ROOT>\\workspace\\ask.txt",
+        "call_id": "call_codecraft_fixture_001",
+        "tool_use_id": "call_codecraft_fixture_001",
+        "agent_type": "cli",
+        "permission_mode": "default",
+        "client": "CLI",
+        "version": "2.137.1",
+        "generation_id": "<RUNTIME_ID>",
+        "model": "fixture-model"
+      },
+      "response": {},
+      "originalSha256": "ab7b3858bd9cbe62836984405bec6005b55170d5564c6f46b5c46729abc02a60"
+    },
+    {
+      "input": {
+        "session_id": "native-session-1",
+        "transcript_path": "<TRANSCRIPT_1>",
+        "cwd": "<WORKSPACE>",
+        "hook_event_name": "Stop",
+        "stop_hook_active": false,
+        "agent_type": "cli",
+        "last_assistant_message": "CodeCraft fixture completed.",
+        "background_tasks": [],
+        "session_crons": [],
+        "permission_mode": "default",
+        "client": "CLI",
+        "version": "2.137.1",
+        "generation_id": "<RUNTIME_ID>",
+        "model": "fixture-model"
+      },
+      "response": {},
+      "originalSha256": "d0b07c3b3d81db20796c3b82155f69d55b885220a9bec9b7166d3da12ce66792"
+    }
+  ]
+}

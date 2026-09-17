@@ -53,6 +53,12 @@ import {
   type KimiSession,
   type KimiSessionStatus,
 } from "./kimi-sessions";
+import {
+  workBuddySessionKey,
+  workBuddyStageLabel,
+  workBuddyVisualStatus,
+  type WorkBuddyUnifiedSession,
+} from "./workbuddy-sessions";
 
 export type UnifiedSession =
   | ClaudeSession
@@ -63,7 +69,8 @@ export type UnifiedSession =
   | ZCodeSession
   | MimoSession
   | GeminiSession
-  | KimiSession;
+  | KimiSession
+  | WorkBuddyUnifiedSession;
 
 const CODEX_VISUAL_STATUS: Record<CodexSessionStatus, ClaudeSessionStatus> = {
   working: "working",
@@ -176,11 +183,16 @@ export const isGeminiSession = (session: UnifiedSession): session is GeminiSessi
   "pendingInteractions" in session && "integrationStatus" in session && !("kimiSessionId" in session);
 export const isKimiSession = (session: UnifiedSession): session is KimiSession =>
   "kimiSessionId" in session;
+export const isWorkBuddySession = (
+  session: UnifiedSession,
+): session is WorkBuddyUnifiedSession => "workbuddyVersion" in session;
 
 export const unifiedSessionSource = (
   session: UnifiedSession,
-): "claude" | "codex" | "opencode" | "pi" | "dsh" | "zcode" | "mimo" | "gemini" | "kimi" =>
-  isCodexSession(session)
+): "claude" | "codex" | "opencode" | "pi" | "dsh" | "zcode" | "mimo" | "gemini" | "kimi" | "workbuddy" =>
+  isWorkBuddySession(session)
+    ? "workbuddy"
+    : isCodexSession(session)
     ? "codex"
     : isOpenCodeSession(session)
       ? "opencode"
@@ -199,7 +211,9 @@ export const unifiedSessionSource = (
                   : "claude";
 
 export const unifiedSessionKey = (session: UnifiedSession): string =>
-  isOpenCodeSession(session)
+  isWorkBuddySession(session)
+    ? workBuddySessionKey(session)
+    : isOpenCodeSession(session)
     ? openCodeSessionKey(session)
     : isPiSession(session)
       ? piSessionKey(session)
@@ -216,7 +230,9 @@ export const unifiedSessionKey = (session: UnifiedSession): string =>
                 : session.id;
 
 export const unifiedSessionStatusLabel = (session: UnifiedSession): string =>
-  isCodexSession(session)
+  isWorkBuddySession(session)
+    ? workBuddyStageLabel(session.stage)
+    : isCodexSession(session)
     ? codexStatusLabel(session.status)
     : isOpenCodeSession(session)
       ? openCodeStatusLabel(session.status)
@@ -237,7 +253,9 @@ export const unifiedSessionStatusLabel = (session: UnifiedSession): string =>
 export const unifiedSessionVisualStatus = (
   session: UnifiedSession,
 ): ClaudeSessionStatus =>
-  isCodexSession(session)
+  isWorkBuddySession(session)
+    ? workBuddyVisualStatus(session.stage) as ClaudeSessionStatus
+    : isCodexSession(session)
     ? CODEX_VISUAL_STATUS[session.status]
     : isOpenCodeSession(session)
       ? OPENCODE_VISUAL_STATUS[session.status]
@@ -272,6 +290,7 @@ export const unifiedSessionLiveContent = (
     !isMimoSession(session)
     && !isGeminiSession(session)
     && !isKimiSession(session)
+    && !isWorkBuddySession(session)
   ) {
     return sessionLiveContent(session);
   }
@@ -288,7 +307,9 @@ export const unifiedSessionLiveContent = (
       ? { kind: "output", text: output.text }
       : {
           kind: "status",
-          text: isCodexSession(session)
+          text: isWorkBuddySession(session)
+            ? workBuddyStageLabel(session.stage)
+            : isCodexSession(session)
             ? codexStatusLabel(session.status)
             : isOpenCodeSession(session)
               ? openCodeStatusLabel(session.status)
@@ -318,6 +339,7 @@ export const unifiedSessionLiveStatusText = (
     !isMimoSession(session)
     && !isGeminiSession(session)
     && !isKimiSession(session)
+    && !isWorkBuddySession(session)
   ) {
     return sessionLiveStatusText(session);
   }
@@ -327,7 +349,9 @@ export const unifiedSessionLiveStatusText = (
   ) {
     return "调用工具中";
   }
-  return isCodexSession(session)
+  return isWorkBuddySession(session)
+    ? workBuddyStageLabel(session.stage)
+    : isCodexSession(session)
     ? codexStatusLabel(session.status)
     : isOpenCodeSession(session)
       ? openCodeStatusLabel(session.status)

@@ -1,0 +1,12 @@
+{
+  "unknownVersion": "observe-only; return empty JSON to preserve native WorkBuddy behavior",
+  "bridgeUnavailable": "observe-only; plugin logs to stderr and returns empty JSON",
+  "hookTimeout": "CLI 2.137.1 print, 1s configured PreToolUse timeout: native error, Write not executed; other modes unverified",
+  "invalidPayload": "quarantine when possible; return empty JSON",
+  "codecraftClosed": "loopback connection fails; plugin returns empty JSON",
+  "approvalRequest": "never auto-approve; capability gate remains false",
+  "emptyHookResponse": "print Write falls back to PermissionDenied; existing native rules may still permit other tools",
+  "askResponse": "negative evidence: print Write executes after ask; not a verified wait primitive",
+  "questionNativePermission": "verifier rejects native request; no answer injected and no PreToolUse observed",
+  "planBodyUnavailable": "read-only; never read a guessed plan file or approve unknown content"
+}

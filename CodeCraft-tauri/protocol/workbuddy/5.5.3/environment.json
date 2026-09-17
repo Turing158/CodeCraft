@@ -1,0 +1,15 @@
+{
+  "desktopVersion": "37.10.3-24",
+  "pluginRuntimeVersion": "5.5.3-wb.37748631.g104760a2.h1a8f7c37fe76",
+  "cliVersion": "2.137.1",
+  "settingsPath": "%USERPROFILE%/.workbuddy/settings.json",
+  "hookDocs": "resources/app.asar.unpacked/cli/dist/web-ui/docs/en/cli/hooks.md",
+  "protocol": "workbuddy-codebuddy-hooks",
+  "protocolVersion": 1,
+  "protocolFrozen": false,
+  "evidence": "installed metadata and 13 isolated real bundled CLI captures; Desktop UI not validated",
+  "cliEntry": "<WORKBUDDY_INSTALL>/resources/app.asar.unpacked/cli/bin/codebuddy",
+  "runtimeFixtures": "fixtures/runtime/*.runtime.json",
+  "capturedAt": "2026-09-12",
+  "directoryVersionMeaning": "existing plugin-runtime baseline label, not CLI version"
+}

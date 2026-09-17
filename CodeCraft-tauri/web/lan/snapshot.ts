@@ -69,6 +69,13 @@ import {
   type KimiSession,
   type KimiSnapshot,
 } from "../../src/kimi-sessions";
+import {
+  workBuddyPendingInteractions,
+  workBuddySessionTitle,
+  workBuddyStageLabel,
+  type WorkBuddySession,
+  type WorkBuddySnapshot,
+} from "../../src/workbuddy-sessions";
 
 export type ConsoleSource =
   | "claude"
@@ -79,7 +86,8 @@ export type ConsoleSource =
   | "dsh"
   | "zcode"
   | "gemini"
-  | "kimi";
+  | "kimi"
+  | "workbuddy";
 
 export type PendingKind = "permission" | "question" | "plan";
 
@@ -136,6 +144,10 @@ export interface ConsolePending {
   kimi?: {
     sessionId: string;
   };
+  workbuddy?: {
+    sessionId: string;
+    requestKey: string;
+  };
 }
 
 export interface ConsoleEntry {
@@ -183,6 +195,7 @@ export interface RawSnapshot {
   zcode?: ZCodeSnapshot | null;
   gemini?: GeminiSnapshot | null;
   kimi?: KimiSnapshot | null;
+  workbuddy?: WorkBuddySnapshot | null;
   integrations?: RawHookIntegration[] | null;
 }
 
@@ -283,6 +296,24 @@ const emptyKimi: KimiSnapshot = {
     readOnly: true,
     reason: "Kimi Code Hook 已连接",
   },
+};
+const emptyWorkBuddy: WorkBuddySnapshot = {
+  connected: false,
+  integrationError: null,
+  version: 0,
+  sessions: [],
+  interactions: [],
+  capabilities: {
+    canObserve: true,
+    canApproveTools: false,
+    canAnswerQuestions: false,
+    canApprovePlans: false,
+    canStreamOutput: false,
+    protocolFrozen: false,
+    reason: "真实会话协议 fixture 尚未冻结；当前仅启用只读观察",
+  },
+  observedEventCount: 0,
+  unknownEventCount: 0,
 };
 
 // Codex questions and plans arrive from an external terminal, so the console can
@@ -651,6 +682,69 @@ const kimiPending = (session: KimiSession): ConsolePending | null => {
   };
 };
 
+const workbuddyPending = (
+  session: WorkBuddySession,
+  snapshot: WorkBuddySnapshot,
+): ConsolePending | null => {
+  const interaction = workBuddyPendingInteractions([session], snapshot.interactions)[0]?.interaction;
+  if (!interaction) return null;
+
+  const requestKey = interaction.requestKey;
+  const target = { sessionId: session.id, requestKey };
+  const reason = interaction.reason
+    ? ` · ${interaction.reason}`
+    : ` · ${workBuddyStageLabel(session.stage)}`;
+  if (interaction.kind === "question") {
+    return {
+      kind: "question",
+      requestId: requestKey,
+      readOnly: true,
+      workbuddy: target,
+      question: {
+        id: requestKey,
+        questions: interaction.questions.map((question) => ({
+          header: question.header,
+          question: question.question,
+          options: question.options,
+          multiSelect: question.multiSelect,
+          allowOther: question.allowOther,
+          allowChat: false,
+          readOnly: true,
+        })),
+      },
+    };
+  }
+  if (interaction.kind === "plan") {
+    return {
+      kind: "plan",
+      requestId: requestKey,
+      readOnly: true,
+      workbuddy: target,
+      plan: {
+        id: requestKey,
+        toolName: interaction.toolName ?? "ExitPlanMode",
+        plan: interaction.plan ?? `${interaction.summary}${reason}`,
+        cwd: null,
+        capturedAt: interaction.capturedAt,
+      },
+    };
+  }
+  return {
+    kind: "permission",
+    requestId: requestKey,
+    readOnly: true,
+    workbuddy: target,
+    permission: {
+      id: requestKey,
+      toolName: interaction.toolName ?? "WorkBuddy 工具调用",
+      summary: `${interaction.summary}${reason}`,
+      cwd: null,
+      canAlwaysAllow: false,
+      capturedAt: interaction.capturedAt,
+    },
+  };
+};
+
 const sourceFromHookId = (id: string | undefined): ConsoleSource | undefined => {
   if (id === "claudeCode") return "claude";
   if (id === "codex") return "codex";
@@ -661,6 +755,7 @@ const sourceFromHookId = (id: string | undefined): ConsoleSource | undefined => 
   if (id === "zCode") return "zcode";
   if (id === "geminiCli") return "gemini";
   if (id === "kimiCode") return "kimi";
+  if (id === "workBuddy") return "workbuddy";
   return undefined;
 };
 
@@ -680,8 +775,10 @@ const integrationName = (source: ConsoleSource): string =>
             : source === "zcode"
               ? "ZCode"
               : source === "gemini"
-                ? "Gemini CLI"
-                : "Kimi Code";
+              ? "Gemini CLI"
+                : source === "workbuddy"
+                  ? "WorkBuddy"
+                  : "Kimi Code";
 
 type SessionCounts = Record<ConsoleSource, number>;
 
@@ -812,6 +909,29 @@ const kimiEntry = (session: KimiSession): ConsoleEntry => ({
   pending: kimiPending(session),
 });
 
+const workbuddyEntry = (
+  session: WorkBuddySession,
+  snapshot: WorkBuddySnapshot,
+): ConsoleEntry => ({
+  key: `workbuddy:${session.id}`,
+  source: "workbuddy",
+  sessionId: session.id,
+  title: workBuddySessionTitle(session),
+  status: session.stage,
+  statusLabel: workBuddyStageLabel(session.stage),
+  cwd: session.cwdHash ? `目录摘要 ${session.cwdHash}` : null,
+  updatedAt: session.updatedAt,
+  activities: session.activities.map((activity) => ({
+    id: activity.id,
+    tool: activity.tool,
+    summary: activity.summary,
+    status: activity.status,
+    updatedAt: activity.updatedAt,
+  })),
+  outputs: session.outputs.map((output) => ({ id: output.id, text: output.text })),
+  pending: workbuddyPending(session, snapshot),
+});
+
 const codexEntry = (
   session: CodexSession,
   interactions: CodexInteraction[],
@@ -878,6 +998,9 @@ export const mergeSnapshot = (raw: RawSnapshot): ConsoleSnapshot => {
   const kimi = isRecord(raw.kimi)
     ? { ...emptyKimi, ...(raw.kimi as KimiSnapshot) }
     : emptyKimi;
+  const workbuddy = isRecord(raw.workbuddy)
+    ? { ...emptyWorkBuddy, ...(raw.workbuddy as WorkBuddySnapshot) }
+    : emptyWorkBuddy;
 
   const entries = [
     ...claude.sessions.map(claudeEntry),
@@ -889,6 +1012,7 @@ export const mergeSnapshot = (raw: RawSnapshot): ConsoleSnapshot => {
     ...zcode.sessions.map(zcodeEntry),
     ...gemini.sessions.map(geminiEntry),
     ...kimi.sessions.map(kimiEntry),
+    ...workbuddy.sessions.map((session) => workbuddyEntry(session, workbuddy)),
   ].sort(compareEntries);
 
   const counts: SessionCounts = {
@@ -901,6 +1025,7 @@ export const mergeSnapshot = (raw: RawSnapshot): ConsoleSnapshot => {
     zcode: zcode.sessions.length,
     gemini: gemini.sessions.length,
     kimi: kimi.sessions.length,
+    workbuddy: workbuddy.sessions.length,
   };
 
   return {
@@ -1002,6 +1127,15 @@ const buildIntegrations = (
         agentInstalled: true,
         hookInstalled: true,
       }] : []),
+      ...(isRecord(raw.workbuddy) ? [{
+        source: "workbuddy" as const,
+        name: integrationName("workbuddy"),
+        connected: workbuddyConnected(raw),
+        error: integrationError(raw, "workbuddy"),
+        sessionCount: counts.workbuddy,
+        agentInstalled: true,
+        hookInstalled: true,
+      }] : []),
     ];
   }
 
@@ -1025,7 +1159,9 @@ const buildIntegrations = (
                   ? zcodeConnected(raw)
                   : source === "gemini"
                     ? geminiConnected(raw)
-                    : kimiConnected(raw);
+                    : source === "kimi"
+                      ? kimiConnected(raw)
+                      : workbuddyConnected(raw);
     return [
       {
         source,
@@ -1058,6 +1194,8 @@ const geminiConnected = (raw: RawSnapshot): boolean =>
   isRecord(raw.gemini) ? raw.gemini.connected === true : false;
 const kimiConnected = (raw: RawSnapshot): boolean =>
   isRecord(raw.kimi) ? raw.kimi.connected === true : false;
+const workbuddyConnected = (raw: RawSnapshot): boolean =>
+  isRecord(raw.workbuddy) ? raw.workbuddy.connected === true : false;
 
 const integrationError = (raw: RawSnapshot, source: ConsoleSource): string | null => {
   const value =
@@ -1093,9 +1231,13 @@ const integrationError = (raw: RawSnapshot, source: ConsoleSource): string | nul
                   ? isRecord(raw.gemini)
                     ? raw.gemini.integrationError
                     : null
-                  : isRecord(raw.kimi)
-                    ? raw.kimi.integrationError
-                    : null;
+                  : source === "kimi"
+                    ? isRecord(raw.kimi)
+                      ? raw.kimi.integrationError
+                      : null
+                    : isRecord(raw.workbuddy)
+                      ? raw.workbuddy.integrationError
+                      : null;
   return (value ?? null) as string | null;
 };
 

@@ -566,6 +566,46 @@
                     <li class="session-list__empty">暂无活跃会话</li>
                   </ul>
                 </section>
+
+                <section
+                  id="workbuddy-session-card"
+                  class="session-source-card"
+                  aria-labelledby="workbuddy-session-card-title"
+                >
+                  <header class="session-source-card__header">
+                    <div class="session-source-card__identity">
+                      <span
+                        class="session-source-card__mark session-source-card__mark--workbuddy"
+                        aria-hidden="true"
+                      >
+                        <img id="workbuddy-session-card-icon" alt="" />
+                      </span>
+                      <h2 id="workbuddy-session-card-title">WorkBuddy</h2>
+                    </div>
+                    <div
+                      id="workbuddy-connection-status"
+                      class="session-source-card__status session-source-card__status--static"
+                      data-connected="false"
+                      title="等待 WorkBuddy Hook 加载"
+                    >
+                      <span
+                        class="session-source-card__status-dot"
+                        aria-hidden="true"
+                      ></span>
+                      <span class="session-source-card__status-label"
+                        >等待加载</span
+                      >
+                    </div>
+                  </header>
+                  <ul
+                    id="workbuddy-session-list"
+                    class="session-list"
+                    aria-label="WorkBuddy 会话列表"
+                    aria-live="polite"
+                  >
+                    <li class="session-list__empty">暂无活跃会话</li>
+                  </ul>
+                </section>
               </div>
             </section>
 
@@ -787,6 +827,14 @@
                   前往 Kimi Code 处理
                 </button>
                 <button
+                  id="question-open-workbuddy"
+                  class="question-action question-action--secondary"
+                  type="button"
+                  hidden
+                >
+                  前往WorkBuddy中处理
+                </button>
+                <button
                   id="question-reject"
                   class="question-action question-action--secondary"
                   type="button"
@@ -944,6 +992,14 @@
                     hidden
                   >
                     前往 Kimi Code 处理
+                  </button>
+                  <button
+                    id="permission-open-workbuddy"
+                    class="question-action question-action--primary"
+                    type="button"
+                    hidden
+                  >
+                    前往WorkBuddy中处理
                   </button>
                 </div>
               </section>
@@ -1130,6 +1186,14 @@
                     hidden
                   >
                     前往 Kimi Code 处理
+                  </button>
+                  <button
+                    id="plan-open-workbuddy"
+                    class="question-action question-action--primary"
+                    type="button"
+                    hidden
+                  >
+                    前往WorkBuddy中处理
                   </button>
                 </div>
                 <p

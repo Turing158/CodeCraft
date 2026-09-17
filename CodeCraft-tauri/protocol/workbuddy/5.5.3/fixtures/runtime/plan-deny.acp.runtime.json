@@ -1,0 +1,125 @@
+{
+  "schemaVersion": 1,
+  "evidenceKind": "real-bundled-cli-with-deterministic-local-model",
+  "scenario": "plan-deny",
+  "transport": "acp",
+  "desktopUiValidated": false,
+  "protocolFrozen": false,
+  "provenance": {
+    "capturedAt": "2026-09-12T08:41:21.812Z",
+    "entrySha256": "44bb8a78f45071b8df629ccc9865472c02d0f08c0cd4144f858615173c50fe46",
+    "bundleSha256": "ab94eef203e30ac65330b269fc61526ee82d38bf75ed05bc18f28ecd365ba4d6",
+    "cliVersions": [
+      "2.137.1"
+    ],
+    "entry": "<WORKBUDDY_INSTALL>/resources/app.asar.unpacked/cli/bin/codebuddy",
+    "originalCaptureSha256": "6b0a31022ffd0efcdc1286488ecf513cce12c01b01144f5b7be3c89515a6c923",
+    "isolatedSettings": true,
+    "localModelOnly": true
+  },
+  "policy": {
+    "tool": "ExitPlanMode",
+    "args": {
+      "allowedPrompts": []
+    },
+    "planText": "# Isolated plan\n1. Read input.txt.",
+    "decision": "deny",
+    "plan": true
+  },
+  "result": {
+    "exitCode": null,
+    "promptCompleted": true,
+    "verifierTimedOut": false,
+    "toolCallSentByLocalModel": true,
+    "workspaceFiles": [
+      "input.txt"
+    ],
+    "nativePermissionRequests": 0,
+    "hookEventOrder": [
+      "UserPromptSubmit",
+      "SessionStart",
+      "PreToolUse",
+      "Stop"
+    ]
+  },
+  "nativeRequests": [],
+  "toolResults": [],
+  "hooks": [
+    {
+      "input": {
+        "session_id": "native-session-1",
+        "transcript_path": "<TRANSCRIPT_1>",
+        "cwd": "<WORKSPACE>",
+        "hook_event_name": "UserPromptSubmit",
+        "prompt": "Run the single isolated CodeCraft protocol fixture tool call, then stop.",
+        "permission_mode": "plan",
+        "client": "CLI",
+        "version": "2.137.1",
+        "model": "fixture-model"
+      },
+      "response": {},
+      "originalSha256": "d6c95e0621c0ae813918d71daeaa4a02dbd42d24716110f37a4d9001ee5fdbb6"
+    },
+    {
+      "input": {
+        "session_id": "native-session-1",
+        "transcript_path": "<TRANSCRIPT_1>",
+        "hook_event_name": "SessionStart",
+        "source": "startup",
+        "permission_mode": "plan",
+        "client": "CLI",
+        "version": "2.137.1",
+        "model": "fixture-model"
+      },
+      "response": {},
+      "originalSha256": "47a510d42a5a4ca1574965148e32c9fdb31f075d6f3132c4b8052a9021a7a113"
+    },
+    {
+      "input": {
+        "session_id": "native-session-2",
+        "transcript_path": "<TRANSCRIPT_2>",
+        "cwd": "<WORKSPACE>",
+        "hook_event_name": "PreToolUse",
+        "tool_name": "ExitPlanMode",
+        "tool_input": {
+          "allowedPrompts": []
+        },
+        "call_id": "call_codecraft_fixture_001",
+        "tool_use_id": "call_codecraft_fixture_001",
+        "permission_mode": "default",
+        "client": "CLI",
+        "version": "2.137.1",
+        "generation_id": "<RUNTIME_ID>",
+        "model": "fixture-model"
+      },
+      "response": {
+        "hookSpecificOutput": {
+          "hookEventName": "PreToolUse",
+          "permissionDecision": "deny",
+          "permissionDecisionReason": "CodeCraft isolated protocol verification"
+        }
+      },
+      "originalSha256": "447a0a8097df4243c901efe2bef2289e0b95d148e4f5598eb2b3d72991f477d0"
+    },
+    {
+      "input": {
+        "session_id": "native-session-1",
+        "transcript_path": "<TRANSCRIPT_1>",
+        "cwd": "<WORKSPACE>",
+        "hook_event_name": "Stop",
+        "stop_hook_active": false,
+        "agent_type": "cli",
+        "last_assistant_message": "CodeCraft fixture completed.",
+        "background_tasks": [],
+        "session_crons": [],
+        "permission_mode": "plan",
+        "client": "CLI",
+        "version": "2.137.1",
+        "generation_id": "<RUNTIME_ID>",
+        "model": "fixture-model"
+      },
+      "response": {},
+      "originalSha256": "d574bbad235ed956afff320e0f7198b4d10561f9116a73166beb05316dd25562"
+    }
+  ]
+}

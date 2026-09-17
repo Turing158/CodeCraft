@@ -88,6 +88,10 @@ impl LanAuthStore {
         self.failures.clear();
     }
 
+    pub(crate) fn revoke_session(&mut self, session_id: &str) {
+        self.sessions.remove(session_id);
+    }
+
     pub(crate) fn session_count_at(&self, now: Instant) -> usize {
         self.sessions
             .values()

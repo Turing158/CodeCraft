@@ -1,0 +1,63 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "CodeCraft WorkBuddy hook envelope",
+  "description": "Read-only capture shape, not an official runtime or approval-response schema. Unknown input is never authorization.",
+  "type": "object",
+  "required": ["hook_event_name"],
+  "properties": {
+    "hook_event_name": {"type": "string"},
+    "session_id": {"type": "string", "maxLength": 160},
+    "session_title": {"type": "string", "maxLength": 4096},
+    "conversation_title": {"type": "string", "maxLength": 4096},
+    "display_title": {"type": "string", "maxLength": 4096},
+    "title": {"type": "string", "maxLength": 4096},
+    "tool_name": {"type": "string", "maxLength": 160},
+    "tool_input": {"type": ["object", "array", "string", "number", "boolean", "null"]},
+    "tool_response": {"type": ["object", "array", "string", "number", "boolean", "null"]},
+    "tool_use_id": {"type": "string", "maxLength": 256},
+    "request_id": {"type": "string", "maxLength": 256},
+    "requestId": {"type": "string", "maxLength": 256},
+    "plugin_instance_id": {"type": "string", "maxLength": 256},
+    "process_instance_id": {"type": "string", "maxLength": 128},
+    "workbuddy_version": {"type": "string", "maxLength": 128},
+    "cli_version": {"type": "string", "maxLength": 128},
+    "permission_mode": {"type": "string", "maxLength": 128},
+    "cwd_hash": {"type": "string", "maxLength": 64},
+    "transcript_hash": {"type": "string", "maxLength": 64},
+    "questions": {
+      "type": "array",
+      "maxItems": 16,
+      "items": {"$ref": "#/$defs/question"}
+    },
+    "plan": {"type": "string", "maxLength": 20000},
+    "cwd": {"type": "string"},
+    "transcript_path": {"type": "string"}
+  },
+  "additionalProperties": true,
+  "$defs": {
+    "question": {
+      "type": "object",
+      "required": ["question"],
+      "properties": {
+        "header": {"type": "string", "maxLength": 160},
+        "question": {"type": "string", "maxLength": 8000},
+        "multiSelect": {"type": "boolean"},
+        "allowOther": {"type": "boolean"},
+        "options": {
+          "type": "array",
+          "maxItems": 32,
+          "items": {
+            "type": "object",
+            "required": ["label"],
+            "properties": {
+              "label": {"type": "string", "maxLength": 512},
+              "description": {"type": "string", "maxLength": 2000}
+            },
+            "additionalProperties": true
+          }
+        }
+      },
+      "additionalProperties": true
+    }
+  }
+}

@@ -1,0 +1,20 @@
+{
+  "_note": "Bridge HTTP errors use machine codes. Decision validation currently returns user-facing messages and always rejects; request/answer labels below are descriptive, not a completed submission protocol.",
+  "content_type_required": "An exact application/json MIME type is required",
+  "object_required": "JSON root must be an object",
+  "unknown_event": "Hook event is outside the supported observation whitelist",
+  "nonce_capacity": "Live nonce limit reached; reject without evicting replay protection",
+  "unauthorized": "Token, plugin instance or protocol header did not match the active bridge",
+  "nonce_required": "The request did not contain a nonce",
+  "timestamp_required": "The request did not contain a current sent-at timestamp",
+  "stale_request": "The request timestamp is outside the bridge clock-skew window",
+  "replayed_nonce": "The nonce was already accepted by this bridge instance",
+  "body_too_large": "The hook JSON exceeded the 256 KiB bridge limit",
+  "invalid_json": "The hook input was not one JSON document",
+  "route_mismatch": "The event was sent to the wrong read-only or interaction bridge route",
+  "inbox_unavailable": "The read-only event inbox could not be written",
+  "protocol_not_frozen": "Approval, question and plan decisions are disabled until real fixtures are reviewed",
+  "request_key_invalid": "The internal CodeCraft request key is invalid or does not belong to the session",
+  "answer_invalid": "Only structural JSON/length checks exist; no successful answer submission or saved-schema validation is claimed",
+  "plan_feedback_required": "A rejected plan must include bounded feedback"
+}

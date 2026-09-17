@@ -39,5 +39,12 @@ fn main() {
         return;
     }
 
+    if std::env::args_os().any(|argument| argument == "--codecraft-workbuddy-hook") {
+        if let Err(error) = codecraft_tauri_lib::capture_workbuddy_hook() {
+            eprintln!("CodeCraft could not capture the WorkBuddy hook: {error}");
+        }
+        return;
+    }
+
     codecraft_tauri_lib::run()
 }

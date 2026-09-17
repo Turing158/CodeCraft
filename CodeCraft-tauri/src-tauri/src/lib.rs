@@ -49,11 +49,17 @@ mod pi;
 mod pi_hook;
 mod zcode;
 mod zcode_hook;
+mod workbuddy;
+mod workbuddy_files;
+mod workbuddy_redaction;
+mod workbuddy_process;
+mod workbuddy_hook;
 
 pub use claude_hook::capture_claude_hook;
 pub use codex_hook::capture_codex_hook;
 pub use gemini_hook::capture_gemini_hook;
 pub use kimi_hook::capture_kimi_hook;
+pub use workbuddy_hook::capture_workbuddy_hook;
 pub use zcode_hook::capture_zcode_hook;
 
 const PANEL_WIDTH: f64 = 500.0;
@@ -305,6 +311,14 @@ struct ZCodeIntegrationState {
     installation: Mutex<Option<zcode_hook::ZCodeInstallation>>,
 }
 
+#[derive(Default)]
+pub(crate) struct WorkBuddyIntegrationState {
+    pub(crate) store: Mutex<workbuddy::WorkBuddyStore>,
+    // Runtime bridge errors only; installation/enablement are read from disk.
+    pub(crate) hook_error: Mutex<Option<String>>,
+    pub(crate) bridge: Mutex<Option<workbuddy_hook::WorkBuddyBridgeInfo>>,
+}
+
 struct PanelWindowState {
     horizontal_position: Mutex<f64>,
 }
@@ -352,6 +366,7 @@ pub(crate) struct AllSessionSnapshots {
     pub(crate) pi: pi::PiSnapshot,
     pub(crate) dsh: dsh::DshSnapshot,
     pub(crate) zcode: zcode::ZCodeSnapshot,
+    pub(crate) workbuddy: workbuddy::WorkBuddySnapshot,
 }
 
 #[derive(Serialize)]
@@ -366,6 +381,7 @@ struct ActiveSessionCounts {
     pi: usize,
     dsh: usize,
     zcode: usize,
+    workbuddy: usize,
 }
 
 #[derive(Default)]
@@ -432,6 +448,7 @@ enum HookAgentId {
     Pi,
     DeepSeekHarness,
     ZCode,
+    WorkBuddy,
 }
 
 impl hook_config::HookInstallConfig {
@@ -446,6 +463,7 @@ impl hook_config::HookInstallConfig {
             HookAgentId::Pi => self.pi,
             HookAgentId::DeepSeekHarness => self.deep_seek_harness,
             HookAgentId::ZCode => self.z_code,
+            HookAgentId::WorkBuddy => self.work_buddy,
         }
     }
 
@@ -460,6 +478,7 @@ impl hook_config::HookInstallConfig {
             HookAgentId::Pi => self.pi = enabled,
             HookAgentId::DeepSeekHarness => self.deep_seek_harness = enabled,
             HookAgentId::ZCode => self.z_code = enabled,
+            HookAgentId::WorkBuddy => self.work_buddy = enabled,
         }
     }
 }
@@ -476,6 +495,7 @@ impl HookAgentId {
             Self::Pi => "pi",
             Self::DeepSeekHarness => "dsh",
             Self::ZCode => "zcode",
+            Self::WorkBuddy => "workbuddy",
         }
     }
 
@@ -490,6 +510,7 @@ impl HookAgentId {
             Self::Pi => "PI",
             Self::DeepSeekHarness => "DeepSeek Harness",
             Self::ZCode => "ZCode",
+            Self::WorkBuddy => "WorkBuddy",
         }
     }
 }
@@ -501,6 +522,8 @@ struct HookIntegrationStatus {
     name: &'static str,
     agent_installed: bool,
     hook_installed: bool,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    workbuddy: Option<workbuddy_hook::WorkBuddyHookStatus>,
     install_state: Option<String>,
     install_path: Option<String>,
     bundled_version: Option<String>,
@@ -544,6 +567,9 @@ fn agent_is_installed(
     agent: HookAgentId,
     zcode_state: &ZCodeIntegrationState,
 ) -> Result<bool, String> {
+    if matches!(agent, HookAgentId::WorkBuddy) {
+        return Ok(workbuddy_hook::detect_environment().detected);
+    }
     if matches!(agent, HookAgentId::Pi) {
         return Ok(command_is_installed(agent.command()) || command_is_installed("pi.ps1"));
     }
@@ -633,6 +659,22 @@ fn zcode_install_state_label(state: zcode_hook::ZCodeHookInstallState) -> String
     .to_string()
 }
 
+fn workbuddy_install_state_label(state: workbuddy_hook::WorkBuddyHookInstallState) -> String {
+    match state {
+        workbuddy_hook::WorkBuddyHookInstallState::NotInstalled => "notInstalled",
+        workbuddy_hook::WorkBuddyHookInstallState::Installed => "installed",
+        workbuddy_hook::WorkBuddyHookInstallState::Disabled => "disabled",
+        workbuddy_hook::WorkBuddyHookInstallState::SyncedRestartRequired => {
+            "syncedRestartRequired"
+        }
+        workbuddy_hook::WorkBuddyHookInstallState::Modified => "modified",
+        workbuddy_hook::WorkBuddyHookInstallState::Conflict => "conflict",
+        workbuddy_hook::WorkBuddyHookInstallState::Incompatible => "incompatible",
+        workbuddy_hook::WorkBuddyHookInstallState::Error => "error",
+    }
+    .to_string()
+}
+
 fn codex_hook_project_dir(state: &CodexIntegrationState) -> Result<Option<String>, String> {
     Ok(state
         .hook_config
@@ -662,21 +704,65 @@ pub(crate) fn hook_statuses(
     mimo_state: &MimoIntegrationState,
     dsh_state: &DshIntegrationState,
     zcode_state: &ZCodeIntegrationState,
+    workbuddy_state: &WorkBuddyIntegrationState,
 ) -> Result<Vec<HookIntegrationStatus>, String> {
     let _lock = hook_configuration_lock()?;
     let cache = HOOK_STATUS_CACHE.get_or_init(|| Mutex::new(None));
     if let Ok(cache) = cache.lock() {
         if let Some((created_at, statuses)) = cache.as_ref() {
             if created_at.elapsed() <= HOOK_STATUS_CACHE_TTL {
-                return Ok(statuses.clone());
+                let mut statuses = statuses.clone();
+                if let Some(status) = statuses.iter_mut().find(|s| matches!(s.id, HookAgentId::WorkBuddy)) {
+                    *status = workbuddy_integration_status(workbuddy_state, zcode_state)?;
+                }
+                return Ok(statuses);
             }
         }
     }
-    let statuses = hook_statuses_unlocked(state, gemini_state, kimi_state, opencode_state, mimo_state, dsh_state, zcode_state)?;
+    let statuses = hook_statuses_unlocked(
+        state,
+        gemini_state,
+        kimi_state,
+        opencode_state,
+        mimo_state,
+        dsh_state,
+        zcode_state,
+        workbuddy_state,
+    )?;
     if let Ok(mut cache) = cache.lock() {
         *cache = Some((Instant::now(), statuses.clone()));
     }
     Ok(statuses)
+}
+
+
+fn workbuddy_integration_status(
+    workbuddy_state: &WorkBuddyIntegrationState,
+    zcode_state: &ZCodeIntegrationState,
+) -> Result<HookIntegrationStatus, String> {
+    let workbuddy_snapshot = workbuddy_state
+        .store
+        .lock()
+        .map_err(|error| error.to_string())?
+        .snapshot();
+    let workbuddy_status = workbuddy_hook::runtime_status(workbuddy_state, &workbuddy_snapshot)?;
+    Ok(HookIntegrationStatus {
+        id: HookAgentId::WorkBuddy,
+        name: HookAgentId::WorkBuddy.display_name(),
+        agent_installed: agent_is_installed(HookAgentId::WorkBuddy, zcode_state)?,
+        hook_installed: workbuddy_status.installed(),
+        workbuddy: Some(workbuddy_status.clone()),
+        install_state: Some(workbuddy_install_state_label(workbuddy_status.state)),
+        install_path: Some(workbuddy_status.install_path),
+        bundled_version: Some(workbuddy_status.bundled_version.to_string()),
+        installed_version: workbuddy_status.installed_version,
+        running_versions: workbuddy_status
+            .workbuddy_version
+            .into_iter()
+            .chain(workbuddy_status.cli_version)
+            .collect(),
+        error: workbuddy_status.error,
+    })
 }
 
 fn hook_statuses_unlocked(
@@ -687,6 +773,7 @@ fn hook_statuses_unlocked(
     mimo_state: &MimoIntegrationState,
     dsh_state: &DshIntegrationState,
     zcode_state: &ZCodeIntegrationState,
+    workbuddy_state: &WorkBuddyIntegrationState,
 ) -> Result<Vec<HookIntegrationStatus>, String> {
     let project_dir = codex_hook_project_dir(state)?;
     let opencode = opencode_hook::status_and_sync()?;
@@ -694,8 +781,9 @@ fn hook_statuses_unlocked(
         .hook_error
         .lock()
         .map_err(|error| error.to_string())? = opencode.error.clone();
-    Ok(vec![
+    let mut statuses = vec![
         HookIntegrationStatus {
+            workbuddy: None,
             id: HookAgentId::ClaudeCode,
             name: HookAgentId::ClaudeCode.display_name(),
             agent_installed: agent_is_installed(HookAgentId::ClaudeCode, zcode_state)?,
@@ -708,6 +796,7 @@ fn hook_statuses_unlocked(
             error: None,
         },
         HookIntegrationStatus {
+            workbuddy: None,
             id: HookAgentId::Codex,
             name: HookAgentId::Codex.display_name(),
             agent_installed: agent_is_installed(HookAgentId::Codex, zcode_state)?,
@@ -722,6 +811,7 @@ fn hook_statuses_unlocked(
             error: None,
         },
         HookIntegrationStatus {
+            workbuddy: None,
             id: HookAgentId::GeminiCli,
             name: HookAgentId::GeminiCli.display_name(),
             agent_installed: agent_is_installed(HookAgentId::GeminiCli, zcode_state)?,
@@ -738,6 +828,7 @@ fn hook_statuses_unlocked(
                 .clone(),
         },
         HookIntegrationStatus {
+            workbuddy: None,
             id: HookAgentId::KimiCode,
             name: HookAgentId::KimiCode.display_name(),
             agent_installed: agent_is_installed(HookAgentId::KimiCode, zcode_state)?,
@@ -750,6 +841,7 @@ fn hook_statuses_unlocked(
             error: kimi_state.hook_error.lock().map_err(|error| error.to_string())?.clone(),
         },
         HookIntegrationStatus {
+            workbuddy: None,
             id: HookAgentId::OpenCode,
             name: HookAgentId::OpenCode.display_name(),
             agent_installed: agent_is_installed(HookAgentId::OpenCode, zcode_state)?,
@@ -769,6 +861,7 @@ fn hook_statuses_unlocked(
                 .map_err(|error| error.to_string())?
                 .clone();
             HookIntegrationStatus {
+                workbuddy: None,
                 id: HookAgentId::Mimo,
                 name: HookAgentId::Mimo.display_name(),
                 agent_installed: agent_is_installed(HookAgentId::Mimo, zcode_state)?,
@@ -784,6 +877,7 @@ fn hook_statuses_unlocked(
         {
             let status = pi_hook::status()?;
             HookIntegrationStatus {
+                workbuddy: None,
                 id: HookAgentId::Pi,
                 name: HookAgentId::Pi.display_name(),
                 agent_installed: agent_is_installed(HookAgentId::Pi, zcode_state)?,
@@ -813,6 +907,7 @@ fn hook_statuses_unlocked(
                 .map_err(|error| error.to_string())?
                 .clone();
             HookIntegrationStatus {
+                workbuddy: None,
                 id: HookAgentId::DeepSeekHarness,
                 name: HookAgentId::DeepSeekHarness.display_name(),
                 agent_installed: agent_is_installed(HookAgentId::DeepSeekHarness, zcode_state)?,
@@ -838,6 +933,7 @@ fn hook_statuses_unlocked(
                 .map_err(|error| error.to_string())?
                 .clone();
             HookIntegrationStatus {
+                workbuddy: None,
                 id: HookAgentId::ZCode,
                 name: HookAgentId::ZCode.display_name(),
                 agent_installed: agent_is_installed(HookAgentId::ZCode, zcode_state)?,
@@ -853,7 +949,9 @@ fn hook_statuses_unlocked(
                 error: status.error.or(runtime_error),
             }
         },
-    ])
+    ];
+    statuses.push(workbuddy_integration_status(workbuddy_state, zcode_state)?);
+    Ok(statuses)
 }
 
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -1999,7 +2097,12 @@ fn focus_codex_window(
 }
 
 #[cfg(windows)]
-fn focus_zcode_window_native(current_window: &WebviewWindow) -> Result<(), String> {
+fn focus_external_window_native(
+    current_window: &WebviewWindow,
+    app_name: &str,
+    score_window: &dyn Fn(&str, &str, u32) -> u16,
+    require_unique: bool,
+) -> Result<(), String> {
     use windows::{
         core::{BOOL, PWSTR},
         Win32::{
@@ -2015,9 +2118,11 @@ fn focus_zcode_window_native(current_window: &WebviewWindow) -> Result<(), Strin
         },
     };
 
-    struct SearchContext {
+    struct SearchContext<'a> {
         current_hwnd: HWND,
+        score_window: &'a dyn Fn(&str, &str, u32) -> u16,
         best: Option<(HWND, u16)>,
+        tied: bool,
     }
 
     unsafe fn process_name(hwnd: HWND) -> String {
@@ -2064,7 +2169,12 @@ fn focus_zcode_window_native(current_window: &WebviewWindow) -> Result<(), Strin
         } else {
             String::new()
         };
-        let score = zcode_window_score(&title, &process_name(hwnd));
+        let mut process_id = 0;
+        GetWindowThreadProcessId(hwnd, Some(&mut process_id));
+        let score = (context.score_window)(&title, &process_name(hwnd), process_id);
+        if score > 0 && context.best.is_some_and(|(_, best)| score == best) {
+            context.tied = true;
+        }
         if score
             > context
                 .best
@@ -2072,6 +2182,7 @@ fn focus_zcode_window_native(current_window: &WebviewWindow) -> Result<(), Strin
                 .unwrap_or_default()
         {
             context.best = Some((hwnd, score));
+            context.tied = false;
         }
         BOOL(1)
     }
@@ -2079,6 +2190,8 @@ fn focus_zcode_window_native(current_window: &WebviewWindow) -> Result<(), Strin
     let mut context = SearchContext {
         current_hwnd: current_window.hwnd().map_err(|error| error.to_string())?,
         best: None,
+        score_window,
+        tied: false,
     };
 
     unsafe {
@@ -2091,26 +2204,113 @@ fn focus_zcode_window_native(current_window: &WebviewWindow) -> Result<(), Strin
 
     let (target, _) = context
         .best
-        .ok_or_else(|| "未找到可切换的 ZCode 窗口".to_string())?;
+        .ok_or_else(|| format!("未找到可切换的 {app_name} 窗口，请先打开 {app_name} 后重试"))?;
+    if require_unique && context.tied {
+        return Err(format!("找到多个 {app_name} 窗口，暂时无法定位此会话，请在 {app_name} 中选择对应会话"));
+    }
     unsafe {
         if IsIconic(target).as_bool() {
             let _ = ShowWindow(target, SW_RESTORE);
         }
         if !SetForegroundWindow(target).as_bool() {
-            return Err("无法将 ZCode 窗口切换到前台".to_string());
+            return Err(format!("无法将 {app_name} 窗口切换到前台，请手动打开 {app_name}"));
         }
     }
     Ok(())
 }
 
 #[cfg(not(windows))]
-fn focus_zcode_window_native(_current_window: &WebviewWindow) -> Result<(), String> {
-    Err("当前平台不支持切换到 ZCode 窗口".to_string())
+fn focus_external_window_native(
+    _current_window: &WebviewWindow,
+    app_name: &str,
+    _score_window: &dyn Fn(&str, &str, u32) -> u16,
+    _require_unique: bool,
+) -> Result<(), String> {
+    Err(format!("当前平台不支持切换到 {app_name} 窗口，请手动打开 {app_name}"))
 }
 
 #[tauri::command]
 fn focus_zcode_window(window: WebviewWindow) -> Result<(), String> {
-    focus_zcode_window_native(&window)
+    focus_external_window_native(
+        &window,
+        "ZCode",
+        &|title, name, _| zcode_window_score(title, name),
+        false,
+    )
+}
+
+fn workbuddy_window_score(title: &str, process_name: &str) -> u16 {
+    if !process_name.eq_ignore_ascii_case("workbuddy.exe") {
+        return 0;
+    }
+    100 + if title.to_ascii_lowercase().contains("workbuddy") {
+        60
+    } else {
+        0
+    }
+}
+
+#[tauri::command]
+fn focus_workbuddy_window(
+    window: WebviewWindow,
+    state: tauri::State<'_, WorkBuddyIntegrationState>,
+    request_key: String,
+) -> Result<(), String> {
+    let snapshot = state
+        .store
+        .lock()
+        .map_err(|error| error.to_string())?
+        .snapshot();
+    let request = snapshot
+        .interactions
+        .iter()
+        .find(|i| i.request_key == request_key)
+        .ok_or_else(|| "WorkBuddy 请求已失效，请刷新后重试".to_string())?;
+    let session = snapshot
+        .sessions
+        .iter()
+        .find(|s| s.id == request.session_id)
+        .ok_or_else(|| "未找到此请求对应的 WorkBuddy 会话".to_string())?;
+    if session
+        .process_instance_id
+        .as_deref()
+        .is_some_and(|id| workbuddy_process::is_alive(id) == Some(false))
+    {
+        return Err("此请求所属的 WorkBuddy 进程已退出，请在 WorkBuddy 中重新打开会话".into());
+    }
+    let process_id = session
+        .process_instance_id
+        .as_deref()
+        .and_then(workbuddy_process::desktop_process_id);
+    focus_external_window_native(
+        &window,
+        "WorkBuddy",
+        &|title, name, pid| {
+            workbuddy_session_window_score(title, name, pid, process_id, &session.workbuddy_session_id)
+        },
+        true,
+    )
+}
+
+fn workbuddy_session_window_score(
+    title: &str,
+    process_name: &str,
+    process_id: u32,
+    target_process: Option<u32>,
+    native_session: &str,
+) -> u16 {
+    if workbuddy_window_score(title, process_name) == 0
+        || target_process.is_some_and(|target| target != process_id)
+    {
+        return 0;
+    }
+    // A request's native host takes precedence over another WorkBuddy instance.
+    // Session titles are only useful when the desktop actually exposes the id.
+    100 + if !native_session.is_empty() && title.contains(native_session) {
+        200
+    } else {
+        0
+    }
 }
 
 #[tauri::command]
@@ -2154,6 +2354,7 @@ pub(crate) fn all_sessions_snapshot(
     let pi = pi_snapshot(&app.state::<PiIntegrationState>())?;
     let dsh = dsh_snapshot(&app.state::<DshIntegrationState>())?;
     let zcode = zcode_snapshot(&app.state::<ZCodeIntegrationState>())?;
+    let workbuddy = workbuddy_snapshot(app)?;
     Ok(AllSessionSnapshots {
         claude,
         codex,
@@ -2164,6 +2365,7 @@ pub(crate) fn all_sessions_snapshot(
         pi,
         dsh,
         zcode,
+        workbuddy,
     })
 }
 
@@ -2226,6 +2428,12 @@ fn active_session_counts(
             .lock()
             .map_err(|error| error.to_string())?
             .active_session_count(),
+        workbuddy: app
+            .state::<WorkBuddyIntegrationState>()
+            .store
+            .lock()
+            .map_err(|error| error.to_string())?
+            .active_session_count(),
     })
 }
 
@@ -2271,6 +2479,7 @@ async fn list_hook_integrations(
         let mimo_state = app.state::<MimoIntegrationState>();
         let dsh_state = app.state::<DshIntegrationState>();
         let zcode_state = app.state::<ZCodeIntegrationState>();
+        let workbuddy_state = app.state::<WorkBuddyIntegrationState>();
         hook_statuses(
             &state,
             &gemini_state,
@@ -2279,10 +2488,58 @@ async fn list_hook_integrations(
             &mimo_state,
             &dsh_state,
             &zcode_state,
+            &workbuddy_state,
         )
     })
     .await
     .map_err(|error| error.to_string())?
+}
+
+fn workbuddy_snapshot(
+    app: &tauri::AppHandle,
+) -> Result<workbuddy::WorkBuddySnapshot, String> {
+    let _ = workbuddy_hook::drain_inbox_events(app);
+    let state = app.state::<WorkBuddyIntegrationState>();
+    let mut snapshot = state.store
+        .lock()
+        .map_err(|error| error.to_string())?
+        .snapshot();
+    let hook = workbuddy_hook::runtime_status(&state, &snapshot)?;
+    snapshot.connected = hook.connected;
+    snapshot.integration_error = hook.error.clone();
+    snapshot.hook = Some(hook);
+    Ok(snapshot)
+}
+
+#[tauri::command]
+fn workbuddy_environment() -> workbuddy_hook::WorkBuddyEnvironmentReport {
+    workbuddy_hook::detect_environment()
+}
+
+#[tauri::command]
+fn list_workbuddy_sessions(
+    app: tauri::AppHandle,
+) -> Result<workbuddy::WorkBuddySnapshot, String> {
+    workbuddy_snapshot(&app)
+}
+
+#[tauri::command]
+fn workbuddy_hook_status(app: tauri::AppHandle) -> Result<workbuddy_hook::WorkBuddyHookStatus, String> {
+    let state = app.state::<WorkBuddyIntegrationState>();
+    let snapshot = state.store.lock().map_err(|e| e.to_string())?.snapshot();
+    workbuddy_hook::runtime_status(&state, &snapshot)
+}
+
+#[tauri::command]
+fn workbuddy_hook_install() -> Result<workbuddy_hook::WorkBuddyHookStatus, String> {
+    let _lock = hook_configuration_lock()?;
+    workbuddy_hook::install()
+}
+
+#[tauri::command]
+fn workbuddy_hook_uninstall() -> Result<(), String> {
+    let _lock = hook_configuration_lock()?;
+    workbuddy_hook::uninstall()
 }
 
 #[tauri::command]
@@ -2311,6 +2568,7 @@ async fn refresh_hook_integrations(
             &mimo_state,
             &dsh_state,
             &zcode_state,
+            &app.state::<WorkBuddyIntegrationState>(),
         )
     })
     .await
@@ -3095,6 +3353,10 @@ async fn install_agent_hook(agent: HookAgentId, app: tauri::AppHandle) -> Result
                     .lock()
                     .map_err(|error| error.to_string())? = status.error;
             }
+            HookAgentId::WorkBuddy => {
+                workbuddy_hook::install()?;
+                save_hook_installation_state(agent, true)?;
+            }
         }
         Ok(())
     })
@@ -3229,6 +3491,12 @@ async fn uninstall_agent_hook(agent: HookAgentId, app: tauri::AppHandle) -> Resu
                     .lock()
                     .map_err(|error| error.to_string())?
                     .clear();
+            }
+            HookAgentId::WorkBuddy => {
+                workbuddy_hook::uninstall()?;
+                save_hook_installation_state(agent, false)?;
+                app.state::<WorkBuddyIntegrationState>().store.lock()
+                    .map_err(|error| error.to_string())?.clear();
             }
         }
         Ok(())
@@ -4099,6 +4367,7 @@ pub fn run() {
         .manage(PiIntegrationState::default())
         .manage(DshIntegrationState::default())
         .manage(ZCodeIntegrationState::default())
+        .manage(WorkBuddyIntegrationState::default())
         .manage(ApprovalIntegrationState::default())
         .manage(NativeSoundIntegrationState::default())
         .manage(TrayMenuState::default())
@@ -4197,6 +4466,47 @@ pub fn run() {
                 .hook_error
                 .lock()
                 .map_err(|error| error.to_string())? = zcode_error;
+
+            let workbuddy_state = app.state::<WorkBuddyIntegrationState>();
+            let workbuddy_bridge_error = match workbuddy_hook::start_bridge(app.handle().clone()) {
+                Ok(bridge) => {
+                    *workbuddy_state
+                        .bridge
+                        .lock()
+                        .map_err(|error| error.to_string())? = Some(bridge);
+                    None
+                }
+                Err(error) => Some(error),
+            };
+            let workbuddy_configured = hook_install_config.is_enabled(HookAgentId::WorkBuddy);
+            let workbuddy_error = match workbuddy_hook::status() {
+                Ok(status) if status.installed() => {
+                    if !workbuddy_configured {
+                        hook_install_config.set_enabled(HookAgentId::WorkBuddy, true);
+                        hook_config_changed = true;
+                    }
+                    status.error
+                }
+                Ok(status)
+                    if workbuddy_configured
+                        && matches!(
+                            status.state,
+                            workbuddy_hook::WorkBuddyHookInstallState::NotInstalled
+                                | workbuddy_hook::WorkBuddyHookInstallState::Incompatible
+                        ) => match workbuddy_hook::install() {
+                    Ok(installed) => installed.error,
+                    Err(error) => Some(error),
+                },
+                Ok(status) => status.error,
+                Err(error) => Some(error),
+            };
+            if let Some(error) = workbuddy_error {
+                eprintln!("WorkBuddy Hook 初始化：{error}");
+            }
+            *workbuddy_state
+                .hook_error
+                .lock()
+                .map_err(|error| error.to_string())? = workbuddy_bridge_error;
 
             let pi_state = app.state::<PiIntegrationState>();
             let pi_configured = hook_install_config.is_enabled(HookAgentId::Pi);
@@ -4500,6 +4810,7 @@ pub fn run() {
             focus_gemini_session,
             focus_kimi_session,
             focus_zcode_window,
+            focus_workbuddy_window,
             get_approval_settings,
             set_approval_settings,
             set_native_sound_settings,
@@ -4510,6 +4821,11 @@ pub fn run() {
             claude_hook_install,
             list_hook_integrations,
             refresh_hook_integrations,
+            workbuddy_environment,
+            list_workbuddy_sessions,
+            workbuddy_hook_status,
+            workbuddy_hook_install,
+            workbuddy_hook_uninstall,
             pi_hook_status,
             pi_hook_install,
             pi_hook_uninstall,
@@ -4578,6 +4894,18 @@ pub fn run() {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn workbuddy_handoff_only_targets_workbuddy_processes() {
+        assert_eq!(workbuddy_window_score("WorkBuddy - session", "WorkBuddy.exe"), 160);
+        assert_eq!(workbuddy_window_score("Session", "WORKBUDDY.EXE"), 100);
+        assert_eq!(workbuddy_window_score("WorkBuddy docs", "msedge.exe"), 0);
+        assert_eq!(workbuddy_window_score("WorkBuddy", "codecraft-tauri.exe"), 0);
+        assert_eq!(workbuddy_window_score("WorkBuddy", "node.exe"), 0);
+        assert_eq!(workbuddy_session_window_score("WorkBuddy", "WorkBuddy.exe", 10, Some(20), "s"), 0);
+        assert_eq!(workbuddy_session_window_score("WorkBuddy", "WorkBuddy.exe", 20, Some(20), "s"), 100);
+        assert_eq!(workbuddy_session_window_score("WorkBuddy - native-session", "WorkBuddy.exe", 20, Some(20), "native-session"), 300);
+    }
 
     #[test]
     fn plan_feedback_is_queued_only_for_a_rejection_with_text() {

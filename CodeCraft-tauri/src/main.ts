@@ -1,3 +1,4 @@
+import { WorkBuddyHandoffUi } from "./workbuddy-handoff";
 import { invoke } from "@tauri-apps/api/core";
 import { getVersion } from "@tauri-apps/api/app";
 import { listen, type UnlistenFn } from "@tauri-apps/api/event";
@@ -119,6 +120,19 @@ import {
   type KimiSession,
   type KimiSnapshot,
 } from "./kimi-sessions";
+import {
+  workBuddyPendingInteractions,
+  workBuddySessionKey,
+  workBuddySessionTitle,
+  workBuddyStageLabel,
+  workBuddyVisualStatus,
+  toWorkBuddyUnifiedSession,
+  type WorkBuddyInteraction,
+  type WorkBuddySession,
+  type WorkBuddySnapshot,
+  type WorkBuddyHookState,
+} from "./workbuddy-sessions";
+import { workBuddyHookPresentation } from "./workbuddy-hook-status";
 import {
   hasUnifiedWorkingSession,
   isCodexSession,
@@ -490,6 +504,10 @@ const kimiIconUrl = new URL(
   "../src-tauri/icons/icon/kimi.svg?no-inline",
   import.meta.url,
 ).href;
+const workbuddyIconUrl = new URL(
+  "../src-tauri/icons/icon/workbuddy.svg?no-inline",
+  import.meta.url,
+).href;
 
 const configureThemedAgentIcon = (
   mark: HTMLElement | null | undefined,
@@ -571,6 +589,9 @@ const dshSessionCard = panel?.querySelector<HTMLElement>("#dsh-session-card");
 const zcodeSessionCard = panel?.querySelector<HTMLElement>("#zcode-session-card");
 const geminiSessionCard = panel?.querySelector<HTMLElement>("#gemini-session-card");
 const kimiSessionCard = panel?.querySelector<HTMLElement>("#kimi-session-card");
+const workbuddySessionCard = panel?.querySelector<HTMLElement>(
+  "#workbuddy-session-card",
+);
 const codexSessionList = panel?.querySelector<HTMLUListElement>(
   "#codex-session-list",
 );
@@ -593,6 +614,9 @@ const geminiSessionList = panel?.querySelector<HTMLUListElement>(
 const kimiSessionList = panel?.querySelector<HTMLUListElement>(
   "#kimi-session-list",
 );
+const workbuddySessionList = panel?.querySelector<HTMLUListElement>(
+  "#workbuddy-session-list",
+);
 const claudeConnectionStatus = panel?.querySelector<HTMLButtonElement>(
   "#claude-connection-status",
 );
@@ -614,6 +638,9 @@ const geminiConnectionStatus = panel?.querySelector<HTMLElement>(
 );
 const kimiConnectionStatus = panel?.querySelector<HTMLElement>(
   "#kimi-connection-status",
+);
+const workbuddyConnectionStatus = panel?.querySelector<HTMLElement>(
+  "#workbuddy-connection-status",
 );
 const claudeSessionCardIcon = panel?.querySelector<HTMLImageElement>(
   "#claude-session-card-icon",
@@ -639,6 +666,9 @@ const geminiSessionCardIcon = panel?.querySelector<HTMLImageElement>(
 );
 const kimiSessionCardIcon = panel?.querySelector<HTMLImageElement>(
   "#kimi-session-card-icon",
+);
+const workbuddySessionCardIcon = panel?.querySelector<HTMLImageElement>(
+  "#workbuddy-session-card-icon",
 );
 const sessionProduct = panel?.querySelector<HTMLElement>(".session-product");
 const sessionProductTrigger = panel?.querySelector<HTMLButtonElement>(
@@ -1055,6 +1085,9 @@ const questionOpenGeminiButton = panel?.querySelector<HTMLButtonElement>(
   "#question-open-gemini",
 );
 const questionOpenKimiButton = panel?.querySelector<HTMLButtonElement>("#question-open-kimi");
+const questionOpenWorkBuddyButton = panel?.querySelector<HTMLButtonElement>(
+  "#question-open-workbuddy",
+);
 const questionRejectButton =
   panel?.querySelector<HTMLButtonElement>("#question-reject");
 const questionNextButton =
@@ -1087,8 +1120,12 @@ const permissionOpenGeminiButton = panel?.querySelector<HTMLButtonElement>(
   "#permission-open-gemini",
 );
 const permissionOpenKimiButton = panel?.querySelector<HTMLButtonElement>("#permission-open-kimi");
+const permissionOpenWorkBuddyButton = panel?.querySelector<HTMLButtonElement>(
+  "#permission-open-workbuddy",
+);
 const planView = panel?.querySelector<HTMLElement>("#plan-view");
 const planBackButton = panel?.querySelector<HTMLButtonElement>("#plan-back");
+const planTitle = panel?.querySelector<HTMLElement>("#plan-block-title");
 const planTool = panel?.querySelector<HTMLElement>("#plan-tool");
 const planPreview = panel?.querySelector<HTMLElement>("#plan-preview");
 const planSummaryText = panel?.querySelector<HTMLElement>("#plan-summary-text");
@@ -1114,6 +1151,9 @@ const planOpenZCodeButton =
 const planOpenGeminiButton =
   panel?.querySelector<HTMLButtonElement>("#plan-open-gemini");
 const planOpenKimiButton = panel?.querySelector<HTMLButtonElement>("#plan-open-kimi");
+const planOpenWorkBuddyButton = panel?.querySelector<HTMLButtonElement>(
+  "#plan-open-workbuddy",
+);
 
 const setSourceStatusLabel = (button: HTMLElement, label: string) => {
   const labelElement = button.querySelector<HTMLElement>(
@@ -1175,6 +1215,7 @@ if (
   !zcodeSessionCard ||
   !geminiSessionCard ||
   !kimiSessionCard ||
+  !workbuddySessionCard ||
   !codexSessionList ||
   !openCodeSessionList ||
   !mimoSessionList ||
@@ -1183,6 +1224,7 @@ if (
   !zcodeSessionList ||
   !geminiSessionList ||
   !kimiSessionList ||
+  !workbuddySessionList ||
   !claudeConnectionStatus ||
   !openCodeConnectionStatus ||
   !mimoConnectionStatus ||
@@ -1191,6 +1233,7 @@ if (
   !zcodeConnectionStatus ||
   !geminiConnectionStatus ||
   !kimiConnectionStatus ||
+  !workbuddyConnectionStatus ||
   !claudeSessionCardIcon ||
   !codexSessionCardIcon ||
   !openCodeSessionCardIcon ||
@@ -1200,6 +1243,7 @@ if (
   !zcodeSessionCardIcon ||
   !geminiSessionCardIcon ||
   !kimiSessionCardIcon ||
+  !workbuddySessionCardIcon ||
   !sessionProduct ||
   !sessionProductTrigger ||
   !sessionProductIcon ||
@@ -1347,6 +1391,7 @@ if (
   !questionOpenCodexButton ||
   !questionOpenGeminiButton ||
   !questionOpenKimiButton ||
+  !questionOpenWorkBuddyButton ||
   !questionRejectButton ||
   !questionNextButton ||
   !questionSubmitButton ||
@@ -1363,8 +1408,10 @@ if (
   !permissionDenyButton ||
   !permissionOpenGeminiButton ||
   !permissionOpenKimiButton ||
+  !permissionOpenWorkBuddyButton ||
   !planView ||
   !planBackButton ||
+  !planTitle ||
   !planTool ||
   !planPreview ||
   !planSummaryText ||
@@ -1379,7 +1426,8 @@ if (
   !planOpenCodexButton ||
   !planOpenZCodeButton ||
   !planOpenGeminiButton ||
-  !planOpenKimiButton
+  !planOpenKimiButton ||
+  !planOpenWorkBuddyButton
 ) {
   throw new Error("CodeCraft session panel is incomplete");
 }
@@ -1521,6 +1569,7 @@ let selectedDshSessionKey: string | undefined;
 let selectedZCodeSessionKey: string | undefined;
 let selectedGeminiSessionId: string | undefined;
 let selectedKimiSessionId: string | undefined;
+let selectedWorkBuddySessionId: string | undefined;
 type ReviewSource =
   | "claude"
   | "codex"
@@ -1530,7 +1579,8 @@ type ReviewSource =
   | "dsh"
   | "zcode"
   | "gemini"
-  | "kimi";
+  | "kimi"
+  | "workbuddy";
 let selectedSessionSource: ReviewSource = "claude";
 let lastRefreshError: string | undefined;
 let lastOpenCodeRefreshError: string | undefined;
@@ -1547,6 +1597,7 @@ let dshSessionItems = new Map<string, HTMLLIElement>();
 let zcodeSessionItems = new Map<string, HTMLLIElement>();
 let geminiSessionItems = new Map<string, HTMLLIElement>();
 let kimiSessionItems = new Map<string, HTMLLIElement>();
+let workbuddySessionItems = new Map<string, HTMLLIElement>();
 interface AllSessionSnapshots {
   claude: ClaudeSessionSnapshot;
   codex: CodexSnapshot;
@@ -1557,6 +1608,7 @@ interface AllSessionSnapshots {
   zcode: ZCodeSnapshot;
   gemini: GeminiSnapshot;
   kimi: KimiSnapshot;
+  workbuddy: WorkBuddySnapshot;
 }
 
 interface ActiveSessionCounts {
@@ -1569,6 +1621,7 @@ interface ActiveSessionCounts {
   zcode: number;
   gemini: number;
   kimi: number;
+  workbuddy: number;
 }
 
 let latestActiveSessionCounts: ActiveSessionCounts = {
@@ -1581,6 +1634,7 @@ let latestActiveSessionCounts: ActiveSessionCounts = {
   zcode: 0,
   gemini: 0,
   kimi: 0,
+  workbuddy: 0,
 };
 
 const activeSessionCount = (sessions: Array<{ status: string }>) =>
@@ -1625,6 +1679,9 @@ let lastAutoRevealedGeminiInteractionId: string | undefined;
 const dismissedKimiReviewIds = new Set<string>();
 const revealedKimiReviewIds = new Set<string>();
 let activeKimiReview: { sessionId: string; requestId: string; kind: ReviewContentView } | undefined;
+const dismissedWorkBuddyInteractionIds = new Set<string>();
+const revealedWorkBuddyInteractionIds = new Set<string>();
+let activeWorkBuddyReview: { sessionId: string; requestKey: string; kind: ReviewContentView } | undefined;
 let latestOpenCodeSnapshot: OpenCodeSnapshot = {
   connected: false,
   integrationError: null,
@@ -1695,6 +1752,24 @@ let latestKimiSnapshot: KimiSnapshot = {
     reason: "Kimi Code Hook 已连接",
   },
 };
+let latestWorkBuddySnapshot: WorkBuddySnapshot = {
+  connected: false,
+  integrationError: null,
+  version: 0,
+  sessions: [],
+  interactions: [],
+  capabilities: {
+    canObserve: true,
+    canApproveTools: false,
+    canAnswerQuestions: false,
+    canApprovePlans: false,
+    canStreamOutput: false,
+    protocolFrozen: false,
+    reason: "WorkBuddy 仅支持只读观察，请前往 WorkBuddy 中处理",
+  },
+  observedEventCount: 0,
+  unknownEventCount: 0,
+};
 let displayedContentView: ContentView = "sessions";
 let requestedContentView: ContentView = "sessions";
 let questionOriginView: ContentView | undefined;
@@ -1721,6 +1796,7 @@ const soundSourcePrimed: Record<
   zcode: false,
   gemini: false,
   kimi: false,
+  workbuddy: false,
 };
 
 const observeSoundFrames = (
@@ -1932,7 +2008,8 @@ type SessionProductId =
   | "dsh"
   | "zcode"
   | "gemini"
-  | "kimi";
+  | "kimi"
+  | "workbuddy";
 type SessionSourceProductId = Exclude<SessionProductId, "all">;
 type SessionProduct = {
   id: SessionProductId;
@@ -1948,7 +2025,8 @@ type SessionProduct = {
     | "dsh"
     | "zcode"
     | "gemini"
-    | "kimi";
+    | "kimi"
+    | "workbuddy";
   iconUrl: string;
 };
 
@@ -2022,6 +2100,13 @@ const sessionProducts: SessionProduct[] = [
     optionLabel: "Kimi Code",
     kind: "kimi",
     iconUrl: kimiIconUrl,
+  },
+  {
+    id: "workbuddy",
+    triggerLabel: "WorkBuddy",
+    optionLabel: "WorkBuddy",
+    kind: "workbuddy",
+    iconUrl: workbuddyIconUrl,
   },
 ];
 const installedSessionProductIds = new Set<SessionSourceProductId>();
@@ -2700,6 +2785,8 @@ const hasSelectedSessionDetail = () =>
             ? latestKimiSnapshot.sessions.some(
                 (session) => session.id === selectedKimiSessionId,
               )
+          : selectedSessionSource === "workbuddy"
+            ? false
           : latestSessions.some((session) => session.id === selectedSessionId);
 
 const returnViewForReview = (origin: ContentView | undefined) =>
@@ -3266,8 +3353,18 @@ const syncQuestionAnswerState = (
     activeQuestionSource === "gemini" && state.question.readOnly === true;
   const showOpenKimi =
     activeQuestionSource === "kimi" && state.question.readOnly === true;
+  const showOpenWorkBuddy =
+    activeQuestionSource === "workbuddy" && state.question.readOnly === true;
   const showReject = activeQuestionSource === "opencode" || activeQuestionSource === "mimo";
-  setActionNavVisible(actions.size > 0 || showOpenCodex || showOpenGemini || showOpenKimi || showReject, animate);
+  setActionNavVisible(
+    actions.size > 0 ||
+      showOpenCodex ||
+      showOpenGemini ||
+      showOpenKimi ||
+      showOpenWorkBuddy ||
+      showReject,
+    animate,
+  );
   setActionButtonVisible(
     questionPreviousButton,
     actions.has("previous"),
@@ -3276,6 +3373,7 @@ const syncQuestionAnswerState = (
   setActionButtonVisible(questionOpenCodexButton, showOpenCodex, animate);
   setActionButtonVisible(questionOpenGeminiButton, showOpenGemini, animate);
   setActionButtonVisible(questionOpenKimiButton, showOpenKimi, animate);
+  setActionButtonVisible(questionOpenWorkBuddyButton, showOpenWorkBuddy, animate);
   setActionButtonVisible(questionRejectButton, showReject, animate);
   setActionButtonVisible(questionNextButton, actions.has("next"), animate);
   setActionButtonVisible(questionSubmitButton, actions.has("submit"), animate);
@@ -3353,16 +3451,18 @@ const renderCurrentQuestion = (animate = false) => {
   const previousLayout = animate ? captureQuestionLayout() : undefined;
   const { request, question, draft } = state;
 
-  const nextProgress = `第 ${activeQuestionIndex + 1}/${request.questions.length} 问题`;
+  const isWorkBuddyQuestion = activeQuestionSource === "workbuddy";
+  questionAnswerBlock.hidden = isWorkBuddyQuestion;
+  const nextProgress = isWorkBuddyQuestion
+    ? "WorkBuddy问题审批"
+    : `第 ${activeQuestionIndex + 1}/${request.questions.length} 问题`;
   const nextHeader = question.header ?? "Claude Code";
   const nextQuestionText = question.question;
   const nextAnswerMode =
     question.answerMode ?? (question.multiSelect ? "可多选" : "单选");
-  const nextOptions = questionAnswerOptions(
-    request.id,
-    question,
-    activeQuestionIndex,
-  );
+  const nextOptions = isWorkBuddyQuestion
+    ? []
+    : questionAnswerOptions(request.id, question, activeQuestionIndex);
   const nextExtraText = draft.extraText;
   const nextExtraVisible = Array.from(draft.selectedAnswerIds).some((id) =>
     id.endsWith(":other"),
@@ -3594,6 +3694,7 @@ const clearActiveQuestionRequest = () => {
     clearActionButtonTransitionStyles(button);
     button.hidden = true;
   }
+  questionOpenWorkBuddyButton.hidden = true;
   actionNavVisibilityState?.animation?.cancel();
   actionNavVisibilityState = undefined;
   clearActionNavTransitionStyles();
@@ -3630,6 +3731,8 @@ questionBackButton.addEventListener("click", () => {
     dismissedMimoReviewId = activeQuestionRequest.id;
   } else if (activeQuestionSource === "kimi") {
     dismissedKimiReviewIds.add(activeQuestionRequest.id);
+  } else if (activeQuestionSource === "workbuddy") {
+    dismissedWorkBuddyInteractionIds.add(activeQuestionRequest.id);
   } else {
     manuallyHiddenQuestionRequestId = activeQuestionRequest.id;
   }
@@ -3795,6 +3898,36 @@ const focusKimiSession = async (button: HTMLButtonElement) => {
   }
 };
 
+const focusWorkBuddyWindow = async (button: HTMLButtonElement) => {
+  const requestKey = activeWorkBuddyReview?.requestKey;
+  if (!requestKey || button.disabled) return;
+  const stillCurrent = () => activeWorkBuddyReview?.requestKey === requestKey && workBuddyReviewIsVisible();
+  const setStatus = (
+    message: string,
+    state: "pending" | "success" | "error" = "pending",
+  ) => {
+    if (!stillCurrent()) return;
+    if (button.id === "question-open-workbuddy") {
+      setQuestionSubmitStatus(message, state);
+    } else if (button.id === "permission-open-workbuddy") {
+      setPermissionSubmitStatus(message, state);
+    } else {
+      setPlanSubmitStatus(message, state);
+    }
+  };
+  button.disabled = true;
+  setStatus("正在切换到 WorkBuddy");
+  try {
+    await workBuddyHandoffUi.openRequest(requestKey);
+    setStatus("已切换到 WorkBuddy，处理完成后提醒会自动关闭", "success");
+  } catch (error) {
+    console.error("Unable to focus the WorkBuddy window", error);
+    setStatus(error instanceof Error ? error.message : String(error), "error");
+  } finally {
+    if (button.dataset.requestKey === requestKey) button.disabled = false;
+  }
+};
+
 questionOpenCodexButton.addEventListener("click", () => {
   const state = currentQuestionState();
   if (
@@ -3810,6 +3943,12 @@ questionOpenCodexButton.addEventListener("click", () => {
     activeCodexQuestionThreadId,
     questionOpenCodexButton,
   );
+});
+
+questionOpenWorkBuddyButton.addEventListener("click", () => {
+  if (activeQuestionSource === "workbuddy") {
+    void focusWorkBuddyWindow(questionOpenWorkBuddyButton);
+  }
 });
 
 questionRejectButton.addEventListener("click", async () => {
@@ -4044,18 +4183,23 @@ const renderPermissionRequest = (request: ClaudePermissionRequest) => {
   delete permissionSubmitStatus.dataset.state;
   const readOnlyGemini = activePermissionSource === "gemini";
   const readOnlyKimi = activePermissionSource === "kimi";
+  const readOnlyWorkBuddy = activePermissionSource === "workbuddy";
   permissionActionBadge.textContent = readOnlyGemini
     ? "在原 Gemini 中处理"
     : readOnlyKimi
       ? "在 Kimi Code 中处理"
+      : readOnlyWorkBuddy
+        ? "在原 WorkBuddy 中处理"
       : "点击后立即回传";
-  permissionAllowButton.hidden = readOnlyGemini || readOnlyKimi;
-  permissionAlwaysAllowButton.hidden = readOnlyGemini || readOnlyKimi || !request.canAlwaysAllow;
-  permissionDenyButton.hidden = readOnlyGemini || readOnlyKimi;
+  permissionAllowButton.hidden = readOnlyGemini || readOnlyKimi || readOnlyWorkBuddy;
+  permissionAlwaysAllowButton.hidden =
+    readOnlyGemini || readOnlyKimi || readOnlyWorkBuddy || !request.canAlwaysAllow;
+  permissionDenyButton.hidden = readOnlyGemini || readOnlyKimi || readOnlyWorkBuddy;
   permissionOpenGeminiButton.hidden = !readOnlyGemini;
   permissionOpenKimiButton.hidden = !readOnlyKimi;
+  permissionOpenWorkBuddyButton.hidden = !readOnlyWorkBuddy;
   permissionView.dataset.reviewSource = activePermissionSource;
-  setPermissionButtonsDisabled(readOnlyGemini || readOnlyKimi);
+  setPermissionButtonsDisabled(readOnlyGemini || readOnlyKimi || readOnlyWorkBuddy);
 };
 
 const clearActivePermissionRequest = () => {
@@ -4073,6 +4217,7 @@ const clearActivePermissionRequest = () => {
   permissionDenyButton.hidden = false;
   permissionOpenGeminiButton.hidden = true;
   permissionOpenKimiButton.hidden = true;
+  permissionOpenWorkBuddyButton.hidden = true;
   permissionSubmitStatus.hidden = true;
   permissionSubmitStatus.textContent = "";
   delete permissionSubmitStatus.dataset.state;
@@ -4133,7 +4278,12 @@ type PermissionDecision = "allow" | "allowAlways" | "deny";
 
 const submitPermissionDecision = async (decision: PermissionDecision) => {
   const request = activePermissionRequest;
-  if (!request || activePermissionSource === "kimi" || activePermissionSource === "gemini") return;
+  if (
+    !request ||
+    activePermissionSource === "kimi" ||
+    activePermissionSource === "gemini" ||
+    activePermissionSource === "workbuddy"
+  ) return;
 
   const returnView = returnViewForReview(permissionOriginView);
   setPermissionButtonsDisabled(true);
@@ -4301,6 +4451,8 @@ permissionBackButton.addEventListener("click", () => {
     dismissedMimoReviewId = activePermissionRequest.id;
   } else if (activePermissionSource === "kimi") {
     dismissedKimiReviewIds.add(activePermissionRequest.id);
+  } else if (activePermissionSource === "workbuddy") {
+    dismissedWorkBuddyInteractionIds.add(activePermissionRequest.id);
   } else {
     manuallyHiddenPermissionRequestId = activePermissionRequest.id;
   }
@@ -4338,6 +4490,12 @@ permissionOpenKimiButton.addEventListener("click", () => {
   if (activePermissionSource === "kimi") void focusKimiSession(permissionOpenKimiButton);
 });
 
+permissionOpenWorkBuddyButton.addEventListener("click", () => {
+  if (activePermissionSource === "workbuddy") {
+    void focusWorkBuddyWindow(permissionOpenWorkBuddyButton);
+  }
+});
+
 const syncPlanSourceControls = () => {
   const isCodexPlan = activePlanSource === "codex";
   const isClaudePlan = activePlanSource === "claude";
@@ -4346,8 +4504,10 @@ const syncPlanSourceControls = () => {
   const isMimoPlan = activePlanSource === "mimo";
   const isGeminiPlan = activePlanSource === "gemini";
   const isKimiPlan = activePlanSource === "kimi";
+  const isWorkBuddyPlan = activePlanSource === "workbuddy";
   const isFeedbackPlan = isDshPlan || isZCodePlan || isMimoPlan;
   planView.dataset.planSource = activePlanSource;
+  planTitle.textContent = isWorkBuddyPlan ? "WorkBuddy计划" : "计划";
   planAutoButton.hidden = !isClaudePlan && !isFeedbackPlan;
   planAutoRememberButton.hidden = !isClaudePlan;
   planCustomInput.hidden = !isClaudePlan && !isFeedbackPlan;
@@ -4356,10 +4516,11 @@ const syncPlanSourceControls = () => {
   planOpenZCodeButton.hidden = !isZCodePlan;
   planOpenGeminiButton.hidden = !isGeminiPlan;
   planOpenKimiButton.hidden = !isKimiPlan;
-  planAutoButton.disabled = isGeminiPlan || isKimiPlan;
-  planAutoRememberButton.disabled = isGeminiPlan || isKimiPlan;
-  planCustomInput.disabled = isGeminiPlan || isKimiPlan;
-  planCustomSubmitButton.disabled = isGeminiPlan || isKimiPlan;
+  planOpenWorkBuddyButton.hidden = !isWorkBuddyPlan;
+  planAutoButton.disabled = isGeminiPlan || isKimiPlan || isWorkBuddyPlan;
+  planAutoRememberButton.disabled = isGeminiPlan || isKimiPlan || isWorkBuddyPlan;
+  planCustomInput.disabled = isGeminiPlan || isKimiPlan || isWorkBuddyPlan;
+  planCustomSubmitButton.disabled = isGeminiPlan || isKimiPlan || isWorkBuddyPlan;
   const zcodeOpenLabel = translate("前往 ZCode 处理");
   const geminiOpenLabel = translate("前往 Gemini 处理");
   planOpenZCodeButton.querySelector("span")!.textContent = zcodeOpenLabel;
@@ -4394,6 +4555,8 @@ const syncPlanSourceControls = () => {
   }
   planActionBadge.textContent = isKimiPlan
     ? "在 Kimi Code 中处理"
+    : isWorkBuddyPlan
+    ? "在WorkBuddy中处理"
     : isGeminiPlan
     ? translate("在原 Gemini 中处理")
     : isCodexPlan
@@ -4477,6 +4640,7 @@ const setPlanButtonsDisabled = (disabled: boolean) => {
   planCustomSubmitButton.disabled = disabled;
   planOpenCodexButton.disabled = disabled;
   planOpenZCodeButton.disabled = disabled;
+  planOpenWorkBuddyButton.disabled = disabled;
 };
 
 const setPlanSubmitStatus = (
@@ -4493,7 +4657,13 @@ type PlanExecutionMode = "auto";
 
 const submitPlanDecision = async (mode: PlanExecutionMode, note?: string) => {
   const request = activePlanRequest;
-  if (!request || activePlanSource === "codex" || activePlanSource === "gemini" || activePlanSource === "kimi") return;
+  if (
+    !request ||
+    activePlanSource === "codex" ||
+    activePlanSource === "gemini" ||
+    activePlanSource === "kimi" ||
+    activePlanSource === "workbuddy"
+  ) return;
 
   const returnView = returnViewForReview(planOriginView);
   setPlanButtonsDisabled(true);
@@ -4565,6 +4735,8 @@ planBackButton.addEventListener("click", () => {
     manuallyHiddenPlanRequestId = activePlanRequest.id;
   } else if (activePlanSource === "kimi") {
     dismissedKimiReviewIds.add(activePlanRequest.id);
+  } else if (activePlanSource === "workbuddy") {
+    dismissedWorkBuddyInteractionIds.add(activePlanRequest.id);
   } else {
     manuallyHiddenPlanRequestId = activePlanRequest.id;
   }
@@ -4617,6 +4789,12 @@ questionOpenGeminiButton.addEventListener("click", () => {
 
 planOpenKimiButton.addEventListener("click", () => {
   if (activePlanSource === "kimi") void focusKimiSession(planOpenKimiButton);
+});
+
+planOpenWorkBuddyButton.addEventListener("click", () => {
+  if (activePlanSource === "workbuddy") {
+    void focusWorkBuddyWindow(planOpenWorkBuddyButton);
+  }
 });
 
 questionOpenKimiButton.addEventListener("click", () => {
@@ -4847,6 +5025,10 @@ const syncProductVisibility = () => {
   const showKimi =
     installedSessionProductIds.has("kimi") &&
     (selectedSessionProductId === "all" || selectedSessionProductId === "kimi");
+  const showWorkBuddy =
+    installedSessionProductIds.has("workbuddy") &&
+    (selectedSessionProductId === "all" ||
+      selectedSessionProductId === "workbuddy");
   claudeSessionCard.hidden = !showClaude;
   codexSessionCard.hidden = !showCodex;
   openCodeSessionCard.hidden = !showOpenCode;
@@ -4856,6 +5038,7 @@ const syncProductVisibility = () => {
   zcodeSessionCard.hidden = !showZCode;
   geminiSessionCard.hidden = !showGemini;
   kimiSessionCard.hidden = !showKimi;
+  workbuddySessionCard.hidden = !showWorkBuddy;
   sessionSourceCards.dataset.filter = selectedSessionProductId;
   renderSessionSummary();
 };
@@ -4872,6 +5055,7 @@ const sessionProductIdForHookAgent = (
   if (id === "zCode") return "zcode";
   if (id === "geminiCli") return "gemini";
   if (id === "kimiCode") return "kimi";
+  if (id === "workBuddy") return "workbuddy";
   return undefined;
 };
 
@@ -5083,6 +5267,12 @@ configureThemedAgentIcon(
   kimiSessionCardIcon,
   kimiIconUrl,
 );
+workbuddySessionCardIcon.src = workbuddyIconUrl;
+configureThemedAgentIcon(
+  workbuddySessionCardIcon.closest<HTMLElement>(".session-source-card__mark"),
+  workbuddySessionCardIcon,
+  workbuddyIconUrl,
+);
 
 claudeConnectionStatus.addEventListener("click", () => {
   if (claudeConnectionStatus.dataset.connected === "true") return;
@@ -5157,6 +5347,7 @@ function* latestUnifiedSessions(): Generator<UnifiedSession> {
   yield* latestZCodeSnapshot.sessions;
   yield* latestGeminiSnapshot.sessions;
   yield* latestKimiSnapshot.sessions;
+  yield* latestWorkBuddySnapshot.sessions.map(toWorkBuddyUnifiedSession);
 }
 
 const collapsedPanelHeight = () =>
@@ -5928,6 +6119,7 @@ const renderSessionSummary = () => {
     mimo: latestActiveSessionCounts.mimo,
     gemini: latestActiveSessionCounts.gemini,
     kimi: latestActiveSessionCounts.kimi,
+    workbuddy: latestActiveSessionCounts.workbuddy,
   };
   const connectionStates: Record<SessionSourceProductId, boolean> = {
     "claude-code": latestClaudeSnapshot.connected,
@@ -5939,6 +6131,7 @@ const renderSessionSummary = () => {
     mimo: latestMimoSnapshot.connected,
     gemini: latestGeminiSnapshot.connected,
     kimi: latestKimiSnapshot.connected,
+    workbuddy: latestWorkBuddySnapshot.connected,
   };
   const selectedSources =
     selectedSessionProductId === "all"
@@ -7596,16 +7789,19 @@ type HookAgentId =
   | "deepSeekHarness"
   | "zCode"
   | "geminiCli"
-  | "kimiCode";
+  | "kimiCode"
+  | "workBuddy";
 type HookIntegrationStatus = {
   id: HookAgentId;
   name: string;
   agentInstalled: boolean;
   hookInstalled: boolean;
+  workbuddy?: WorkBuddyHookState;
   installState?:
     | "notInstalled"
     | "installed"
     | "syncedRestartRequired"
+    | "disabled"
     | "modified"
     | "conflict"
     | "incompatible"
@@ -7667,6 +7863,13 @@ const browserHookIntegrations: HookIntegrationStatus[] = [
     name: "Kimi Code",
     agentInstalled: true,
     hookInstalled: false,
+  },
+  {
+    id: "workBuddy",
+    name: "WorkBuddy",
+    agentInstalled: true,
+    hookInstalled: false,
+    installState: "notInstalled",
   },
 ];
 
@@ -7766,6 +7969,7 @@ const syncHookRefreshButton = () => {
 const hookIconUrl = (id: HookAgentId) => {
   if (id === "geminiCli") return geminiIconUrl;
   if (id === "kimiCode") return kimiIconUrl;
+  if (id === "workBuddy") return workbuddyIconUrl;
   if (id === "claudeCode") return claudeCodeIconUrl;
   if (id === "openCode") return openCodeIconUrl;
   if (id === "mimo") return mimoIconUrl;
@@ -7784,7 +7988,25 @@ const syncMimoHookStatus = () => {
   mimoConnectionStatus.title = status?.error ?? "Mimo Hook 未安装";
 };
 
+const syncWorkBuddyHookStatus = () => {
+  const status = hookIntegrations.find((item) => item.id === "workBuddy");
+  const hook = status?.workbuddy ?? latestWorkBuddySnapshot.hook ?? undefined;
+  const view = workBuddyHookPresentation(hook);
+  setSourceStatusLabel(
+    workbuddyConnectionStatus,
+    view.connected ? "Hook 正常" : "等待加载",
+  );
+  workbuddyConnectionStatus.dataset.connected = String(view.connected);
+  workbuddyConnectionStatus.title = view.connected
+    ? "WorkBuddy Hook 正常"
+    : "等待 WorkBuddy Hook 加载";
+};
+
 const hookIntegrationDetail = (status: HookIntegrationStatus): string => {
+  if (status.id === "workBuddy") {
+    const view = workBuddyHookPresentation(status.workbuddy);
+    return `${status.hookInstalled ? "已安装 · " : ""}${view.label}`;
+  }
   if (status.id === "kimiCode") return "CodeCraft 会话同步 Hook";
   if (status.id === "zCode") {
     const version = status.installedVersion ?? status.runningVersions?.[0];
@@ -7823,8 +8045,10 @@ const createHookAgentButton = (status: HookIntegrationStatus) => {
               ? "zcode"
               : status.id === "geminiCli"
                 ? "gemini"
-                : status.id === "kimiCode"
-                  ? "kimi"
+              : status.id === "kimiCode"
+                ? "kimi"
+                : status.id === "workBuddy"
+                  ? "workbuddy"
                   : "codex";
   mark.setAttribute("aria-hidden", "true");
   const iconUrl = hookIconUrl(status.id);
@@ -7863,19 +8087,21 @@ const syncHookAgentButton = (
   );
   if (detail) {
     detail.textContent = hookIntegrationDetail(status);
-    detail.title = detail.textContent;
+    detail.title = status.id === "workBuddy"
+      ? workBuddyHookPresentation(status.workbuddy).detail : detail.textContent;
   }
   button.dataset.agentInstalled = String(status.agentInstalled);
   button.dataset.busy = String(activeOperation !== undefined);
   button.dataset.refreshing = String(hookRefreshing);
-  button.disabled = hookMutationsBlocked() || !status.agentInstalled;
+  const canOperate = status.agentInstalled || (status.id === "workBuddy" && status.hookInstalled);
+  button.disabled = hookMutationsBlocked() || !canOperate;
   button.setAttribute(
     "aria-label",
-    !status.agentInstalled
+    !canOperate
       ? `${status.name} 未安装`
       : `${status.hookInstalled ? "卸载" : "安装"} ${status.name} Hook`,
   );
-  button.title = !status.agentInstalled
+  button.title = !canOperate
     ? `未检测到 ${status.name}，无法操作 Hook`
     : status.error
       ? status.error
@@ -7892,9 +8118,13 @@ const syncHookAgentButton = (
     spinner.className = "hook-spinner";
     spinner.setAttribute("aria-hidden", "true");
     state.append(text, spinner);
-  } else if (!status.agentInstalled) {
+  } else if (!canOperate) {
     state.dataset.kind = "missing";
     state.textContent = "未安装";
+  } else if (status.id === "workBuddy") {
+    state.dataset.kind = status.error ? "missing" : "action";
+    state.textContent = status.hookInstalled ? "卸载" : "安装";
+    button.title = `${workBuddyHookPresentation(status.workbuddy).detail} 点击${state.textContent} Hook。`;
   } else if (status.installState === "syncedRestartRequired") {
     state.dataset.kind = "action";
     state.textContent = "已同步 · 重启生效";
@@ -7950,6 +8180,7 @@ const renderHookIntegrations = (
   syncInstalledSessionProducts(nextStatuses);
   syncOpenCodeHookStatus();
   syncMimoHookStatus();
+  syncWorkBuddyHookStatus();
   if (isTauriRuntime && isCodexHookKnownUninstalled()) {
     // Removing a Hook must clear any already-rendered Codex detail or pending
     // request immediately; waiting for the next session poll leaves stale
@@ -8030,7 +8261,7 @@ const fadeHookOperation = async (id: HookAgentId) => {
 
 async function toggleAgentHook(id: HookAgentId) {
   const status = hookIntegrations.find((item) => item.id === id);
-  if (!status || !status.agentInstalled || hookMutationsBlocked())
+  if (!status || (!status.agentInstalled && !(id === "workBuddy" && status.hookInstalled)) || hookMutationsBlocked())
     return;
   hookOperation = { id, installing: !status.hookInstalled };
   setHookSettingsError();
@@ -8046,7 +8277,18 @@ async function toggleAgentHook(id: HookAgentId) {
     } else {
       await new Promise((resolve) => window.setTimeout(resolve, 650));
       const preview = browserHookIntegrations.find((item) => item.id === id);
-      if (preview) preview.hookInstalled = !status.hookInstalled;
+      if (preview) {
+        preview.hookInstalled = !status.hookInstalled;
+        if (id === "workBuddy") {
+          preview.workbuddy = {
+            state: preview.hookInstalled ? "syncedRestartRequired" : "notInstalled",
+            filesInstalled: preview.hookInstalled, enabled: preview.hookInstalled,
+            registered: false, loaded: false, connected: false, bridgeReady: true, error: null,
+          };
+          preview.installState = preview.workbuddy.state;
+          preview.error = undefined;
+        }
+      }
     }
     const nextStatuses = await readHookIntegrations();
     await fadeHookOperation(id);
@@ -9384,6 +9626,352 @@ const renderUnifiedSessionList = (
   nextItems.forEach((item, id) => items.set(id, item));
 };
 
+const openWorkBuddyRequest = async (requestKey: string) => {
+  if (!isTauriRuntime) throw new Error("请在运行 WorkBuddy 的设备上使用 CodeCraft 桌面端，或直接打开 WorkBuddy 处理。");
+  await invoke("focus_workbuddy_window", { requestKey });
+};
+
+const workBuddyHandoffUi = new WorkBuddyHandoffUi(openWorkBuddyRequest);
+
+const workBuddyQuestionRequest = (
+  interaction: WorkBuddyInteraction,
+): ClaudeQuestionRequest => ({
+  id: interaction.requestKey,
+  questions: (interaction.questions.length > 0
+    ? interaction.questions
+    : [{
+        header: interaction.toolName ?? "WorkBuddy",
+        question: interaction.summary,
+        options: [],
+        multiSelect: false,
+        allowOther: false,
+      }]
+  ).map((question) => ({
+    header: question.header,
+    question: question.question,
+    options: question.options,
+    multiSelect: question.multiSelect,
+    allowOther: question.allowOther,
+    allowChat: false,
+    readOnly: true,
+    answerMode: "请在 WorkBuddy 中回答，完成后此提醒会自动关闭",
+  })),
+});
+
+const workBuddyPermissionRequest = (
+  interaction: WorkBuddyInteraction,
+): ClaudePermissionRequest => ({
+  id: interaction.requestKey,
+  toolName: interaction.toolName ?? "WorkBuddy 工具调用",
+  summary: interaction.summary,
+  cwd: null,
+  canAlwaysAllow: false,
+  capturedAt: interaction.capturedAt,
+});
+
+const workBuddyPlanRequest = (
+  interaction: WorkBuddyInteraction,
+): ClaudePlanRequest => ({
+  id: interaction.requestKey,
+  toolName: interaction.toolName ?? "ExitPlanMode",
+  plan: interaction.plan ?? "WorkBuddy 正在等待确认计划。请前往 WorkBuddy 查看完整计划并处理，完成后此提醒会自动关闭。",
+  cwd: null,
+  capturedAt: interaction.capturedAt,
+});
+
+const workBuddyReviewIsVisible = () =>
+  (requestedContentView === "question" && activeQuestionSource === "workbuddy") ||
+  (requestedContentView === "permission" && activePermissionSource === "workbuddy") ||
+  (requestedContentView === "plan" && activePlanSource === "workbuddy");
+
+const renderWorkBuddyReview = (
+  interaction: WorkBuddyInteraction,
+  session: WorkBuddySession,
+  shouldAutoReveal: boolean,
+) => {
+  selectedWorkBuddySessionId = session.id;
+  selectedSessionSource = "workbuddy";
+  activeWorkBuddyReview = {
+    sessionId: session.id,
+    requestKey: interaction.requestKey,
+    kind: interaction.kind === "question"
+      ? "question"
+      : interaction.kind === "plan"
+        ? "plan"
+        : "permission",
+  };
+
+  const signature = JSON.stringify(interaction);
+  const view = interaction.kind === "question"
+    ? questionView
+    : interaction.kind === "plan"
+      ? planView
+      : permissionView;
+  const changed = view.dataset.workbuddyRequest !== signature;
+  if (changed) {
+    const handoffButton = interaction.kind === "question"
+      ? questionOpenWorkBuddyButton
+      : interaction.kind === "plan" ? planOpenWorkBuddyButton : permissionOpenWorkBuddyButton;
+    // A previous request's in-flight handoff must not disable its successor.
+    if (handoffButton.dataset.requestKey !== interaction.requestKey) {
+      handoffButton.disabled = false;
+      handoffButton.dataset.requestKey = interaction.requestKey;
+    }
+    if (interaction.kind === "question") {
+      if (activeQuestionRequest?.id !== interaction.requestKey) clearActiveQuestionRequest();
+      renderedQuestionRequestId = undefined;
+    }
+    else if (interaction.kind === "plan") renderedPlanRequestId = undefined;
+    else renderedPermissionRequestId = undefined;
+    view.dataset.workbuddyRequest = signature;
+  }
+
+  if (interaction.kind === "question") {
+    clearActivePermissionRequest();
+    clearActivePlanRequest();
+    activeQuestionSource = "workbuddy";
+    renderQuestionRequest(workBuddyQuestionRequest(interaction));
+  } else if (interaction.kind === "plan") {
+    clearActiveQuestionRequest();
+    clearActivePermissionRequest();
+    renderPlanRequest(workBuddyPlanRequest(interaction), "workbuddy");
+  } else {
+    clearActiveQuestionRequest();
+    clearActivePlanRequest();
+    activePermissionSource = "workbuddy";
+    renderPermissionRequest(workBuddyPermissionRequest(interaction));
+    setPermissionButtonsDisabled(true);
+    if (changed) setPermissionSubmitStatus("请在 WorkBuddy 中处理，完成后此提醒会自动关闭");
+  }
+
+  const reviewView = interaction.kind === "question"
+    ? "question"
+    : interaction.kind === "plan"
+      ? "plan"
+      : "permission";
+  if (requestedContentView !== reviewView) {
+    rememberReviewOrigin(reviewView);
+    switchContentView(reviewView);
+  }
+  if (shouldAutoReveal && collapseExpandSettings.approvalAutoExpand) {
+    void revealPanelForAttention().catch((error: unknown) => {
+      console.error("Unable to reveal the WorkBuddy review", error);
+    });
+  }
+};
+
+const setSelectedWorkBuddySession = (_sessionId: string) => {
+  // WorkBuddy sessions are observable only; their detail page is disabled.
+};
+void setSelectedWorkBuddySession;
+
+const createWorkBuddySessionButton = (session: WorkBuddySession): HTMLLIElement => {
+  const sessionTitle = workBuddySessionTitle(session);
+  const item = document.createElement("li");
+  item.className = "session-list__item";
+  const button = document.createElement("button");
+  button.className = "session-button";
+  button.type = "button";
+  button.dataset.sessionId = session.id;
+  button.dataset.sessionKey = workBuddySessionKey(session);
+  button.dataset.sessionSource = "workbuddy";
+  button.dataset.sessionStatus = workBuddyVisualStatus(session.stage);
+  button.setAttribute("aria-pressed", "false");
+  button.setAttribute("aria-disabled", "true");
+  button.disabled = true;
+  button.title = `WorkBuddy 会话详情已禁用 · ${sessionTitle}`;
+  const statusIcon = createPixelStatusSvg(workBuddyVisualStatus(session.stage), "pixel-status");
+  const statusLabel = document.createElement("span");
+  statusLabel.className = "sr-only";
+  statusLabel.textContent = workBuddyStageLabel(session.stage);
+  const title = document.createElement("span");
+  title.className = "session-button__title";
+  title.textContent = sessionTitle;
+  title.title = sessionTitle;
+  const content = document.createElement("span");
+  content.className = "session-button__content";
+  content.textContent = session.pendingCount > 0
+    ? `${session.pendingCount} 项交互待观察`
+    : session.currentTool ?? workBuddyStageLabel(session.stage);
+  content.title = content.textContent;
+  const time = document.createElement("time");
+  time.className = "session-button__time";
+  time.dateTime = new Date(session.updatedAt).toISOString();
+  time.textContent = formatSessionTime(session.updatedAt);
+  const chevron = document.createElementNS("http://www.w3.org/2000/svg", "svg");
+  chevron.classList.add("session-button__chevron");
+  chevron.setAttribute("viewBox", "0 0 24 24");
+  chevron.setAttribute("fill", "none");
+  chevron.setAttribute("stroke", "currentColor");
+  chevron.setAttribute("stroke-width", "2");
+  chevron.setAttribute("stroke-linecap", "round");
+  chevron.setAttribute("stroke-linejoin", "round");
+  chevron.setAttribute("aria-hidden", "true");
+  const chevronPath = document.createElementNS("http://www.w3.org/2000/svg", "path");
+  chevronPath.setAttribute("d", "m9 18 6-6-6-6");
+  chevron.append(chevronPath);
+  button.append(statusIcon, statusLabel, title, content, time, chevron);
+  item.append(button);
+  return item;
+};
+
+const renderWorkBuddySessionList = (sessions: WorkBuddySession[]) => {
+  if (sessions.length === 0) {
+    workbuddySessionList.replaceChildren(Object.assign(document.createElement("li"), {
+      className: "session-list__empty",
+      textContent: "暂无活跃会话",
+    }));
+    workbuddySessionItems.clear();
+    return;
+  }
+  const nextItems = new Map<string, HTMLLIElement>();
+  for (const session of sessions) {
+    const key = workBuddySessionKey(session);
+    const item = workbuddySessionItems.get(key) ?? createWorkBuddySessionButton(session);
+    const button = item.querySelector<HTMLButtonElement>(".session-button");
+    if (button) {
+      const statusChanged = button.dataset.sessionStatus !== workBuddyVisualStatus(session.stage);
+      button.dataset.sessionStatus = workBuddyVisualStatus(session.stage);
+      if (statusChanged) button.querySelector(".pixel-status")?.replaceWith(
+        createPixelStatusSvg(workBuddyVisualStatus(session.stage), "pixel-status"),
+      );
+      const statusLabel = button.querySelector(".sr-only");
+      if (statusLabel) statusLabel.textContent = workBuddyStageLabel(session.stage);
+      button.setAttribute("aria-pressed", "false");
+      button.setAttribute("aria-disabled", "true");
+      button.disabled = true;
+      const sessionTitle = workBuddySessionTitle(session);
+      button.title = `WorkBuddy 会话详情已禁用 · ${sessionTitle}`;
+      const title = button.querySelector<HTMLElement>(".session-button__title");
+      if (title) {
+        title.textContent = sessionTitle;
+        title.title = sessionTitle;
+      }
+      const content = button.querySelector<HTMLElement>(".session-button__content");
+      if (content) {
+        content.textContent = session.pendingCount > 0
+          ? `${session.pendingCount} 项交互待观察`
+          : session.currentTool ?? workBuddyStageLabel(session.stage);
+        content.title = content.textContent ?? "";
+      }
+      const time = button.querySelector(".session-button__time");
+      if (time) {
+        time.textContent = formatSessionTime(session.updatedAt);
+        time.setAttribute("datetime", new Date(session.updatedAt).toISOString());
+      }
+    }
+    nextItems.set(key, item);
+  }
+  for (const [key, stale] of workbuddySessionItems) {
+    if (!nextItems.has(key)) stale.remove();
+  }
+  const focused = document.activeElement instanceof HTMLButtonElement &&
+    workbuddySessionList.contains(document.activeElement) ? document.activeElement : null;
+  workbuddySessionList.querySelectorAll(".session-list__empty").forEach((empty) => empty.remove());
+  sessions.forEach((session, index) => {
+    const item = nextItems.get(workBuddySessionKey(session))!;
+    if (workbuddySessionList.children[index] !== item) {
+      workbuddySessionList.insertBefore(item, workbuddySessionList.children[index] ?? null);
+    }
+  });
+  workbuddySessionItems = nextItems;
+  if (focused?.isConnected && document.activeElement !== focused) focused.focus({ preventScroll: true });
+};
+
+const renderWorkBuddySnapshot = (snapshot: WorkBuddySnapshot) => {
+  workBuddyHandoffUi.prune(new Set(snapshot.interactions.map((request) => request.requestKey)));
+  const visibleSessions = filterDismissedSessions(
+    snapshot.sessions, dismissedSessionKeys, workBuddySessionKey,
+    (session) => !["idle", "stopped"].includes(session.stage),
+  ).filter((session) => !shouldAutoCleanupSession(session.stage, session.updatedAt, sessionCleanupSettings));
+  snapshot = {
+    ...snapshot,
+    sessions: visibleSessions,
+    interactions: snapshot.interactions.filter((item) => visibleSessions.some((session) => session.id === item.sessionId)),
+  };
+  latestWorkBuddySnapshot = snapshot;
+  latestActiveSessionCounts.workbuddy = activeSessionCount(
+    snapshot.sessions.map((session) => ({
+      status: session.stage === "idle" || session.stage === "stopped" ? session.stage : "active",
+    })),
+  );
+  // Session polling also refreshes lifecycle changes made in WorkBuddy. Do not
+  // let a snapshot racing an install/uninstall overwrite the operation result.
+  if (snapshot.hook && !hookMutationsBlocked()) {
+    const hook = snapshot.hook;
+    const current = hookIntegrations.find((status) => status.id === "workBuddy");
+    if (current && JSON.stringify(current.workbuddy) !== JSON.stringify(hook)) {
+      renderHookIntegrations(hookIntegrations.map((status) => status === current ? {
+        ...status, workbuddy: hook, hookInstalled: hook.filesInstalled,
+        installState: hook.state, error: hook.error ?? undefined,
+      } : status), false);
+    }
+  }
+  syncWorkBuddyHookStatus();
+  renderWorkBuddySessionList(snapshot.sessions);
+  selectedWorkBuddySessionId = undefined;
+  if (selectedSessionSource === "workbuddy" && requestedContentView === "detail") {
+    renderedDetailSignature = undefined;
+    sessionOutput.replaceChildren();
+    sessionActivityList.replaceChildren();
+    switchContentView("sessions");
+  }
+
+  const pending = workBuddyPendingInteractions(snapshot.sessions, snapshot.interactions);
+  const pendingKeys = new Set(pending.map(({ interaction }) => interaction.requestKey));
+  for (const key of dismissedWorkBuddyInteractionIds) {
+    if (!pendingKeys.has(key)) dismissedWorkBuddyInteractionIds.delete(key);
+  }
+  for (const key of revealedWorkBuddyInteractionIds) {
+    if (!pendingKeys.has(key)) revealedWorkBuddyInteractionIds.delete(key);
+  }
+
+  if (activeWorkBuddyReview && !pendingKeys.has(activeWorkBuddyReview.requestKey)) {
+    const visible = workBuddyReviewIsVisible();
+    const origin = activeWorkBuddyReview.kind === "question"
+      ? questionOriginView
+      : activeWorkBuddyReview.kind === "permission"
+        ? permissionOriginView
+        : planOriginView;
+    if (activeQuestionSource === "workbuddy") clearActiveQuestionRequest();
+    if (activePermissionSource === "workbuddy") clearActivePermissionRequest();
+    if (activePlanSource === "workbuddy") clearActivePlanRequest();
+    activeWorkBuddyReview = undefined;
+    if (visible) {
+      questionOriginView = undefined;
+      permissionOriginView = undefined;
+      planOriginView = undefined;
+      const returnView = returnViewForReview(origin);
+      switchContentView(
+        returnView === "detail" && !hasSelectedSessionDetail()
+          ? "sessions"
+          : returnView,
+      );
+    }
+  }
+
+  const current = workBuddyReviewIsVisible()
+    ? pending.find(({ interaction }) =>
+        interaction.requestKey === activeWorkBuddyReview?.requestKey,
+      )
+    : undefined;
+  const next = current ?? pending.find(({ interaction }) =>
+    !dismissedWorkBuddyInteractionIds.has(interaction.requestKey) &&
+    !revealedWorkBuddyInteractionIds.has(interaction.requestKey),
+  );
+  if (next) {
+    renderWorkBuddyReview(
+      next.interaction,
+      next.session,
+      !revealedWorkBuddyInteractionIds.has(next.interaction.requestKey),
+    );
+    revealedWorkBuddyInteractionIds.add(next.interaction.requestKey);
+  }
+  syncProductVisibility();
+  renderSessionSummary();
+  syncCollapsedSessionState();
+};
+
 const createSessionButton = (session: UnifiedSession): HTMLLIElement => {
   const listItem = document.createElement("li");
   listItem.className = "session-list__item";
@@ -9796,6 +10384,27 @@ const refreshClaudeSessions = async () => {
   }
 };
 
+const refreshWorkBuddySessions = async () => {
+  if (!isTauriRuntime) return;
+  try {
+    const snapshot = await invoke<WorkBuddySnapshot>("list_workbuddy_sessions");
+    renderWorkBuddySnapshot(snapshot);
+  } catch (error: unknown) {
+    const message = error instanceof Error ? error.message : String(error);
+    renderWorkBuddySnapshot({
+      ...latestWorkBuddySnapshot,
+      connected: false,
+      integrationError: message,
+      hook: latestWorkBuddySnapshot.hook ? {
+        ...latestWorkBuddySnapshot.hook, connected: false, error: message,
+      } : undefined,
+      sessions: [],
+      interactions: [],
+    });
+    console.error("Unable to refresh WorkBuddy sessions", error);
+  }
+};
+
 const refreshAllSessions = async () => {
   if (refreshingAllSessions || !isTauriRuntime) return;
   refreshingAllSessions = true;
@@ -9811,6 +10420,14 @@ const refreshAllSessions = async () => {
       zcode: activeSessionCount(bundle.zcode.sessions),
       gemini: activeSessionCount(bundle.gemini.sessions),
       kimi: activeSessionCount(bundle.kimi.sessions),
+      workbuddy: activeSessionCount(
+        bundle.workbuddy.sessions.map((session) => ({
+          status:
+            session.stage === "idle" || session.stage === "stopped"
+              ? session.stage
+              : "active",
+        })),
+      ),
     };
     if (snapshotNeedsRender("claude", bundle.claude, latestClaudeSnapshot)) {
       renderSessionSnapshot(bundle.claude);
@@ -9839,6 +10456,14 @@ const refreshAllSessions = async () => {
     if (snapshotNeedsRender("kimi", bundle.kimi, latestKimiSnapshot)) {
       renderKimiSnapshot(bundle.kimi);
     }
+    if (
+      bundle.workbuddy.version !== latestWorkBuddySnapshot.version ||
+      bundle.workbuddy.connected !== latestWorkBuddySnapshot.connected ||
+      JSON.stringify(bundle.workbuddy.hook) !== JSON.stringify(latestWorkBuddySnapshot.hook) ||
+      bundle.workbuddy.integrationError !== latestWorkBuddySnapshot.integrationError
+    ) {
+      renderWorkBuddySnapshot(bundle.workbuddy);
+    }
     latestActiveSessionCounts = {
       claude: activeSessionCount(latestSessions),
       codex: activeSessionCount(latestCodexSnapshot.sessions),
@@ -9849,6 +10474,7 @@ const refreshAllSessions = async () => {
       zcode: activeSessionCount(latestZCodeSnapshot.sessions),
       gemini: activeSessionCount(latestGeminiSnapshot.sessions),
       kimi: activeSessionCount(latestKimiSnapshot.sessions),
+      workbuddy: latestActiveSessionCounts.workbuddy,
     };
     renderSessionSummary();
   } catch (error: unknown) {
@@ -9863,6 +10489,7 @@ const refreshAllSessions = async () => {
       refreshZCodeSessions(),
       refreshGeminiSessions(),
       refreshKimiSessions(),
+      refreshWorkBuddySessions(),
     ]);
   } finally {
     refreshingAllSessions = false;
@@ -9978,7 +10605,8 @@ const dismissSessionFromList = (data: CodeCraftContextData | undefined) => {
       data.sessionSource === "dsh" ||
       data.sessionSource === "zcode" ||
       data.sessionSource === "mimo" ||
-      data.sessionSource === "kimi"
+      data.sessionSource === "kimi" ||
+      data.sessionSource === "workbuddy"
       ? sessionKey
       : `${data.sessionSource}:${sessionKey}`,
   );
@@ -9992,7 +10620,9 @@ const dismissSessionFromList = (data: CodeCraftContextData | undefined) => {
     (data.sessionSource === "dsh" && selectedDshSessionKey === sessionKey) ||
     (data.sessionSource === "zcode" && selectedZCodeSessionKey === sessionKey) ||
     (data.sessionSource === "mimo" && selectedMimoSessionKey === sessionKey) ||
-    (data.sessionSource === "kimi" && selectedKimiSessionId === data.sessionId)
+    (data.sessionSource === "kimi" && selectedKimiSessionId === data.sessionId) ||
+    (data.sessionSource === "workbuddy" &&
+      selectedWorkBuddySessionId === data.sessionId)
   ) {
     selectedSessionId = undefined;
     selectedCodexSessionId = undefined;
@@ -10001,6 +10631,7 @@ const dismissSessionFromList = (data: CodeCraftContextData | undefined) => {
     selectedPiSessionKey = undefined;
     selectedDshSessionKey = undefined;
     selectedZCodeSessionKey = undefined;
+    selectedWorkBuddySessionId = undefined;
     renderedDetailSignature = undefined;
     if (requestedContentView === "detail") switchContentView("sessions");
   }
@@ -10054,6 +10685,13 @@ const dismissSessionFromList = (data: CodeCraftContextData | undefined) => {
     renderKimiSnapshot({
       ...latestKimiSnapshot,
       sessions: latestKimiSnapshot.sessions.filter((session) => session.id !== data.sessionId),
+    });
+  } else if (data.sessionSource === "workbuddy") {
+    renderWorkBuddySnapshot({
+      ...latestWorkBuddySnapshot,
+      sessions: latestWorkBuddySnapshot.sessions.filter(
+        (session) => session.id !== data.sessionId,
+      ),
     });
   } else {
     renderZCodeSnapshot({
@@ -10119,7 +10757,8 @@ const contextMenu = new ContextMenuController<CodeCraftContextData>(
           sessionSource === "pi" ||
           sessionSource === "dsh" ||
           sessionSource === "zcode" ||
-          sessionSource === "kimi")
+          sessionSource === "kimi" ||
+          sessionSource === "workbuddy")
       ) {
         return {
           kind: "session",

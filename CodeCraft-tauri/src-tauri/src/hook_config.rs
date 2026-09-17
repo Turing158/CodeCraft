@@ -17,6 +17,7 @@ pub(crate) struct HookInstallConfig {
     pub pi: bool,
     pub deep_seek_harness: bool,
     pub z_code: bool,
+    pub work_buddy: bool,
 }
 
 impl Default for HookInstallConfig {
@@ -31,6 +32,7 @@ impl Default for HookInstallConfig {
             pi: false,
             deep_seek_harness: false,
             z_code: false,
+            work_buddy: false,
         }
     }
 }
@@ -81,6 +83,7 @@ mod tests {
         assert!(!config.pi);
         assert!(!config.deep_seek_harness);
         assert!(!config.z_code);
+        assert!(!config.work_buddy);
     }
 
     #[test]
@@ -95,5 +98,6 @@ mod tests {
         assert!(!config.pi);
         assert!(!config.deep_seek_harness);
         assert!(!config.z_code);
+        assert!(!config.work_buddy);
     }
 }

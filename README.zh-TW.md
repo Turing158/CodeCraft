@@ -23,7 +23,7 @@
 
 ## 這是什麼？
 
-如果你在用 **Claude Code**、**Codex**、**OpenCode**、**PI**、**DeepSeek Harness**、**ZCode** 或 **Gemini CLI** 這類「AI 程式設計助手」，你大概遇到過這些情況：
+如果你在用 **Claude Code**、**Codex**、**OpenCode**、**PI**、**DeepSeek Harness**、**ZCode**、**Gemini CLI** 或 **WorkBuddy** 這類「AI 程式設計助手」，你大概遇到過這些情況：
 
 - 讓它做事之後，只能一直盯著黑色的命令列視窗，不知道它到底做完了沒有；
 - 它中途要問你一句「這個命令能執行嗎」，你沒看見，它就一直卡在那裡等；
@@ -37,7 +37,7 @@ CodeCraft 就是為了解決這件事。它平時只是螢幕最上方一條幾�
 
 | | 能力 | 說明 |
 | :---: | --- | --- |
-| 📋 | **工作階段集中管理** | Claude Code、Codex、OpenCode、PI、Mimo、DeepSeek Harness、ZCode 和 Gemini CLI 的工作並排顯示，狀態一目了然：工作中、等待輸入、需要處理、已完成、失敗。 |
+| 📋 | **工作階段集中管理** | Claude Code、Codex、OpenCode、PI、Mimo、DeepSeek Harness、ZCode、Gemini CLI 和 WorkBuddy 的工作並排顯示，狀態一目了然：工作中、等待輸入、需要處理、已完成、失敗。 |
 | ✅ | **一鍵批准** | 助手想執行某個命令、修改某個檔案時，跳到面板上，你按「允許一次」「一律允許」或「拒絕」，不用切回終端機。 |
 | ❓ | **代它回答** | 助手提問時直接在面板裡選選項或寫補充說明，答案會回傳給它。 |
 | 📝 | **確認計畫** | 助手列出行動計畫後，由你決定：按「執行計畫」讓它開始動手，或寫下要改的地方讓它先調整。 |
@@ -59,9 +59,10 @@ CodeCraft 自己不寫程式碼，它負責盯著下面這些 AI 程式設計助
 | <img src="docs/assets/agent-pi.svg" width="20" height="20" align="absmiddle" alt="" />&nbsp; **PI** | 工作階段、工具活動、權限審批和提問可在面板與區域網路控制台處理；支援允許一次、工作階段內允許和拒絕，計畫確認暫未接入。 |
 | <img src="docs/assets/agent-deepseek.svg" width="20" height="20" align="absmiddle" alt="" />&nbsp; **DeepSeek Harness**<br /><sub>DeepSeek</sub> | 透過使用者層級原生外掛同步工作階段、回答、工具活動、提問和計畫審閱。權限嚴格使用 DSH 的一次性語意，只提供「允許一次」和「拒絕」；計畫可以批准，或帶著回饋繼續規劃。 |
 | <img src="docs/assets/agent-zcode.svg" width="20" height="20" align="absmiddle" alt="" />&nbsp; **ZCode**<br /><sub>Z.ai</sub> | 透過官方七事件 Hook 同步外部 Desktop/CLI 工作階段、工具結果、最終回答、提問和計畫審閱。一般工具只提供「允許一次」和「拒絕」；提問與計畫即使在自動審批模式下也必須由人決定。 |
-| **Gemini CLI**<br /><sub>Google</sub> | 透過使用者層級 Hook 觀察一般 Gemini 終端的工作階段、提示、工具活動、結果、通知和計畫路徑。所有互動都是唯讀；桌面版只能盡力定位原 Gemini 終端，LAN 頁面只能提示你回到執行 Gemini 的裝置處理。 |
+| <img src="docs/assets/agent-gemini.svg" width="20" height="20" align="absmiddle" alt="" />&nbsp; **Gemini CLI**<br /><sub>Google</sub> | 透過使用者層級 Hook 觀察一般 Gemini 終端的工作階段、提示、工具活動、結果、通知和計畫路徑。所有互動都是唯讀；桌面版只能盡力定位原 Gemini 終端，LAN 頁面只能提示你回到執行 Gemini 的裝置處理。 |
+| <img src="docs/assets/agent-workbuddy.svg" width="20" height="20" align="absmiddle" alt="" />&nbsp; **WorkBuddy** | 透過使用者層級本機外掛唯讀觀察工作階段、工具活動、問題、計畫和權限請求。所有審批與回答仍在 WorkBuddy 中完成；桌面版提供「前往 WorkBuddy 處理」按鈕，LAN 頁面只提示你回到執行 WorkBuddy 的裝置處理。 |
 
-八個 Agent 可以同時開著，面板頂部的篩選按鈕能只看其中一家，或者「全部」一起看。
+九個 Agent 可以同時開著，面板頂部的篩選按鈕能只看其中一家，或者「全部」一起看。
 
 > DeepSeek Harness 目前是 Developer Preview。CodeCraft 優先適配 `@deepseek-ai/dsh@0.1.1-rc.2`，並相容 `0.1.2-alpha.2`；偵測不到版本或版本不在相容清單中時，本機橋接會拒絕互動並顯示相容性錯誤。
 
@@ -83,6 +84,8 @@ ZCode 使用使用者層級的 `~/.zcode/cli/config.json`。CodeCraft 會以結�
 
 Gemini CLI 使用使用者層級的 `~/.gemini/settings.json`。CodeCraft 會以結構化方式合併 `SessionStart`、`SessionEnd`、`BeforeAgent`、`AfterAgent`、`BeforeTool`、`AfterTool`、`Notification` 和 `PreCompress` 八個事件，修改前建立不覆蓋既有檔案的 `.bak`，並保留其他 Hook、matcher、未知欄位和安全設定。安裝、重新整理、修復和解除安裝都可重複執行；解除安裝只刪除 CodeCraft 自己的 handler。Hook 只寫入受限的本機 inbox，標準輸出永遠是 `{}`，不會阻塞、批准、拒絕或改變 Gemini 的原生行為。
 
+WorkBuddy 使用使用者層級的 `%USERPROFILE%/.workbuddy/settings.json`；設定 `WORKBUDDY_HOME` 時則使用對應的設定根目錄。CodeCraft 只安裝和管理帶有自身標記的本機 marketplace、外掛檔案及 `enabledPlugins` 項目，保留使用者既有的 Hook、MCP、權限和其他設定。外掛只向 CodeCraft 傳送觀察事件並回傳空回應，不會代替使用者批准、拒絕、回答問題或確認計畫。
+
 ### Gemini CLI Hook-only 支援矩陣
 
 | 能力 | Gemini CLI |
@@ -94,6 +97,18 @@ Gemini CLI 使用使用者層級的 `~/.gemini/settings.json`。CodeCraft 會以
 | LAN「前往 Gemini 處理」 | 僅顯示裝置限制，不遠端啟用視窗、不提供審批寫入介面 |
 
 CodeCraft 不回答問題、不提交批准或拒絕、不選擇計畫模式，也不透過鍵盤、滑鼠、named pipe 或其他方式向 Gemini 終端注入輸入。若 Hook 未安裝、CodeCraft 未執行、設定損壞或工作階段已結束，Gemini 仍按自己的原生策略繼續。
+
+### WorkBuddy Hook-only 支援矩陣
+
+| 能力 | WorkBuddy |
+| --- | --- |
+| 工作階段、提示、工具活動和原生結果 | 唯讀觀察 |
+| 工具權限、問題和計畫請求 | 顯示唯讀提醒，必須在 WorkBuddy 中處理 |
+| 桌面版「前往 WorkBuddy 處理」 | 嘗試啟用既有的 WorkBuddy 視窗；無法定位時顯示原因 |
+| LAN「前往 WorkBuddy 處理」 | 僅提供裝置指引，不提供審批寫入端點 |
+| 助手串流輸出 | 目前協定尚未提供 |
+
+CodeCraft 不會把 WorkBuddy 的原生決定視為自己的審批，也不提供允許一次、工作階段允許、問題回答或計畫決定的回傳路徑。目前驗證基線為 bundled CLI `2.137.1`；其他獨立 CLI 或後續 Desktop 版本按盡力觀察處理，不會因此自動啟用雙向功能。
 
 **3. 正常使用你的助手**
 

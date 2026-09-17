@@ -1,0 +1,22 @@
+{
+  "canObserve": {
+    "value": true,
+    "evidence": "13 real bundled CLI 2.137.1 captures; major lifecycle/tool events, not Desktop end-to-end"
+  },
+  "canApproveTools": {
+    "value": false,
+    "evidence": "Write allow/deny verified; print ask unexpectedly executes; full P0 and synchronous human decision service incomplete"
+  },
+  "canAnswerQuestions": {
+    "value": false,
+    "evidence": "single/multiple/text ACP cases request native permission before PreToolUse; no successful Hook answer fixture"
+  },
+  "canApprovePlans": {
+    "value": false,
+    "evidence": "schema-valid ExitPlanMode captured, but no reliable body/version in Hook and empty plan result"
+  },
+  "canStreamOutput": {
+    "value": false,
+    "evidence": "CodeCraft currently consumes completed hook documents"
+  }
+}

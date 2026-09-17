@@ -23,7 +23,7 @@ A lightweight desktop workbench focused on AI coding sessions · Built for Windo
 
 ## What is this?
 
-If you use AI coding assistants like **Claude Code**, **Codex**, **OpenCode**, **PI**, **DeepSeek Harness**, **ZCode**, or **Gemini CLI**, you have probably run into this:
+If you use AI coding assistants like **Claude Code**, **Codex**, **OpenCode**, **PI**, **DeepSeek Harness**, **ZCode**, **Gemini CLI**, or **WorkBuddy**, you have probably run into this:
 
 - You hand it a task, then sit there staring at a black terminal window with no idea whether it has finished;
 - Halfway through it asks "can I run this command?", you don't notice, and it just waits forever;
@@ -37,7 +37,7 @@ CodeCraft exists to fix that. Most of the time it's just an almost invisible sli
 
 | | Capability | Details |
 | :---: | --- | --- |
-| 📋 | **All sessions in one place** | Tasks from Claude Code, Codex, OpenCode, PI, Mimo, DeepSeek Harness, ZCode, and Gemini CLI side by side, with status at a glance: working, waiting for input, needs attention, done, failed. |
+| 📋 | **All sessions in one place** | Tasks from Claude Code, Codex, OpenCode, PI, Mimo, DeepSeek Harness, ZCode, Gemini CLI, and WorkBuddy side by side, with status at a glance: working, waiting for input, needs attention, done, failed. |
 | ✅ | **One-click approval** | When an assistant wants to run a command or edit a file, the request pops up on the panel. Click "Allow once", "Always allow", or "Deny" — no need to switch back to the terminal. |
 | ❓ | **Answer on its behalf** | When an assistant asks a question, pick an option or type a note right in the panel, and the answer is sent back to it. |
 | 📝 | **Confirm plans** | Once an assistant lays out its plan, you decide: click "Run plan" to let it start, or write down what to change so it revises first. |
@@ -59,9 +59,10 @@ CodeCraft doesn't write code itself — it watches the AI coding assistants belo
 | <img src="docs/assets/agent-pi.svg" width="20" height="20" align="absmiddle" alt="" />&nbsp; **PI** | Sessions, tool activity, permissions, and questions are available in the panel and LAN console. It supports allow once, allow for the session, and deny; plan review is not connected yet. |
 | <img src="docs/assets/agent-deepseek.svg" width="20" height="20" align="absmiddle" alt="" />&nbsp; **DeepSeek Harness**<br /><sub>DeepSeek</sub> | A user-level native plugin synchronizes sessions, responses, tool activity, questions, and plan review. Permissions follow DSH's one-shot semantics, so only "Allow once" and "Deny" are offered. Plans can be approved or returned with feedback for further planning. |
 | <img src="docs/assets/agent-zcode.svg" width="20" height="20" align="absmiddle" alt="" />&nbsp; **ZCode**<br /><sub>Z.ai</sub> | The official seven-event Hook synchronizes external Desktop/CLI sessions, tool results, final answers, questions, and plan review. Ordinary tools offer only "Allow once" and "Deny"; questions and plans always require a person, even in automatic mode. |
-| **Gemini CLI**<br /><sub>Google</sub> | A user-level Hook observes sessions, prompts, tool activity, results, notifications, and plan paths from ordinary Gemini terminals. Every interaction is read-only; Desktop can only attempt to focus the original Gemini terminal, while LAN can only explain how to handle it on the device running Gemini. |
+| <img src="docs/assets/agent-gemini.svg" width="20" height="20" align="absmiddle" alt="" />&nbsp; **Gemini CLI**<br /><sub>Google</sub> | A user-level Hook observes sessions, prompts, tool activity, results, notifications, and plan paths from ordinary Gemini terminals. Every interaction is read-only; Desktop can only attempt to focus the original Gemini terminal, while LAN can only explain how to handle it on the device running Gemini. |
+| <img src="docs/assets/agent-workbuddy.svg" width="20" height="20" align="absmiddle" alt="" />&nbsp; **WorkBuddy** | A user-level local plugin provides read-only observation of sessions, tool activity, questions, plans, and permission requests. All approvals and answers are handled in WorkBuddy; Desktop provides an “Open WorkBuddy to handle” button, while LAN only directs you to the device running WorkBuddy. |
 
-All eight agents can run at the same time. The filter buttons at the top of the panel let you look at just one of them, or "All" together.
+All nine agents can run at the same time. The filter buttons at the top of the panel let you look at just one of them, or "All" together.
 
 > DeepSeek Harness is currently a Developer Preview. CodeCraft primarily targets `@deepseek-ai/dsh@0.1.1-rc.2` and also supports `0.1.2-alpha.2`; the local bridge rejects interactions when the runtime version is unknown or outside this compatibility list.
 
@@ -83,6 +84,8 @@ ZCode uses the user-level `~/.zcode/cli/config.json`. CodeCraft structurally mer
 
 Gemini CLI uses the user-level `~/.gemini/settings.json`. CodeCraft structurally merges the eight `SessionStart`, `SessionEnd`, `BeforeAgent`, `AfterAgent`, `BeforeTool`, `AfterTool`, `Notification`, and `PreCompress` events, creates a non-overwriting `.bak` before changes, and preserves other Hooks, matchers, unknown fields, and security settings. Install, refresh, repair, and uninstall are idempotent; uninstall removes only CodeCraft-owned handlers. The Hook writes only to a restricted local inbox and always returns `{}` on stdout, so it never blocks, approves, denies, or changes Gemini's native behavior.
 
+WorkBuddy uses the user-level `%USERPROFILE%/.workbuddy/settings.json`, or the configured root when `WORKBUDDY_HOME` is set. CodeCraft installs and manages only its own marked local marketplace, plugin files, and `enabledPlugins` entry, preserving the user's existing Hooks, MCP, permissions, and other settings. The plugin sends observation events to CodeCraft and returns an empty response; it never approves, denies, answers questions, or confirms plans on the user's behalf.
+
 ### Gemini CLI Hook-only support matrix
 
 | Capability | Gemini CLI |
@@ -94,6 +97,18 @@ Gemini CLI uses the user-level `~/.gemini/settings.json`. CodeCraft structurally
 | LAN “Open Gemini to handle” | Device guidance only; no remote window activation or approval writes |
 
 CodeCraft never answers questions, submits approvals or denials, chooses a plan mode, or injects keyboard, mouse, named-pipe, or other terminal input. If the Hook is missing, CodeCraft is closed, settings are damaged, or a session has ended, Gemini continues under its own native policy.
+
+### WorkBuddy Hook-only support matrix
+
+| Capability | WorkBuddy |
+| --- | --- |
+| Sessions, prompts, tool activity, and native results | Read-only observation |
+| Tool permissions, questions, and plan requests | Read-only reminders; handle them in WorkBuddy |
+| Desktop “Open WorkBuddy to handle” | Attempts to focus an existing WorkBuddy window; explains when it cannot locate one |
+| LAN “Open WorkBuddy to handle” | Device guidance only; no approval write endpoint |
+| Streaming assistant output | Not available in the current protocol |
+
+CodeCraft does not treat WorkBuddy's native decisions as its own approvals and provides no return path for allow-once, session-allow, question-answer, or plan decisions. The validated baseline is bundled CLI `2.137.1`; other standalone CLIs or later Desktop versions are handled as best-effort observation and do not automatically enable bidirectional features.
 
 **3. Use your assistant as usual**
 

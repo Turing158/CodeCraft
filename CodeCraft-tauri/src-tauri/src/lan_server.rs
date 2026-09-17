@@ -135,6 +135,7 @@ impl LanServerState {
             .snapshot_updates
             .send_modify(|version| *version = version.wrapping_add(1));
     }
+
 }
 
 /// Address list the settings panel shows, most reachable candidate first.
@@ -291,10 +292,18 @@ fn snapshot_value(app: &tauri::AppHandle) -> Value {
         &app.state::<MimoIntegrationState>(),
         &app.state::<DshIntegrationState>(),
         &app.state::<ZCodeIntegrationState>(),
+        &app.state::<crate::WorkBuddyIntegrationState>(),
     )
     .ok()
     .and_then(|list| serde_json::to_value(list).ok())
     .unwrap_or(Value::Null);
+    let workbuddy = app
+        .state::<crate::WorkBuddyIntegrationState>()
+        .store
+        .lock()
+        .ok()
+        .and_then(|store| serde_json::to_value(store.snapshot()).ok())
+        .unwrap_or(Value::Null);
     let approval_mode = app
         .state::<ApprovalIntegrationState>()
         .settings
@@ -321,6 +330,7 @@ fn snapshot_value(app: &tauri::AppHandle) -> Value {
         "pi": sessions.get("pi").cloned().unwrap_or(Value::Null),
         "dsh": sessions.get("dsh").cloned().unwrap_or(Value::Null),
         "zcode": sessions.get("zcode").cloned().unwrap_or(Value::Null),
+        "workbuddy": workbuddy,
         "integrations": integrations,
     });
     if let Ok(mut cache) = state.snapshot_cache.lock() {
@@ -331,7 +341,18 @@ fn snapshot_value(app: &tauri::AppHandle) -> Value {
 
 fn snapshot_version_fingerprint(snapshot: &Value) -> u64 {
     let mut hash = 0xcbf29ce484222325_u64;
-    for source in ["claude", "codex", "gemini", "kimi", "opencode", "mimo", "pi", "dsh", "zcode"] {
+    for source in [
+        "claude",
+        "codex",
+        "gemini",
+        "kimi",
+        "opencode",
+        "mimo",
+        "pi",
+        "dsh",
+        "zcode",
+        "workbuddy",
+    ] {
         if let Some(version) = snapshot
             .get(source)
             .and_then(|value| value.get("version"))
@@ -474,12 +495,22 @@ async fn post_auth(
     (
         StatusCode::OK,
         [(header::SET_COOKIE, session_cookie(&session))],
-        Json(json!({ "allowApprovals": config.allow_approvals })),
+        Json(json!({
+            "allowApprovals": config.allow_approvals,
+            "workbuddyCapability": null,
+            "workbuddyReadOnly": true
+        })),
     )
         .into_response()
 }
 
-async fn post_logout() -> Response {
+async fn post_logout(State(http_state): State<LanHttpState>, headers: HeaderMap) -> Response {
+    if let Some(session) = headers.get(header::COOKIE).and_then(|value|value.to_str().ok())
+        .and_then(|value|cookie_value(value,SESSION_COOKIE)) {
+        if let Ok(mut auth) = http_state.app.state::<LanServerState>().auth.lock() {
+            auth.revoke_session(&session);
+        }
+    }
     (
         StatusCode::OK,
         [(header::SET_COOKIE, cleared_session_cookie())],

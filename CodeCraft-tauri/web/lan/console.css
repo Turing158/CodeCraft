@@ -575,6 +575,19 @@ textarea {
   box-shadow: var(--shadow-hover);
 }
 
+.session-card[aria-disabled="true"] {
+  cursor: default;
+  opacity: 0.82;
+}
+
+.session-card[aria-disabled="true"]:hover,
+.session-card[aria-disabled="true"]:active {
+  border-color: var(--surface-border);
+  background: var(--surface-raised);
+  box-shadow: none;
+  transform: none;
+}
+
 .session-card:hover::after,
 .session-card[aria-current="true"]::after,
 .session-card[data-pending="true"]::after {
@@ -1211,7 +1224,8 @@ textarea {
 .action-bar {
   position: sticky;
   bottom: 0;
-  z-index: 15;
+  /* Above the detail sheet (30), below the settings scrim (35). */
+  z-index: 31;
   display: flex;
   gap: var(--space-2);
   padding: var(--space-3) var(--space-4)

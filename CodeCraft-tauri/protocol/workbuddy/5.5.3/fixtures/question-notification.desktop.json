@@ -1,0 +1,47 @@
+{
+  "schemaVersion": 1,
+  "evidenceKind": "redacted-real-desktop-hook-sequence",
+  "capturedAt": "2026-09-13T05:56:00.551Z",
+  "desktopVersion": "37.10.3-24",
+  "hookReportedVersion": "5.5.3",
+  "source": "CodeCraft received Hook envelopes and WorkBuddy native question-resolution log",
+  "redactions": "Only event and correlation fields are retained; session/generation/call ids and question/result text are replaced. Receive timestamps and native decision timing are preserved.",
+  "nativeResolutionAt": 1789278970316,
+  "nativeDecision": "deny",
+  "hooks": [
+    {
+      "receivedAt": 1789278960551,
+      "input": {
+        "hook_event_name": "Notification",
+        "notification_type": "permission_prompt",
+        "session_id": "desktop-session-1",
+        "generation_id": "generation-1",
+        "message": "needs your permission to use AskUserQuestion"
+      }
+    },
+    {
+      "receivedAt": 1789278970478,
+      "input": {
+        "hook_event_name": "PreToolUse",
+        "session_id": "desktop-session-1",
+        "generation_id": "generation-1",
+        "tool_name": "AskUserQuestion",
+        "tool_use_id": "native-question-1",
+        "tool_input": {
+          "questions": [{ "question": "<QUESTION_TEXT>" }]
+        }
+      }
+    },
+    {
+      "receivedAt": 1789278970646,
+      "input": {
+        "hook_event_name": "PostToolUse",
+        "session_id": "desktop-session-1",
+        "generation_id": "generation-1",
+        "tool_name": "AskUserQuestion",
+        "tool_use_id": "native-question-1",
+        "tool_response": "<NATIVE_RESULT>"
+      }
+    }
+  ]
+}

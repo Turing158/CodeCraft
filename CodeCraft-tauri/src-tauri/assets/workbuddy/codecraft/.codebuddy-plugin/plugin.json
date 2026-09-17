@@ -1,0 +1,10 @@
+{
+  "name": "codecraft-workbuddy",
+  "version": "0.1.0",
+  "description": "CodeCraft read-only WorkBuddy session observer",
+  "author": {
+    "name": "CodeCraft"
+  },
+  "hooks": "./hooks/hooks.json",
+  "defaultEnabled": false
+}
