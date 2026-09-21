@@ -1,0 +1,893 @@
+{
+  "ApiError": {
+    "$defs": {
+      "ErrorCode": {
+        "enum": [
+          "INVALID_ARGUMENT",
+          "PAYLOAD_TOO_LARGE",
+          "TICKET_INVALID",
+          "TICKET_EXPIRED",
+          "ARGUMENT_MISMATCH",
+          "IDEMPOTENCY_CONFLICT",
+          "BRIDGE_UNAVAILABLE",
+          "STATE_UNAVAILABLE",
+          "QUEUE_FULL",
+          "REQUEST_EXPIRED",
+          "CANCELLED",
+          "TASK_CHANGED",
+          "PLAN_CHANGED",
+          "DELIVERY_UNCONFIRMED",
+          "UNSUPPORTED_VERSION",
+          "FORBIDDEN",
+          "NOT_FOUND",
+          "REQUEST_CONFLICT",
+          "NATIVE_CONFIRMATION_PENDING"
+        ],
+        "type": "string"
+      },
+      "ErrorDetail": {
+        "additionalProperties": false,
+        "properties": {
+          "code": {
+            "$ref": "#/$defs/ErrorCode"
+          },
+          "currentRevision": {
+            "format": "uint32",
+            "minimum": 0,
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "message": {
+            "maxLength": 8192,
+            "type": "string"
+          },
+          "retryable": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "code",
+          "message",
+          "retryable",
+          "currentRevision"
+        ],
+        "type": "object"
+      }
+    },
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "additionalProperties": false,
+    "properties": {
+      "error": {
+        "$ref": "#/$defs/ErrorDetail"
+      },
+      "schemaVersion": {
+        "const": 1,
+        "format": "uint8",
+        "maximum": 255,
+        "minimum": 0,
+        "type": "integer"
+      }
+    },
+    "required": [
+      "schemaVersion",
+      "error"
+    ],
+    "title": "ApiError",
+    "type": "object"
+  },
+  "CreateTask": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "additionalProperties": false,
+    "properties": {
+      "controlId": {
+        "format": "uuid",
+        "type": "string"
+      },
+      "primaryRoot": {
+        "type": "string"
+      },
+      "schemaVersion": {
+        "const": 1,
+        "format": "uint8",
+        "maximum": 255,
+        "minimum": 0,
+        "type": "integer"
+      },
+      "title": {
+        "maxLength": 200,
+        "minLength": 1,
+        "type": "string"
+      },
+      "workspaceRoots": {
+        "items": {
+          "type": "string"
+        },
+        "maxItems": 16,
+        "minItems": 1,
+        "type": "array",
+        "uniqueItems": true
+      }
+    },
+    "required": [
+      "schemaVersion",
+      "controlId",
+      "title",
+      "primaryRoot",
+      "workspaceRoots"
+    ],
+    "title": "CreateTask",
+    "type": "object"
+  },
+  "DecisionRequest": {
+    "$defs": {
+      "Action": {
+        "oneOf": [
+          {
+            "additionalProperties": false,
+            "properties": {
+              "decision": {
+                "$ref": "#/$defs/PermissionDecision"
+              },
+              "kind": {
+                "const": "permission",
+                "type": "string"
+              },
+              "message": {
+                "maxLength": 8192,
+                "type": [
+                  "string",
+                  "null"
+                ]
+              }
+            },
+            "required": [
+              "kind",
+              "decision",
+              "message"
+            ],
+            "type": "object"
+          },
+          {
+            "additionalProperties": false,
+            "properties": {
+              "answers": {
+                "items": {
+                  "$ref": "#/$defs/Answer"
+                },
+                "maxItems": 8,
+                "minItems": 1,
+                "type": "array"
+              },
+              "kind": {
+                "const": "question",
+                "type": "string"
+              }
+            },
+            "required": [
+              "kind",
+              "answers"
+            ],
+            "type": "object"
+          },
+          {
+            "additionalProperties": false,
+            "properties": {
+              "contentHash": {
+                "pattern": "^[a-f0-9]{64}$",
+                "type": "string"
+              },
+              "decision": {
+                "$ref": "#/$defs/PlanDecision"
+              },
+              "feedback": {
+                "maxLength": 8192,
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "kind": {
+                "const": "plan",
+                "type": "string"
+              },
+              "revision": {
+                "format": "uint32",
+                "maximum": 2147483647,
+                "minimum": 0,
+                "type": "integer"
+              }
+            },
+            "required": [
+              "kind",
+              "decision",
+              "revision",
+              "contentHash",
+              "feedback"
+            ],
+            "type": "object"
+          },
+          {
+            "additionalProperties": false,
+            "properties": {
+              "kind": {
+                "const": "cancel",
+                "type": "string"
+              },
+              "reason": {
+                "maxLength": 8192,
+                "type": [
+                  "string",
+                  "null"
+                ]
+              }
+            },
+            "required": [
+              "kind",
+              "reason"
+            ],
+            "type": "object"
+          }
+        ]
+      },
+      "Answer": {
+        "additionalProperties": false,
+        "properties": {
+          "questionId": {
+            "pattern": "^[A-Za-z0-9_-]{1,64}$",
+            "type": "string"
+          },
+          "selectedOptionIds": {
+            "items": {
+              "pattern": "^[A-Za-z0-9_-]{1,64}$",
+              "type": "string"
+            },
+            "maxItems": 12,
+            "type": "array",
+            "uniqueItems": true
+          },
+          "status": {
+            "$ref": "#/$defs/AnswerStatus"
+          },
+          "text": {
+            "maxLength": 4096,
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        },
+        "required": [
+          "questionId",
+          "status",
+          "selectedOptionIds",
+          "text"
+        ],
+        "type": "object"
+      },
+      "AnswerStatus": {
+        "enum": [
+          "answered",
+          "skipped"
+        ],
+        "type": "string"
+      },
+      "PermissionDecision": {
+        "enum": [
+          "allow",
+          "deny",
+          "ask"
+        ],
+        "type": "string"
+      },
+      "PlanDecision": {
+        "enum": [
+          "approved",
+          "changes_requested",
+          "rejected"
+        ],
+        "type": "string"
+      },
+      "Target": {
+        "additionalProperties": false,
+        "properties": {
+          "appEpoch": {
+            "format": "uuid",
+            "type": "string"
+          },
+          "requestId": {
+            "format": "uuid",
+            "type": "string"
+          },
+          "requestVersion": {
+            "format": "uint32",
+            "maximum": 2147483647,
+            "minimum": 0,
+            "type": "integer"
+          },
+          "sessionKey": {
+            "pattern": "^[a-f0-9]{64}$",
+            "type": "string"
+          },
+          "taskId": {
+            "format": "uuid",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "turnEpoch": {
+            "format": "uint32",
+            "maximum": 2147483647,
+            "minimum": 0,
+            "type": "integer"
+          }
+        },
+        "required": [
+          "appEpoch",
+          "sessionKey",
+          "taskId",
+          "turnEpoch",
+          "requestId",
+          "requestVersion"
+        ],
+        "type": "object"
+      }
+    },
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "additionalProperties": false,
+    "properties": {
+      "action": {
+        "$ref": "#/$defs/Action"
+      },
+      "decisionId": {
+        "format": "uuid",
+        "type": "string"
+      },
+      "schemaVersion": {
+        "const": 1,
+        "format": "uint8",
+        "maximum": 255,
+        "minimum": 0,
+        "type": "integer"
+      },
+      "target": {
+        "$ref": "#/$defs/Target"
+      }
+    },
+    "required": [
+      "schemaVersion",
+      "decisionId",
+      "target",
+      "action"
+    ],
+    "title": "DecisionRequest",
+    "type": "object"
+  },
+  "PlanInput": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "additionalProperties": false,
+    "properties": {
+      "baseRevision": {
+        "format": "uint32",
+        "maximum": 2147483647,
+        "minimum": 0,
+        "type": "integer"
+      },
+      "bridgeTicket": {
+        "pattern": "^[A-Za-z0-9_-]{43}$",
+        "type": "string"
+      },
+      "documentPath": {
+        "type": "string"
+      },
+      "planId": {
+        "format": "uuid",
+        "type": "string"
+      },
+      "planMarkdown": {
+        "maxLength": 131072,
+        "minLength": 1,
+        "type": "string"
+      },
+      "schemaVersion": {
+        "const": 1,
+        "format": "uint8",
+        "maximum": 255,
+        "minimum": 0,
+        "type": "integer"
+      }
+    },
+    "required": [
+      "schemaVersion",
+      "planId",
+      "baseRevision",
+      "documentPath",
+      "planMarkdown"
+    ],
+    "title": "PlanInput",
+    "type": "object"
+  },
+  "QuestionInput": {
+    "$defs": {
+      "Question": {
+        "additionalProperties": false,
+        "properties": {
+          "allowText": {
+            "type": "boolean"
+          },
+          "kind": {
+            "$ref": "#/$defs/QuestionKind"
+          },
+          "maxSelections": {
+            "format": "uint32",
+            "maximum": 12,
+            "minimum": 0,
+            "type": "integer"
+          },
+          "minSelections": {
+            "format": "uint32",
+            "maximum": 12,
+            "minimum": 0,
+            "type": "integer"
+          },
+          "options": {
+            "items": {
+              "$ref": "#/$defs/QuestionOption"
+            },
+            "maxItems": 12,
+            "type": "array"
+          },
+          "prompt": {
+            "maxLength": 4096,
+            "minLength": 1,
+            "type": "string"
+          },
+          "questionId": {
+            "pattern": "^[A-Za-z0-9_-]{1,64}$",
+            "type": "string"
+          },
+          "required": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "questionId",
+          "prompt",
+          "kind",
+          "options",
+          "required",
+          "allowText",
+          "minSelections",
+          "maxSelections"
+        ],
+        "type": "object"
+      },
+      "QuestionKind": {
+        "enum": [
+          "single",
+          "multiple",
+          "text"
+        ],
+        "type": "string"
+      },
+      "QuestionOption": {
+        "additionalProperties": false,
+        "properties": {
+          "description": {
+            "maxLength": 1024,
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "label": {
+            "maxLength": 256,
+            "minLength": 1,
+            "type": "string"
+          },
+          "optionId": {
+            "pattern": "^[A-Za-z0-9_-]{1,64}$",
+            "type": "string"
+          }
+        },
+        "required": [
+          "optionId",
+          "label",
+          "description"
+        ],
+        "type": "object"
+      }
+    },
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "additionalProperties": false,
+    "properties": {
+      "bridgeTicket": {
+        "pattern": "^[A-Za-z0-9_-]{43}$",
+        "type": "string"
+      },
+      "questions": {
+        "items": {
+          "$ref": "#/$defs/Question"
+        },
+        "maxItems": 8,
+        "minItems": 1,
+        "type": "array"
+      },
+      "schemaVersion": {
+        "const": 1,
+        "format": "uint8",
+        "maximum": 255,
+        "minimum": 0,
+        "type": "integer"
+      }
+    },
+    "required": [
+      "schemaVersion",
+      "questions"
+    ],
+    "title": "QuestionInput",
+    "type": "object"
+  },
+  "ResolveGrant": {
+    "$defs": {
+      "GrantResolution": {
+        "enum": [
+          "confirmed_cancelled_in_trae",
+          "confirmed_completed_in_trae"
+        ],
+        "type": "string"
+      }
+    },
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "additionalProperties": false,
+    "properties": {
+      "action": {
+        "$ref": "#/$defs/GrantResolution"
+      },
+      "controlId": {
+        "format": "uuid",
+        "type": "string"
+      },
+      "expectedVersion": {
+        "format": "uint32",
+        "maximum": 2147483647,
+        "minimum": 0,
+        "type": "integer"
+      },
+      "grantId": {
+        "format": "uuid",
+        "type": "string"
+      },
+      "schemaVersion": {
+        "const": 1,
+        "format": "uint8",
+        "maximum": 255,
+        "minimum": 0,
+        "type": "integer"
+      }
+    },
+    "required": [
+      "schemaVersion",
+      "controlId",
+      "grantId",
+      "expectedVersion",
+      "action"
+    ],
+    "title": "ResolveGrant",
+    "type": "object"
+  },
+  "TaskAction": {
+    "$defs": {
+      "TaskActionKind": {
+        "enum": [
+          "pause",
+          "resume",
+          "end",
+          "revoke_plan"
+        ],
+        "type": "string"
+      }
+    },
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "additionalProperties": false,
+    "properties": {
+      "action": {
+        "$ref": "#/$defs/TaskActionKind"
+      },
+      "controlId": {
+        "format": "uuid",
+        "type": "string"
+      },
+      "expectedVersion": {
+        "format": "uint32",
+        "maximum": 2147483647,
+        "minimum": 0,
+        "type": "integer"
+      },
+      "schemaVersion": {
+        "const": 1,
+        "format": "uint8",
+        "maximum": 255,
+        "minimum": 0,
+        "type": "integer"
+      },
+      "taskId": {
+        "format": "uuid",
+        "type": "string"
+      }
+    },
+    "required": [
+      "schemaVersion",
+      "controlId",
+      "taskId",
+      "expectedVersion",
+      "action"
+    ],
+    "title": "TaskAction",
+    "type": "object"
+  },
+  "ToolResult": {
+    "$defs": {
+      "Answer": {
+        "additionalProperties": false,
+        "properties": {
+          "questionId": {
+            "pattern": "^[A-Za-z0-9_-]{1,64}$",
+            "type": "string"
+          },
+          "selectedOptionIds": {
+            "items": {
+              "pattern": "^[A-Za-z0-9_-]{1,64}$",
+              "type": "string"
+            },
+            "maxItems": 12,
+            "type": "array",
+            "uniqueItems": true
+          },
+          "status": {
+            "$ref": "#/$defs/AnswerStatus"
+          },
+          "text": {
+            "maxLength": 4096,
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        },
+        "required": [
+          "questionId",
+          "status",
+          "selectedOptionIds",
+          "text"
+        ],
+        "type": "object"
+      },
+      "AnswerStatus": {
+        "enum": [
+          "answered",
+          "skipped"
+        ],
+        "type": "string"
+      },
+      "ErrorCode": {
+        "enum": [
+          "INVALID_ARGUMENT",
+          "PAYLOAD_TOO_LARGE",
+          "TICKET_INVALID",
+          "TICKET_EXPIRED",
+          "ARGUMENT_MISMATCH",
+          "IDEMPOTENCY_CONFLICT",
+          "BRIDGE_UNAVAILABLE",
+          "STATE_UNAVAILABLE",
+          "QUEUE_FULL",
+          "REQUEST_EXPIRED",
+          "CANCELLED",
+          "TASK_CHANGED",
+          "PLAN_CHANGED",
+          "DELIVERY_UNCONFIRMED",
+          "UNSUPPORTED_VERSION",
+          "FORBIDDEN",
+          "NOT_FOUND",
+          "REQUEST_CONFLICT",
+          "NATIVE_CONFIRMATION_PENDING"
+        ],
+        "type": "string"
+      },
+      "ErrorDetail": {
+        "additionalProperties": false,
+        "properties": {
+          "code": {
+            "$ref": "#/$defs/ErrorCode"
+          },
+          "currentRevision": {
+            "format": "uint32",
+            "minimum": 0,
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "message": {
+            "maxLength": 8192,
+            "type": "string"
+          },
+          "retryable": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "code",
+          "message",
+          "retryable",
+          "currentRevision"
+        ],
+        "type": "object"
+      }
+    },
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "additionalProperties": false,
+    "allOf": [
+      {
+        "else": {
+          "properties": {
+            "error": {
+              "type": "object"
+            },
+            "payload": {
+              "type": "null"
+            }
+          }
+        },
+        "if": {
+          "properties": {
+            "status": {
+              "const": "completed"
+            }
+          }
+        },
+        "then": {
+          "properties": {
+            "error": {
+              "type": "null"
+            },
+            "operationId": {
+              "type": "string"
+            },
+            "payload": {
+              "type": "object"
+            },
+            "requestId": {
+              "type": "string"
+            }
+          }
+        }
+      }
+    ],
+    "properties": {
+      "error": {
+        "anyOf": [
+          {
+            "$ref": "#/$defs/ErrorDetail"
+          },
+          {
+            "type": "null"
+          }
+        ]
+      },
+      "operationId": {
+        "format": "uuid",
+        "type": [
+          "string",
+          "null"
+        ]
+      },
+      "payload": {
+        "anyOf": [
+          {
+            "additionalProperties": false,
+            "properties": {
+              "answers": {
+                "items": {
+                  "$ref": "#/$defs/Answer"
+                },
+                "maxItems": 8,
+                "minItems": 1,
+                "type": "array"
+              },
+              "kind": {
+                "const": "question"
+              }
+            },
+            "required": [
+              "kind",
+              "answers"
+            ],
+            "type": "object"
+          },
+          {
+            "additionalProperties": false,
+            "properties": {
+              "contentHash": {
+                "pattern": "^[a-f0-9]{64}$",
+                "type": "string"
+              },
+              "decision": {
+                "enum": [
+                  "approved",
+                  "changes_requested",
+                  "rejected"
+                ]
+              },
+              "feedback": {
+                "maxLength": 8192,
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "kind": {
+                "const": "plan"
+              },
+              "planId": {
+                "format": "uuid",
+                "type": "string"
+              },
+              "revision": {
+                "maximum": 2147483647,
+                "minimum": 0,
+                "type": "integer"
+              }
+            },
+            "required": [
+              "kind",
+              "planId",
+              "revision",
+              "contentHash",
+              "decision",
+              "feedback"
+            ],
+            "type": "object"
+          },
+          {
+            "type": "null"
+          }
+        ]
+      },
+      "requestId": {
+        "format": "uuid",
+        "type": [
+          "string",
+          "null"
+        ]
+      },
+      "schemaVersion": {
+        "const": 1,
+        "format": "uint8",
+        "maximum": 255,
+        "minimum": 0,
+        "type": "integer"
+      },
+      "status": {
+        "enum": [
+          "completed",
+          "cancelled",
+          "expired",
+          "failed"
+        ]
+      }
+    },
+    "required": [
+      "schemaVersion",
+      "operationId",
+      "requestId",
+      "status",
+      "payload",
+      "error"
+    ],
+    "title": "ToolResult",
+    "type": "object"
+  }
+}

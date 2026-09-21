@@ -23,7 +23,7 @@
 
 ## 這是什麼？
 
-如果你在用 **Claude Code**、**Codex**、**OpenCode**、**PI**、**DeepSeek Harness**、**ZCode**、**Gemini CLI** 或 **WorkBuddy** 這類「AI 程式設計助手」，你大概遇到過這些情況：
+如果你在用 **Claude Code**、**Codex**、**OpenCode**、**PI**、**DeepSeek Harness**、**ZCode**、**Gemini CLI**、**WorkBuddy** 或 **Trae CN** 這類「AI 程式設計助手」，你大概遇到過這些情況：
 
 - 讓它做事之後，只能一直盯著黑色的命令列視窗，不知道它到底做完了沒有；
 - 它中途要問你一句「這個命令能執行嗎」，你沒看見，它就一直卡在那裡等；
@@ -37,7 +37,7 @@ CodeCraft 就是為了解決這件事。它平時只是螢幕最上方一條幾�
 
 | | 能力 | 說明 |
 | :---: | --- | --- |
-| 📋 | **工作階段集中管理** | Claude Code、Codex、OpenCode、PI、Mimo、DeepSeek Harness、ZCode、Gemini CLI 和 WorkBuddy 的工作並排顯示，狀態一目了然：工作中、等待輸入、需要處理、已完成、失敗。 |
+| 📋 | **工作階段集中管理** | Claude Code、Codex、OpenCode、PI、Mimo、DeepSeek Harness、ZCode、Gemini CLI、WorkBuddy 和 Trae CN 的工作並排顯示，狀態一目了然：工作中、等待輸入、需要處理、已完成、失敗。 |
 | ✅ | **一鍵批准** | 助手想執行某個命令、修改某個檔案時，跳到面板上，你按「允許一次」「一律允許」或「拒絕」，不用切回終端機。 |
 | ❓ | **代它回答** | 助手提問時直接在面板裡選選項或寫補充說明，答案會回傳給它。 |
 | 📝 | **確認計畫** | 助手列出行動計畫後，由你決定：按「執行計畫」讓它開始動手，或寫下要改的地方讓它先調整。 |
@@ -61,8 +61,9 @@ CodeCraft 自己不寫程式碼，它負責盯著下面這些 AI 程式設計助
 | <img src="docs/assets/agent-zcode.svg" width="20" height="20" align="absmiddle" alt="" />&nbsp; **ZCode**<br /><sub>Z.ai</sub> | 透過官方七事件 Hook 同步外部 Desktop/CLI 工作階段、工具結果、最終回答、提問和計畫審閱。一般工具只提供「允許一次」和「拒絕」；提問與計畫即使在自動審批模式下也必須由人決定。 |
 | <img src="docs/assets/agent-gemini.svg" width="20" height="20" align="absmiddle" alt="" />&nbsp; **Gemini CLI**<br /><sub>Google</sub> | 透過使用者層級 Hook 觀察一般 Gemini 終端的工作階段、提示、工具活動、結果、通知和計畫路徑。所有互動都是唯讀；桌面版只能盡力定位原 Gemini 終端，LAN 頁面只能提示你回到執行 Gemini 的裝置處理。 |
 | <img src="docs/assets/agent-workbuddy.svg" width="20" height="20" align="absmiddle" alt="" />&nbsp; **WorkBuddy** | 透過使用者層級本機外掛唯讀觀察工作階段、工具活動、問題、計畫和權限請求。所有審批與回答仍在 WorkBuddy 中完成；桌面版提供「前往 WorkBuddy 處理」按鈕，LAN 頁面只提示你回到執行 WorkBuddy 的裝置處理。 |
+| <img src="docs/assets/agent-trae.svg" width="20" height="20" align="absmiddle" alt="" />&nbsp; **Trae CN**<br /><sub>ByteDance</sub> | 透過使用者層級六事件 Hook 同步工作階段、使用者提問、最終回覆及工具參數與結果。一般工具可在 CodeCraft 中允許一次、拒絕或交回 Trae；原生問題與 Plan/Spec 以唯讀方式顯示，需前往 Trae 處理。 |
 
-九個 Agent 可以同時開著，面板頂部的篩選按鈕能只看其中一家，或者「全部」一起看。
+十個 Agent 可以同時開著，面板頂部的篩選按鈕能只看其中一家，或者「全部」一起看。
 
 > DeepSeek Harness 目前是 Developer Preview。CodeCraft 優先適配 `@deepseek-ai/dsh@0.1.1-rc.2`，並相容 `0.1.2-alpha.2`；偵測不到版本或版本不在相容清單中時，本機橋接會拒絕互動並顯示相容性錯誤。
 
@@ -74,7 +75,7 @@ CodeCraft 自己不寫程式碼，它負責盯著下面這些 AI 程式設計助
 
 **2. 連接你的 AI 助手（關鍵一步）**
 
-展開面板 → 按右上角 ⚙️ → **一般 → Hook 管理** → 按一下要連接的 Agent 完成安裝。
+展開面板 → 按右上角 ⚙️ → **Hook → Hook 管理** → 按一下要連接的 Agent 完成安裝。
 
 這一步在做什麼？CodeCraft 會往對應助手的設定裡加一個「通知掛鉤」，讓助手在開始工作、要呼叫工具、工作結束時主動告訴 CodeCraft 一聲。不裝它，面板會一直是空的。想撤銷隨時可以在同一處卸載，設定會被還原。
 
@@ -85,6 +86,8 @@ ZCode 使用使用者層級的 `~/.zcode/cli/config.json`。CodeCraft 會以結�
 Gemini CLI 使用使用者層級的 `~/.gemini/settings.json`。CodeCraft 會以結構化方式合併 `SessionStart`、`SessionEnd`、`BeforeAgent`、`AfterAgent`、`BeforeTool`、`AfterTool`、`Notification` 和 `PreCompress` 八個事件，修改前建立不覆蓋既有檔案的 `.bak`，並保留其他 Hook、matcher、未知欄位和安全設定。安裝、重新整理、修復和解除安裝都可重複執行；解除安裝只刪除 CodeCraft 自己的 handler。Hook 只寫入受限的本機 inbox，標準輸出永遠是 `{}`，不會阻塞、批准、拒絕或改變 Gemini 的原生行為。
 
 WorkBuddy 使用使用者層級的 `%USERPROFILE%/.workbuddy/settings.json`；設定 `WORKBUDDY_HOME` 時則使用對應的設定根目錄。CodeCraft 只安裝和管理帶有自身標記的本機 marketplace、外掛檔案及 `enabledPlugins` 項目，保留使用者既有的 Hook、MCP、權限和其他設定。外掛只向 CodeCraft 傳送觀察事件並回傳空回應，不會代替使用者批准、拒絕、回答問題或確認計畫。
+
+Trae CN 使用使用者層級的 `%USERPROFILE%/.trae-cn/hooks.json`。在 Hook 管理中安裝 **Trae CN** 後，CodeCraft 會合併 `SessionStart`、`UserPromptSubmit`、`PreToolUse`、`PostToolUse`、`Stop` 和 `Notification` 六個官方事件；修改前建立唯一的 `*.bak`，保留既有 Hook 和未知欄位，解除安裝只移除自己的項目。無需額外安裝 MCP 服務或建立 CodeCraft 工作。
 
 ### Gemini CLI Hook-only 支援矩陣
 
@@ -109,6 +112,19 @@ CodeCraft 不回答問題、不提交批准或拒絕、不選擇計畫模式，�
 | 助手串流輸出 | 目前協定尚未提供 |
 
 CodeCraft 不會把 WorkBuddy 的原生決定視為自己的審批，也不提供允許一次、工作階段允許、問題回答或計畫決定的回傳路徑。目前驗證基線為 bundled CLI `2.137.1`；其他獨立 CLI 或後續 Desktop 版本按盡力觀察處理，不會因此自動啟用雙向功能。
+
+### Trae CN 支援矩陣
+
+| 能力 | Trae CN |
+| --- | --- |
+| 工作階段狀態、使用者提問、最終回覆、工具參數與結果 | 桌面版與 LAN 均可檢視接入後收集的記錄；不匯入接入前的歷史，不提供逐字串流輸出 |
+| 一般工具權限 | 按全域審批模式處理；手動模式提供允許一次、拒絕、交回 Trae，不提供「一律允許」 |
+| 原生問題與 Plan/Spec | 自動開啟唯讀提醒，答案和計畫決定仍在 Trae 中提交 |
+| 桌面版「前往 Trae 中處理」 | 啟用可唯一識別的 Trae CN 視窗；無法確定目標時提示手動處理 |
+| LAN 工具審批 | 預設唯讀；開啟「允許網頁提交決定」後可提交工具決定，問題與計畫仍為唯讀 |
+| LAN「前往 Trae 中處理」 | 提示回到執行 Trae 的裝置處理 |
+
+目前適配 Windows Trae CN `3.3.102`，其他版本的工具決定交回 Trae 原生確認。工具審批最長等待使用者 120 秒，逾時後交回 Trae。安裝、相容性限制與已驗證範圍請見 [Trae 整合指南](CodeCraft-tauri/protocol/trae/README.md)（簡體中文）。
 
 **3. 正常使用你的助手**
 
@@ -142,7 +158,7 @@ CodeCraft 不會把 WorkBuddy 的原生決定視為自己的審批，也不提�
 
 - **自動收起**：滑鼠移開約 0.25 秒後面板縮回細線；有工作在跑時會留一小條即時狀態。
 - **自動清理**：閒置或已停止的工作階段超過設定時間（預設 30 分鐘）自動從清單移走，正在工作和等你處理的不會被動。
-- **自動審批**：所有已連接 Agent 共用同一策略，可以手動逐個確認、只自動通過低風險工具，或自動通過一般工具審批；DSH 與 ZCode 不提供持久化「一律允許」按鈕，ZCode 的提問和計畫始終需要人工決定。
+- **自動審批**：支援工具審批的 Agent 共用同一策略，可以手動逐個確認、只自動通過低風險工具，或自動通過一般工具審批；DSH、ZCode 與 Trae CN 不提供持久化「一律允許」按鈕，ZCode 的提問和計畫始終需要人工決定，Trae 的原生問題和計畫仍需回到 Trae 處理。
 - **位置隨心**：頂部可以左右拖動，也能一鍵靠左、置中、靠右。
 
 ## 執行環境

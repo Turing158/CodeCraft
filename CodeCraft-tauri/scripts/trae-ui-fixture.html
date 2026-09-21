@@ -1,0 +1,18 @@
+<!doctype html><html lang="zh-CN"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Trae LAN synthetic UI verification</title>
+<style>body{font:16px system-ui;background:#132027;color:#f2f5f6;padding:24px}button{padding:12px;margin:8px}pre{white-space:pre-wrap;overflow-wrap:anywhere}</style>
+<h1>Trae LAN 合成测试</h1><p>模拟事件自动弹出，问题与计划只读，不连接真实 Trae。</p>
+<button id="question">触发原生问题</button><button id="plan">触发原生计划</button><button id="tool">触发工具审批</button><button id="readonly">切换只读访问</button><pre id="result">尚未回传</pre>
+<script type="module">
+import { TraeView } from '../src/trae-view.ts';
+import { emptyTraeSnapshot } from '../src/trae-sessions.ts';
+const snapshot=emptyTraeSnapshot(); snapshot.connected=true;snapshot.appEpoch='lan-test';snapshot.capabilities.toolApproval=true;
+snapshot.sessions=[{source:'trae',sessionKey:'session',sessionId:'native',installationId:'test',traeInstanceId:'test',cwd:'C:/Synthetic',workspaceRoots:['C:/Synthetic'],title:'LAN test',status:'waitingForInput',turnEpoch:1,taskId:null,nativeNotice:null,nativeInteractions:[],output:'',updatedAt:new Date().toISOString(),activities:[]}];
+let writable=true;let index=0;
+const view=new TraeView(async(route,body)=>{document.querySelector('#result').textContent=JSON.stringify({route,body},null,2);snapshot.requests=[];},async()=>view.update(snapshot,writable));
+function show(kind){snapshot.requests=[];snapshot.sessions[0].nativeInteractions=[];
+if(kind==='permission')snapshot.requests=[{target:{appEpoch:snapshot.appEpoch,sessionKey:'session',taskId:null,turnEpoch:1,requestId:'p-'+(++index),requestVersion:1},kind:'permission',channel:'hook',toolName:'Write',toolUseId:'call',arguments:{file_path:'C:/Synthetic/test.txt'},state:'pending',expiresAt:new Date(Date.now()+120000).toISOString(),plan:null,error:null}];
+else snapshot.sessions[0].nativeInteractions=[{id:kind+(++index),kind,toolUseId:null,arguments:{questions:[{question:'选择开发语言？',options:[{label:'Rust'},{label:'TypeScript'}]}]},message:'请在 Trae 中处理',plan:kind==='plan'?'# 原生计划\n\n1. 修改实现。\n2. 运行测试。':null,documentPath:null,capturedAt:new Date().toISOString(),readOnly:true}];
+snapshot.version++;view.update(snapshot,writable);}
+document.querySelector('#question').onclick=()=>show('question');document.querySelector('#plan').onclick=()=>show('plan');document.querySelector('#tool').onclick=()=>show('permission');
+document.querySelector('#readonly').onclick=()=>{writable=!writable;document.querySelector('#readonly').textContent=writable?'切换只读访问':'切换可写访问';view.update(snapshot,writable);};
+</script></html>

@@ -1,0 +1,25 @@
+{
+  "schemaVersion": 1,
+  "evidenceKind": "runtime_capture_redacted",
+  "productVersion": "3.3.102",
+  "platform": "windows",
+  "capturedAt": "2026-09-19T11:28:17.990+08:00",
+  "source": "Trae agent-hooks.log; UserPromptSubmit from standalone Chat",
+  "redactions": ["session_id replaced with a stable fixture identifier"],
+  "input": {
+    "session_id": "workspace-less-chat-fixture",
+    "cwd": ".",
+    "hook_event_name": "UserPromptSubmit",
+    "workspace_roots": [],
+    "agent_id": "chat",
+    "agent_type": "chat",
+    "prompt": "调用 codecraft_probe_echo，payload 为 {\"marker\":\"A\",\"nested\":{\"text\":\"中文\",\"values\":[1,true,null]}}。展示工具实际返回的结果。"
+  },
+  "observedOutputBeforeFix": {
+    "decision": "block",
+    "reason": "INVALID_ARGUMENT: absolute cwd required"
+  },
+  "observedClientBehaviorBeforeFix": "Stopped by Hooks before model/tool execution",
+  "expectedOutputAfterFix": {},
+  "fullToolApprovalRuntimeVerified": false
+}

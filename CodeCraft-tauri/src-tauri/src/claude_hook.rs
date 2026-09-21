@@ -710,6 +710,7 @@ impl ClaudeSession {
 }
 
 pub fn capture_claude_hook() -> Result<(), String> {
+    if codecraft_trae::hook::suppress_imported_claude() { return Ok(()); }
     let mut input = String::new();
     io::stdin()
         .read_to_string(&mut input)

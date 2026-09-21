@@ -1,3 +1,5 @@
+import { emptyTraeSnapshot, readTraeSnapshot, toTraeUnifiedSession, traeReviews, traeQuestionRequest, traePlanRequest, traePermissionRequest, TraeReviewQueue, TraeDecisionIds, canDecide, type TraeReview, type TraeSnapshot } from "./trae-sessions";
+import { isTraeSession } from "./unified-sessions";
 import { WorkBuddyHandoffUi } from "./workbuddy-handoff";
 import { invoke } from "@tauri-apps/api/core";
 import { getVersion } from "@tauri-apps/api/app";
@@ -33,6 +35,7 @@ import {
   questionAnswerOptions,
   sessionEntryView,
   type ClaudeAnswerOption,
+  type ClaudeOutputEntry,
   type ClaudePlanRequest,
   type ClaudePermissionRequest,
   type ClaudeQuestion,
@@ -504,6 +507,7 @@ const kimiIconUrl = new URL(
   "../src-tauri/icons/icon/kimi.svg?no-inline",
   import.meta.url,
 ).href;
+const traeIconUrl = new URL("../src-tauri/icons/icon/trae.svg?no-inline", import.meta.url).href;
 const workbuddyIconUrl = new URL(
   "../src-tauri/icons/icon/workbuddy.svg?no-inline",
   import.meta.url,
@@ -1088,6 +1092,7 @@ const questionOpenKimiButton = panel?.querySelector<HTMLButtonElement>("#questio
 const questionOpenWorkBuddyButton = panel?.querySelector<HTMLButtonElement>(
   "#question-open-workbuddy",
 );
+const questionOpenTraeButton = document.querySelector<HTMLButtonElement>("#question-open-trae")!;
 const questionRejectButton =
   panel?.querySelector<HTMLButtonElement>("#question-reject");
 const questionNextButton =
@@ -1123,6 +1128,7 @@ const permissionOpenKimiButton = panel?.querySelector<HTMLButtonElement>("#permi
 const permissionOpenWorkBuddyButton = panel?.querySelector<HTMLButtonElement>(
   "#permission-open-workbuddy",
 );
+const permissionReturnTraeButton = document.querySelector<HTMLButtonElement>("#permission-return-trae")!;
 const planView = panel?.querySelector<HTMLElement>("#plan-view");
 const planBackButton = panel?.querySelector<HTMLButtonElement>("#plan-back");
 const planTitle = panel?.querySelector<HTMLElement>("#plan-block-title");
@@ -1154,6 +1160,7 @@ const planOpenKimiButton = panel?.querySelector<HTMLButtonElement>("#plan-open-k
 const planOpenWorkBuddyButton = panel?.querySelector<HTMLButtonElement>(
   "#plan-open-workbuddy",
 );
+const planOpenTraeButton = document.querySelector<HTMLButtonElement>("#plan-open-trae")!;
 
 const setSourceStatusLabel = (button: HTMLElement, label: string) => {
   const labelElement = button.querySelector<HTMLElement>(
@@ -1570,6 +1577,7 @@ let selectedZCodeSessionKey: string | undefined;
 let selectedGeminiSessionId: string | undefined;
 let selectedKimiSessionId: string | undefined;
 let selectedWorkBuddySessionId: string | undefined;
+let selectedTraeSessionKey: string | undefined;
 type ReviewSource =
   | "claude"
   | "codex"
@@ -1580,7 +1588,8 @@ type ReviewSource =
   | "zcode"
   | "gemini"
   | "kimi"
-  | "workbuddy";
+  | "workbuddy"
+  | "trae";
 let selectedSessionSource: ReviewSource = "claude";
 let lastRefreshError: string | undefined;
 let lastOpenCodeRefreshError: string | undefined;
@@ -1598,6 +1607,7 @@ let zcodeSessionItems = new Map<string, HTMLLIElement>();
 let geminiSessionItems = new Map<string, HTMLLIElement>();
 let kimiSessionItems = new Map<string, HTMLLIElement>();
 let workbuddySessionItems = new Map<string, HTMLLIElement>();
+let latestTraeSnapshot = emptyTraeSnapshot();
 interface AllSessionSnapshots {
   claude: ClaudeSessionSnapshot;
   codex: CodexSnapshot;
@@ -1609,6 +1619,7 @@ interface AllSessionSnapshots {
   gemini: GeminiSnapshot;
   kimi: KimiSnapshot;
   workbuddy: WorkBuddySnapshot;
+  trae: TraeSnapshot;
 }
 
 interface ActiveSessionCounts {
@@ -1622,6 +1633,7 @@ interface ActiveSessionCounts {
   gemini: number;
   kimi: number;
   workbuddy: number;
+  trae: number;
 }
 
 let latestActiveSessionCounts: ActiveSessionCounts = {
@@ -1635,6 +1647,7 @@ let latestActiveSessionCounts: ActiveSessionCounts = {
   gemini: 0,
   kimi: 0,
   workbuddy: 0,
+  trae: 0,
 };
 
 const activeSessionCount = (sessions: Array<{ status: string }>) =>
@@ -1797,6 +1810,7 @@ const soundSourcePrimed: Record<
   gemini: false,
   kimi: false,
   workbuddy: false,
+  trae: false,
 };
 
 const observeSoundFrames = (
@@ -2009,7 +2023,8 @@ type SessionProductId =
   | "zcode"
   | "gemini"
   | "kimi"
-  | "workbuddy";
+  | "workbuddy"
+  | "trae";
 type SessionSourceProductId = Exclude<SessionProductId, "all">;
 type SessionProduct = {
   id: SessionProductId;
@@ -2026,11 +2041,13 @@ type SessionProduct = {
     | "zcode"
     | "gemini"
     | "kimi"
-    | "workbuddy";
+    | "workbuddy"
+  | "trae";
   iconUrl: string;
 };
 
 const sessionProducts: SessionProduct[] = [
+  { id: "trae", triggerLabel: "Trae CN", optionLabel: "Trae CN", kind: "trae", iconUrl: traeIconUrl },
   {
     id: "all",
     triggerLabel: "CodeCraft",
@@ -2756,7 +2773,9 @@ const rememberReviewOrigin = (reviewView: ReviewContentView) => {
 };
 
 const hasSelectedSessionDetail = () =>
-  selectedSessionSource === "codex"
+  selectedSessionSource === "trae"
+    ? latestTraeSnapshot.sessions.some(session => session.sessionKey === selectedTraeSessionKey)
+    : selectedSessionSource === "codex"
     ? latestCodexSnapshot.sessions.some(
         (session) => session.id === selectedCodexSessionId,
       )
@@ -3353,6 +3372,7 @@ const syncQuestionAnswerState = (
     activeQuestionSource === "gemini" && state.question.readOnly === true;
   const showOpenKimi =
     activeQuestionSource === "kimi" && state.question.readOnly === true;
+  const showOpenTrae = activeQuestionSource === "trae" && state.question.readOnly === true;
   const showOpenWorkBuddy =
     activeQuestionSource === "workbuddy" && state.question.readOnly === true;
   const showReject = activeQuestionSource === "opencode" || activeQuestionSource === "mimo";
@@ -3361,7 +3381,7 @@ const syncQuestionAnswerState = (
       showOpenCodex ||
       showOpenGemini ||
       showOpenKimi ||
-      showOpenWorkBuddy ||
+      showOpenWorkBuddy || showOpenTrae ||
       showReject,
     animate,
   );
@@ -3374,6 +3394,7 @@ const syncQuestionAnswerState = (
   setActionButtonVisible(questionOpenGeminiButton, showOpenGemini, animate);
   setActionButtonVisible(questionOpenKimiButton, showOpenKimi, animate);
   setActionButtonVisible(questionOpenWorkBuddyButton, showOpenWorkBuddy, animate);
+  setActionButtonVisible(questionOpenTraeButton, showOpenTrae, animate);
   setActionButtonVisible(questionRejectButton, showReject, animate);
   setActionButtonVisible(questionNextButton, actions.has("next"), animate);
   setActionButtonVisible(questionSubmitButton, actions.has("submit"), animate);
@@ -3453,7 +3474,7 @@ const renderCurrentQuestion = (animate = false) => {
 
   const isWorkBuddyQuestion = activeQuestionSource === "workbuddy";
   questionAnswerBlock.hidden = isWorkBuddyQuestion;
-  const nextProgress = isWorkBuddyQuestion
+  const nextProgress = activeQuestionSource === "trae" ? `Trae 问题 · ${activeQuestionIndex + 1}/${request.questions.length}` : isWorkBuddyQuestion
     ? "WorkBuddy问题审批"
     : `第 ${activeQuestionIndex + 1}/${request.questions.length} 问题`;
   const nextHeader = question.header ?? "Claude Code";
@@ -3695,6 +3716,7 @@ const clearActiveQuestionRequest = () => {
     button.hidden = true;
   }
   questionOpenWorkBuddyButton.hidden = true;
+  questionOpenTraeButton.hidden = true;
   actionNavVisibilityState?.animation?.cancel();
   actionNavVisibilityState = undefined;
   clearActionNavTransitionStyles();
@@ -3731,6 +3753,8 @@ questionBackButton.addEventListener("click", () => {
     dismissedMimoReviewId = activeQuestionRequest.id;
   } else if (activeQuestionSource === "kimi") {
     dismissedKimiReviewIds.add(activeQuestionRequest.id);
+  } else if (activeQuestionSource === "trae") {
+    traeReviewQueue.mark(activeQuestionRequest.id);
   } else if (activeQuestionSource === "workbuddy") {
     dismissedWorkBuddyInteractionIds.add(activeQuestionRequest.id);
   } else {
@@ -4141,7 +4165,8 @@ const renderPermissionRequest = (request: ClaudePermissionRequest) => {
   permissionTool.textContent = request.toolName;
   permissionTool.title = request.toolName;
   permissionSummaryText.textContent = request.summary;
-  permissionSummaryText.title = request.summary;
+  if (activePermissionSource === "trae") permissionSummaryText.removeAttribute("title");
+  else permissionSummaryText.title = request.summary;
 
   const allowLabel = permissionAllowButton.querySelector(
     ".question-option__label",
@@ -4198,6 +4223,7 @@ const renderPermissionRequest = (request: ClaudePermissionRequest) => {
   permissionOpenGeminiButton.hidden = !readOnlyGemini;
   permissionOpenKimiButton.hidden = !readOnlyKimi;
   permissionOpenWorkBuddyButton.hidden = !readOnlyWorkBuddy;
+  permissionReturnTraeButton.hidden = activePermissionSource !== "trae";
   permissionView.dataset.reviewSource = activePermissionSource;
   setPermissionButtonsDisabled(readOnlyGemini || readOnlyKimi || readOnlyWorkBuddy);
 };
@@ -4218,6 +4244,7 @@ const clearActivePermissionRequest = () => {
   permissionOpenGeminiButton.hidden = true;
   permissionOpenKimiButton.hidden = true;
   permissionOpenWorkBuddyButton.hidden = true;
+  permissionReturnTraeButton.hidden = true;
   permissionSubmitStatus.hidden = true;
   permissionSubmitStatus.textContent = "";
   delete permissionSubmitStatus.dataset.state;
@@ -4272,11 +4299,16 @@ const setPermissionButtonsDisabled = (disabled: boolean) => {
   permissionAllowButton.disabled = disabled;
   permissionAlwaysAllowButton.disabled = disabled;
   permissionDenyButton.disabled = disabled;
+  permissionReturnTraeButton.disabled = disabled;
 };
 
 type PermissionDecision = "allow" | "allowAlways" | "deny";
 
 const submitPermissionDecision = async (decision: PermissionDecision) => {
+  if (activePermissionSource === "trae") {
+    if (decision !== "allowAlways") await submitTraePermission(decision);
+    return;
+  }
   const request = activePermissionRequest;
   if (
     !request ||
@@ -4451,6 +4483,8 @@ permissionBackButton.addEventListener("click", () => {
     dismissedMimoReviewId = activePermissionRequest.id;
   } else if (activePermissionSource === "kimi") {
     dismissedKimiReviewIds.add(activePermissionRequest.id);
+  } else if (activePermissionSource === "trae") {
+    traeReviewQueue.mark(activePermissionRequest.id);
   } else if (activePermissionSource === "workbuddy") {
     dismissedWorkBuddyInteractionIds.add(activePermissionRequest.id);
   } else {
@@ -4504,10 +4538,11 @@ const syncPlanSourceControls = () => {
   const isMimoPlan = activePlanSource === "mimo";
   const isGeminiPlan = activePlanSource === "gemini";
   const isKimiPlan = activePlanSource === "kimi";
+  const isTraePlan = activePlanSource === "trae";
   const isWorkBuddyPlan = activePlanSource === "workbuddy";
   const isFeedbackPlan = isDshPlan || isZCodePlan || isMimoPlan;
   planView.dataset.planSource = activePlanSource;
-  planTitle.textContent = isWorkBuddyPlan ? "WorkBuddy计划" : "计划";
+  planTitle.textContent = isTraePlan ? "Trae 计划" : isWorkBuddyPlan ? "WorkBuddy计划" : "计划";
   planAutoButton.hidden = !isClaudePlan && !isFeedbackPlan;
   planAutoRememberButton.hidden = !isClaudePlan;
   planCustomInput.hidden = !isClaudePlan && !isFeedbackPlan;
@@ -4517,10 +4552,11 @@ const syncPlanSourceControls = () => {
   planOpenGeminiButton.hidden = !isGeminiPlan;
   planOpenKimiButton.hidden = !isKimiPlan;
   planOpenWorkBuddyButton.hidden = !isWorkBuddyPlan;
-  planAutoButton.disabled = isGeminiPlan || isKimiPlan || isWorkBuddyPlan;
-  planAutoRememberButton.disabled = isGeminiPlan || isKimiPlan || isWorkBuddyPlan;
-  planCustomInput.disabled = isGeminiPlan || isKimiPlan || isWorkBuddyPlan;
-  planCustomSubmitButton.disabled = isGeminiPlan || isKimiPlan || isWorkBuddyPlan;
+  planOpenTraeButton.hidden = !isTraePlan;
+  planAutoButton.disabled = isGeminiPlan || isKimiPlan || isWorkBuddyPlan || isTraePlan;
+  planAutoRememberButton.disabled = isGeminiPlan || isKimiPlan || isWorkBuddyPlan || isTraePlan;
+  planCustomInput.disabled = isGeminiPlan || isKimiPlan || isWorkBuddyPlan || isTraePlan;
+  planCustomSubmitButton.disabled = isGeminiPlan || isKimiPlan || isWorkBuddyPlan || isTraePlan;
   const zcodeOpenLabel = translate("前往 ZCode 处理");
   const geminiOpenLabel = translate("前往 Gemini 处理");
   planOpenZCodeButton.querySelector("span")!.textContent = zcodeOpenLabel;
@@ -4553,7 +4589,7 @@ const syncPlanSourceControls = () => {
         : "允许 DeepSeek Harness 退出计划模式"
       : "以自动模式执行此计划";
   }
-  planActionBadge.textContent = isKimiPlan
+  planActionBadge.textContent = isTraePlan ? "仅供查看，请在 Trae 中处理" : isKimiPlan
     ? "在 Kimi Code 中处理"
     : isWorkBuddyPlan
     ? "在WorkBuddy中处理"
@@ -4641,6 +4677,7 @@ const setPlanButtonsDisabled = (disabled: boolean) => {
   planOpenCodexButton.disabled = disabled;
   planOpenZCodeButton.disabled = disabled;
   planOpenWorkBuddyButton.disabled = disabled;
+  planOpenTraeButton.disabled = disabled;
 };
 
 const setPlanSubmitStatus = (
@@ -4662,7 +4699,7 @@ const submitPlanDecision = async (mode: PlanExecutionMode, note?: string) => {
     activePlanSource === "codex" ||
     activePlanSource === "gemini" ||
     activePlanSource === "kimi" ||
-    activePlanSource === "workbuddy"
+    activePlanSource === "workbuddy" || activePlanSource === "trae"
   ) return;
 
   const returnView = returnViewForReview(planOriginView);
@@ -4735,6 +4772,8 @@ planBackButton.addEventListener("click", () => {
     manuallyHiddenPlanRequestId = activePlanRequest.id;
   } else if (activePlanSource === "kimi") {
     dismissedKimiReviewIds.add(activePlanRequest.id);
+  } else if (activePlanSource === "trae") {
+    traeReviewQueue.mark(activePlanRequest.id);
   } else if (activePlanSource === "workbuddy") {
     dismissedWorkBuddyInteractionIds.add(activePlanRequest.id);
   } else {
@@ -4806,9 +4845,10 @@ planOpenZCodeButton.addEventListener("click", () => {
   void focusZCodeWindow(planOpenZCodeButton);
 });
 
-const createSessionProductIcon = (
+const configureSessionProductIcon = (
+  mark: HTMLElement,
   product: SessionProduct,
-): HTMLImageElement => {
+): void => {
   const image = document.createElement("img");
   image.src = product.iconUrl;
   image.width = 18;
@@ -4816,7 +4856,13 @@ const createSessionProductIcon = (
   image.alt = "";
   image.draggable = false;
   image.setAttribute("aria-hidden", "true");
-  return image;
+  mark.replaceChildren(image);
+  if (product.kind === "trae") {
+    configureThemedAgentIcon(mark, image, product.iconUrl);
+  } else {
+    delete mark.dataset.themedIcon;
+    mark.style.removeProperty("--agent-icon-image");
+  }
 };
 
 const visibleSessionProducts = () =>
@@ -4870,7 +4916,7 @@ const updateSessionProductTrigger = () => {
   const product = selectedSessionProduct();
   sessionProductTitle.textContent = product.triggerLabel;
   sessionProductIcon.dataset.productKind = product.kind;
-  sessionProductIcon.replaceChildren(createSessionProductIcon(product));
+  configureSessionProductIcon(sessionProductIcon, product);
   sessionProductTrigger.setAttribute(
     "aria-label",
     `筛选会话来源，当前为${product.optionLabel}`,
@@ -4900,7 +4946,7 @@ const renderSessionProductMenu = () => {
     mark.className = "session-product__option-mark";
     mark.dataset.productKind = product.kind;
     mark.setAttribute("aria-hidden", "true");
-    mark.append(createSessionProductIcon(product));
+    configureSessionProductIcon(mark, product);
 
     const label = document.createElement("span");
     label.className = "session-product__option-label";
@@ -5039,6 +5085,7 @@ const syncProductVisibility = () => {
   geminiSessionCard.hidden = !showGemini;
   kimiSessionCard.hidden = !showKimi;
   workbuddySessionCard.hidden = !showWorkBuddy;
+  document.querySelector<HTMLElement>("#trae-session-card")!.hidden = selectedSessionProductId !== "all" && selectedSessionProductId !== "trae";
   sessionSourceCards.dataset.filter = selectedSessionProductId;
   renderSessionSummary();
 };
@@ -5055,6 +5102,7 @@ const sessionProductIdForHookAgent = (
   if (id === "zCode") return "zcode";
   if (id === "geminiCli") return "gemini";
   if (id === "kimiCode") return "kimi";
+  if (id === "trae") return "trae";
   if (id === "workBuddy") return "workbuddy";
   return undefined;
 };
@@ -5063,6 +5111,7 @@ const syncInstalledSessionProducts = (
   statuses: ReadonlyArray<{ id: string; hookInstalled: boolean }>,
 ) => {
   installedSessionProductIds.clear();
+  installedSessionProductIds.add("trae");
   for (const status of statuses) {
     if (!status.hookInstalled) continue;
     const productId = sessionProductIdForHookAgent(status.id);
@@ -5295,6 +5344,8 @@ const activityStatusLabel = (status: string) => {
       return "执行中";
     case "failed":
       return "失败";
+    case "unknown":
+      return "结果未知";
     default:
       return "已完成";
   }
@@ -5348,6 +5399,7 @@ function* latestUnifiedSessions(): Generator<UnifiedSession> {
   yield* latestGeminiSnapshot.sessions;
   yield* latestKimiSnapshot.sessions;
   yield* latestWorkBuddySnapshot.sessions.map(toWorkBuddyUnifiedSession);
+  yield* latestTraeSnapshot.sessions.map(toTraeUnifiedSession);
 }
 
 const collapsedPanelHeight = () =>
@@ -5520,6 +5572,13 @@ const syncCollapsedSessionState = () => {
 };
 
 const renderSessionDetail = (session: UnifiedSession) => {
+  const trae = isTraeSession(session);
+  document.querySelector<HTMLElement>("#trae-detail-context")!.hidden = !trae;
+  document.querySelector<HTMLElement>("#session-output-source")!.textContent = trae ? "已采集记录" : "实时转录";
+  if (trae) {
+    document.querySelector<HTMLElement>("#trae-detail-notice")!.textContent = [session.cwd, session.detailNotice].filter(Boolean).join("\n");
+    document.querySelector<HTMLButtonElement>("#trae-detail-review")!.hidden = !traeReviews(latestTraeSnapshot).some(r => r.sessionKey === session.sessionKey);
+  }
   const signature = JSON.stringify([
     unifiedSessionKey(session),
     session.status,
@@ -5572,6 +5631,8 @@ const renderSessionDetail = (session: UnifiedSession) => {
     empty.textContent = "等待会话调用工具";
     sessionActivityList.replaceChildren(empty);
   } else {
+    const expanded = new Set(previousSessionId === sessionKey
+      ? [...sessionActivityList.querySelectorAll<HTMLDetailsElement>("details[open]")].map(el => el.dataset.activityId) : []);
     const items = [...session.activities].reverse().map((activity) => {
       const item = document.createElement("li");
       item.className = "activity-item";
@@ -5595,6 +5656,18 @@ const renderSessionDetail = (session: UnifiedSession) => {
       summary.textContent = activity.summary;
       summary.title = activity.summary;
       content.append(tool, summary);
+      if (trae) {
+        const details = document.createElement("details");
+        details.className = "trae-activity-details";
+        details.dataset.activityId = activity.id;
+        details.open = expanded.has(activity.id);
+        const label = document.createElement("summary");
+        label.textContent = "查看参数与结果";
+        const body = document.createElement("pre");
+        body.textContent = activity.summary;
+        details.append(label, body);
+        content.append(details);
+      }
 
       const time = document.createElement("time");
       time.className = "activity-item__time";
@@ -5613,11 +5686,17 @@ const renderSessionDetail = (session: UnifiedSession) => {
     empty.textContent = "等待会话产生可读取的输出";
     sessionOutput.replaceChildren(empty);
   } else {
-    const outputEntries = session.outputs.map((output) => {
+    const outputEntries = session.outputs.map((output: ClaudeOutputEntry) => {
       const entry = document.createElement("article");
       entry.className = "output-entry markdown-content";
       entry.dataset.outputId = output.id;
       entry.innerHTML = renderMarkdown(output.text);
+      if (output.role) {
+        const meta = document.createElement("header");
+        meta.className = "detail-section__meta";
+        meta.textContent = `${output.role === "user" ? "用户" : "Trae"}${output.capturedAt ? " · " + formatSessionTime(output.capturedAt) : ""}`;
+        entry.prepend(meta);
+      }
       return entry;
     });
     sessionOutput.replaceChildren(...outputEntries);
@@ -6120,6 +6199,7 @@ const renderSessionSummary = () => {
     gemini: latestActiveSessionCounts.gemini,
     kimi: latestActiveSessionCounts.kimi,
     workbuddy: latestActiveSessionCounts.workbuddy,
+    trae: activeSessionCount(latestTraeSnapshot.sessions),
   };
   const connectionStates: Record<SessionSourceProductId, boolean> = {
     "claude-code": latestClaudeSnapshot.connected,
@@ -6132,6 +6212,7 @@ const renderSessionSummary = () => {
     gemini: latestGeminiSnapshot.connected,
     kimi: latestKimiSnapshot.connected,
     workbuddy: latestWorkBuddySnapshot.connected,
+    trae: latestTraeSnapshot.connected,
   };
   const selectedSources =
     selectedSessionProductId === "all"
@@ -7031,6 +7112,7 @@ sessionDetailBack.addEventListener("click", () => {
   selectedZCodeSessionKey = undefined;
   renderedDetailSignature = undefined;
   selectedKimiSessionId = undefined;
+  selectedTraeSessionKey = undefined;
   switchContentView("sessions");
 });
 
@@ -7790,7 +7872,8 @@ type HookAgentId =
   | "zCode"
   | "geminiCli"
   | "kimiCode"
-  | "workBuddy";
+  | "workBuddy"
+  | "trae";
 type HookIntegrationStatus = {
   id: HookAgentId;
   name: string;
@@ -7829,6 +7912,7 @@ const hookMutationsBlocked = () =>
   hookRefreshing || hookOperation !== undefined;
 
 const browserHookIntegrations: HookIntegrationStatus[] = [
+  { id: "trae", name: "Trae CN", agentInstalled: true, hookInstalled: false },
   {
     id: "claudeCode",
     name: "Claude Code",
@@ -7967,6 +8051,7 @@ const syncHookRefreshButton = () => {
 };
 
 const hookIconUrl = (id: HookAgentId) => {
+  if (id === "trae") return traeIconUrl;
   if (id === "geminiCli") return geminiIconUrl;
   if (id === "kimiCode") return kimiIconUrl;
   if (id === "workBuddy") return workbuddyIconUrl;
@@ -8049,7 +8134,9 @@ const createHookAgentButton = (status: HookIntegrationStatus) => {
                 ? "kimi"
                 : status.id === "workBuddy"
                   ? "workbuddy"
-                  : "codex";
+                  : status.id === "trae"
+                    ? "trae"
+                    : "codex";
   mark.setAttribute("aria-hidden", "true");
   const iconUrl = hookIconUrl(status.id);
   const image = document.createElement("img");
@@ -9632,6 +9719,154 @@ const openWorkBuddyRequest = async (requestKey: string) => {
 };
 
 const workBuddyHandoffUi = new WorkBuddyHandoffUi(openWorkBuddyRequest);
+const traeSessionItems = new Map<string, HTMLLIElement>();
+const traeReviewQueue = new TraeReviewQueue();
+const traeDecisionIds = new TraeDecisionIds();
+let activeTraeReview: TraeReview | undefined;
+let traeSubmitting = false;
+const traeReviewIsVisible = () =>
+  (requestedContentView === "question" && activeQuestionSource === "trae") ||
+  (requestedContentView === "permission" && activePermissionSource === "trae") ||
+  (requestedContentView === "plan" && activePlanSource === "trae");
+const renderTraeReview = (review: TraeReview, reveal = false) => {
+  activeTraeReview = review;
+  selectedSessionSource = "trae";
+  selectedTraeSessionKey = review.sessionKey;
+  const session = latestTraeSnapshot.sessions.find(s => s.sessionKey === review.sessionKey);
+  if (session) renderSessionDetail(toTraeUnifiedSession(session));
+  const signature = JSON.stringify(review);
+  const view = review.kind === "question" ? questionView : review.kind === "plan" ? planView : permissionView;
+  const changed = view.dataset.traeRequest !== signature;
+  if (changed) {
+    if (review.kind === "question") renderedQuestionRequestId = undefined;
+    else if (review.kind === "plan") renderedPlanRequestId = undefined;
+    else renderedPermissionRequestId = undefined;
+    view.dataset.traeRequest = signature;
+  }
+  if (review.kind === "question") {
+    clearActivePermissionRequest(); clearActivePlanRequest();
+    activeQuestionSource = "trae";
+    renderQuestionRequest(traeQuestionRequest(review));
+  } else if (review.kind === "plan") {
+    clearActiveQuestionRequest(); clearActivePermissionRequest();
+    renderPlanRequest(traePlanRequest(review), "trae");
+  } else {
+    clearActiveQuestionRequest(); clearActivePlanRequest();
+    activePermissionSource = "trae";
+    renderPermissionRequest(traePermissionRequest(review, latestTraeSnapshot));
+    setPermissionButtonsDisabled(traeSubmitting || !canDecide(latestTraeSnapshot, review.request!));
+    if (changed && review.request?.state !== "pending") setPermissionSubmitStatus("决定已保存，等待交付");
+  }
+  if (requestedContentView !== review.kind) { rememberReviewOrigin(review.kind); switchContentView(review.kind); }
+  traeReviewQueue.mark(review.key);
+  if (reveal && collapseExpandSettings.approvalAutoExpand) void revealPanelForAttention().catch(console.error);
+};
+const renderTraeSnapshot = (snapshot: TraeSnapshot) => {
+  snapshot = {
+    ...snapshot,
+    sessions: filterDismissedSessions(
+      snapshot.sessions,
+      dismissedSessionKeys,
+      (session) => `trae:${session.sessionKey}`,
+      (session) => session.status !== "idle" && session.status !== "stopped",
+    ),
+  };
+  if (snapshot.appEpoch !== latestTraeSnapshot.appEpoch) traeDecisionIds.clear();
+  latestTraeSnapshot = snapshot;
+  const selected = snapshot.sessions.find(s => s.sessionKey === selectedTraeSessionKey);
+  if (!selected) {
+    selectedTraeSessionKey = undefined;
+    if (selectedSessionSource === "trae" && requestedContentView === "detail") {
+      renderedDetailSignature = undefined;
+      sessionOutput.replaceChildren();
+      sessionActivityList.replaceChildren();
+      switchContentView("sessions");
+    }
+  } else if (selectedSessionSource === "trae") {
+    renderSessionDetail(toTraeUnifiedSession(selected));
+  }
+  renderUnifiedSessionList(document.querySelector<HTMLUListElement>("#trae-session-list")!, snapshot.sessions.map(toTraeUnifiedSession), traeSessionItems);
+  const status = document.querySelector<HTMLElement>("#trae-connection-status")!;
+  status.textContent = !snapshot.connected ? "Hook 未连接" : snapshot.capabilities.toolApproval ? "Hook 已连接" : "当前版本暂不支持工具审批";
+  status.dataset.connected = String(snapshot.connected);
+  const reviews = traeReviews(snapshot);
+  const visible = traeReviewIsVisible();
+  if (activeTraeReview && !reviews.some(r => r.key === activeTraeReview!.key)) {
+    const origin = activeTraeReview.kind === "question" ? questionOriginView : activeTraeReview.kind === "plan" ? planOriginView : permissionOriginView;
+    if (activeQuestionSource === "trae") clearActiveQuestionRequest();
+    if (activePlanSource === "trae") clearActivePlanRequest();
+    if (activePermissionSource === "trae") clearActivePermissionRequest();
+    activeTraeReview = undefined;
+    if (visible) switchContentView(returnViewForReview(origin));
+  }
+  const otherReview = (requestedContentView === "question" && activeQuestionSource !== "trae") || (requestedContentView === "plan" && activePlanSource !== "trae") || (requestedContentView === "permission" && activePermissionSource !== "trae");
+  if (otherReview || traeSubmitting) return;
+  const next = traeReviewQueue.next(reviews, traeReviewIsVisible() ? activeTraeReview?.key : undefined);
+  if (next) renderTraeReview(next, !traeReviewIsVisible());
+};
+const openTraeSession = (sessionKey: string) => {
+  const session = latestTraeSnapshot.sessions.find(s => s.sessionKey === sessionKey);
+  if (!session) return;
+  selectedTraeSessionKey = sessionKey;
+  selectedSessionSource = "trae";
+  renderSessionDetail(toTraeUnifiedSession(session));
+  renderUnifiedSessionList(document.querySelector<HTMLUListElement>("#trae-session-list")!, latestTraeSnapshot.sessions.map(toTraeUnifiedSession), traeSessionItems);
+  switchContentView("detail");
+  sessionDetailBack.focus({ preventScroll: true });
+};
+document.querySelector<HTMLButtonElement>("#trae-detail-review")!.addEventListener("click", () => {
+  const review = traeReviews(latestTraeSnapshot).find(r => r.sessionKey === selectedTraeSessionKey);
+  if (review) renderTraeReview(review, true);
+});
+const submitTraePermission = async (decision: "allow" | "deny" | "ask") => {
+  const review = activeTraeReview;
+  const request = review?.request;
+  if (traeSubmitting || !review || !request || !canDecide(latestTraeSnapshot, request)) return;
+  const action = { kind: "permission" as const, decision, message: null };
+  traeSubmitting = true;
+  setPermissionButtonsDisabled(true);
+  setPermissionSubmitStatus("正在回传决定…");
+  try {
+    await invoke("trae_respond_permission", { body: { schemaVersion: 1, decisionId: traeDecisionIds.for(request, action), target: request.target, action } });
+    if (activeTraeReview?.key === review.key && traeReviewIsVisible()) {
+      clearActivePermissionRequest();
+      switchContentView(returnViewForReview(permissionOriginView));
+      permissionOriginView = undefined;
+    }
+    traeSubmitting = false;
+    renderTraeSnapshot(await invoke<TraeSnapshot>("trae_get_snapshot"));
+  } catch (error) {
+    if (activeTraeReview?.key === review.key && traeReviewIsVisible()) {
+      const e = error as { error?: { message?: string }; message?: string };
+      setPermissionSubmitStatus(e.error?.message ?? e.message ?? String(error), "error");
+    }
+  } finally {
+    traeSubmitting = false;
+    if (activeTraeReview?.key === review.key && traeReviewIsVisible()) setPermissionButtonsDisabled(!canDecide(latestTraeSnapshot, request));
+  }
+};
+const focusTraeReview = async (button: HTMLButtonElement) => {
+  const key = activeTraeReview?.key;
+  if (!key || !traeReviewIsVisible()) return;
+  button.disabled = true;
+  try { await invoke("focus_trae_window"); }
+  catch (error) {
+    if (key !== activeTraeReview?.key || !traeReviewIsVisible()) return;
+    const message = `无法切换到 Trae：${String(error)}`;
+    if (activeTraeReview.kind === "plan") setPlanSubmitStatus(message, "error");
+    else { questionSubmitStatus.textContent = message; questionSubmitStatus.hidden = false; }
+  } finally { button.disabled = false; }
+};
+questionOpenTraeButton.addEventListener("click", () => void focusTraeReview(questionOpenTraeButton));
+planOpenTraeButton.addEventListener("click", () => void focusTraeReview(planOpenTraeButton));
+permissionReturnTraeButton.addEventListener("click", () => void submitTraePermission("ask"));
+const traeSessionCardIcon = document.querySelector<HTMLImageElement>("#trae-session-card-icon")!;
+traeSessionCardIcon.src = traeIconUrl;
+configureThemedAgentIcon(
+  traeSessionCardIcon.closest<HTMLElement>(".session-source-card__mark"),
+  traeSessionCardIcon,
+  traeIconUrl,
+);
 
 const workBuddyQuestionRequest = (
   interaction: WorkBuddyInteraction,
@@ -9986,7 +10221,9 @@ const createSessionButton = (session: UnifiedSession): HTMLLIElement => {
   button.setAttribute(
     "aria-pressed",
     String(
-      isCodexSession(session)
+      isTraeSession(session)
+        ? selectedSessionSource === "trae" && session.sessionKey === selectedTraeSessionKey
+        : isCodexSession(session)
         ? session.id === selectedCodexSessionId
         : isOpenCodeSession(session)
           ? openCodeSessionKey(session) === selectedOpenCodeSessionKey
@@ -10007,7 +10244,9 @@ const createSessionButton = (session: UnifiedSession): HTMLLIElement => {
   );
   button.title = `${unifiedSessionStatusLabel(session)} · ${session.title}`;
   button.addEventListener("click", () =>
-    isCodexSession(session)
+    isTraeSession(session)
+      ? openTraeSession(session.sessionKey)
+      : isCodexSession(session)
       ? setSelectedCodexSession(session.id)
       : isOpenCodeSession(session)
         ? setSelectedOpenCodeSession(openCodeSessionKey(session))
@@ -10099,7 +10338,9 @@ const updateSessionButton = (
   if (button.dataset.sessionKey !== sessionKey) button.dataset.sessionKey = sessionKey;
   if (button.dataset.sessionSource !== sessionSource) button.dataset.sessionSource = sessionSource;
   const pressed = String(
-    isCodexSession(session)
+    isTraeSession(session)
+      ? selectedSessionSource === "trae" && session.sessionKey === selectedTraeSessionKey
+      : isCodexSession(session)
       ? session.id === selectedCodexSessionId
       : isOpenCodeSession(session)
         ? openCodeSessionKey(session) === selectedOpenCodeSessionKey
@@ -10411,6 +10652,7 @@ const refreshAllSessions = async () => {
   try {
     const bundle = await invoke<AllSessionSnapshots>("list_all_sessions");
     latestActiveSessionCounts = {
+      trae: activeSessionCount(bundle.trae?.sessions ?? []),
       claude: activeSessionCount(bundle.claude.sessions),
       codex: activeSessionCount(bundle.codex.sessions),
       opencode: activeSessionCount(bundle.opencode.sessions),
@@ -10464,6 +10706,7 @@ const refreshAllSessions = async () => {
     ) {
       renderWorkBuddySnapshot(bundle.workbuddy);
     }
+    renderTraeSnapshot(readTraeSnapshot(bundle.trae));
     latestActiveSessionCounts = {
       claude: activeSessionCount(latestSessions),
       codex: activeSessionCount(latestCodexSnapshot.sessions),
@@ -10475,6 +10718,7 @@ const refreshAllSessions = async () => {
       gemini: activeSessionCount(latestGeminiSnapshot.sessions),
       kimi: activeSessionCount(latestKimiSnapshot.sessions),
       workbuddy: latestActiveSessionCounts.workbuddy,
+    trae: activeSessionCount(latestTraeSnapshot.sessions),
     };
     renderSessionSummary();
   } catch (error: unknown) {
@@ -10490,6 +10734,7 @@ const refreshAllSessions = async () => {
       refreshGeminiSessions(),
       refreshKimiSessions(),
       refreshWorkBuddySessions(),
+      invoke<TraeSnapshot>("trae_get_snapshot").then(renderTraeSnapshot),
     ]);
   } finally {
     refreshingAllSessions = false;
@@ -10606,7 +10851,8 @@ const dismissSessionFromList = (data: CodeCraftContextData | undefined) => {
       data.sessionSource === "zcode" ||
       data.sessionSource === "mimo" ||
       data.sessionSource === "kimi" ||
-      data.sessionSource === "workbuddy"
+      data.sessionSource === "workbuddy" ||
+      data.sessionSource === "trae"
       ? sessionKey
       : `${data.sessionSource}:${sessionKey}`,
   );
@@ -10693,6 +10939,13 @@ const dismissSessionFromList = (data: CodeCraftContextData | undefined) => {
         (session) => session.id !== data.sessionId,
       ),
     });
+  } else if (data.sessionSource === "trae") {
+    renderTraeSnapshot({
+      ...latestTraeSnapshot,
+      sessions: latestTraeSnapshot.sessions.filter(
+        (session) => `trae:${session.sessionKey}` !== sessionKey,
+      ),
+    });
   } else {
     renderZCodeSnapshot({
       ...latestZCodeSnapshot,
@@ -10758,7 +11011,8 @@ const contextMenu = new ContextMenuController<CodeCraftContextData>(
           sessionSource === "dsh" ||
           sessionSource === "zcode" ||
           sessionSource === "kimi" ||
-          sessionSource === "workbuddy")
+          sessionSource === "workbuddy" ||
+          sessionSource === "trae")
       ) {
         return {
           kind: "session",

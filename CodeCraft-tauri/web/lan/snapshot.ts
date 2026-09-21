@@ -1,3 +1,4 @@
+import { readTraeSnapshot, traeReviews, toTraeUnifiedSession, type TraeSnapshot } from "../../src/trae-sessions";
 import {
   sessionEntryView,
   sessionStatusLabel,
@@ -87,7 +88,8 @@ export type ConsoleSource =
   | "zcode"
   | "gemini"
   | "kimi"
-  | "workbuddy";
+  | "workbuddy"
+  | "trae";
 
 export type PendingKind = "permission" | "question" | "plan";
 
@@ -102,6 +104,8 @@ export interface ConsoleActivity {
 export interface ConsoleOutput {
   id: string;
   text: string;
+  role?: "user" | "assistant";
+  capturedAt?: number;
 }
 
 /** A request waiting on a person. Read-only entries can only be viewed. */
@@ -151,6 +155,7 @@ export interface ConsolePending {
 }
 
 export interface ConsoleEntry {
+  detailNotice?: string;
   key: string;
   source: ConsoleSource;
   sessionId: string;
@@ -196,6 +201,7 @@ export interface RawSnapshot {
   gemini?: GeminiSnapshot | null;
   kimi?: KimiSnapshot | null;
   workbuddy?: WorkBuddySnapshot | null;
+  trae?: TraeSnapshot | null;
   integrations?: RawHookIntegration[] | null;
 }
 
@@ -755,12 +761,13 @@ const sourceFromHookId = (id: string | undefined): ConsoleSource | undefined => 
   if (id === "zCode") return "zcode";
   if (id === "geminiCli") return "gemini";
   if (id === "kimiCode") return "kimi";
+  if (id === "trae") return "trae";
   if (id === "workBuddy") return "workbuddy";
   return undefined;
 };
 
 const integrationName = (source: ConsoleSource): string =>
-  source === "claude"
+  source === "trae" ? "Trae CN" : source === "claude"
     ? "Claude Code"
     : source === "codex"
       ? "Codex"
@@ -1002,7 +1009,12 @@ export const mergeSnapshot = (raw: RawSnapshot): ConsoleSnapshot => {
     ? { ...emptyWorkBuddy, ...(raw.workbuddy as WorkBuddySnapshot) }
     : emptyWorkBuddy;
 
+  const trae = readTraeSnapshot(raw.trae);
   const entries = [
+    ...trae.sessions.map((session): ConsoleEntry => {
+      const adapted = toTraeUnifiedSession(session); const request = traeReviews(trae).find(r => r.sessionKey === session.sessionKey);
+      return { key: `trae:${session.sessionKey}`, source: "trae", sessionId: session.sessionKey, title: session.title, status: adapted.status, statusLabel: session.status, cwd: adapted.cwd, updatedAt: adapted.updatedAt, activities: adapted.activities, outputs: adapted.outputs, detailNotice: adapted.detailNotice, pending: request ? { kind: request.kind, requestId: request.key, readOnly: request.kind !== "permission" || !trae.connected || !raw.allowApprovals } : null };
+    }),
     ...claude.sessions.map(claudeEntry),
     ...codex.sessions.map((session) => codexEntry(session, codex.interactions)),
     ...opencode.sessions.map(openCodeEntry),
@@ -1026,6 +1038,7 @@ export const mergeSnapshot = (raw: RawSnapshot): ConsoleSnapshot => {
     gemini: gemini.sessions.length,
     kimi: kimi.sessions.length,
     workbuddy: workbuddy.sessions.length,
+    trae: trae.sessions.length,
   };
 
   return {
@@ -1046,6 +1059,7 @@ const buildIntegrations = (
     // connected summary. With no install report we cannot prove a hook is
     // missing, so treat every agent as installed and keep it visible.
     return [
+      ...(raw.trae ? [{ source: "trae" as const, name: "Trae CN", connected: raw.trae.connected, error: null, sessionCount: counts.trae, agentInstalled: true, hookInstalled: true }] : []),
       {
         source: "claude",
         name: integrationName("claude"),
@@ -1143,7 +1157,7 @@ const buildIntegrations = (
     const source = sourceFromHookId(status.id);
     if (!source) return [];
     const connected =
-      source === "claude"
+      source === "trae" ? readTraeSnapshot(raw.trae).connected : source === "claude"
         ? claudeConnected(raw)
         : source === "codex"
           ? codexConnected(raw)
@@ -1198,6 +1212,7 @@ const workbuddyConnected = (raw: RawSnapshot): boolean =>
   isRecord(raw.workbuddy) ? raw.workbuddy.connected === true : false;
 
 const integrationError = (raw: RawSnapshot, source: ConsoleSource): string | null => {
+  if (source === "trae") return readTraeSnapshot(raw.trae).capabilities.reason || null;
   const value =
     source === "claude"
       ? isRecord(raw.claude)

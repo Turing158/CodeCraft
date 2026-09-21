@@ -19,6 +19,8 @@ dist-ssr
 /protocol/workbuddy/5.5.3/fixtures/post-tool-use-failure.json
 /protocol/workbuddy/5.5.3/fixtures/pre-tool-use.json
 /protocol/workbuddy/5.5.3/fixtures/session-start.json
+/protocol/trae/**/*-verification.json
+/protocol/trae/*/fixtures/*-delivery.json
 
 artifacts
 *.local
@@ -29,6 +31,8 @@ artifacts
 !src/workbuddy-plugin.test.ts
 !src/workbuddy-hook-status.test.ts
 !web/lan/workbuddy-snapshot.test.ts
+!src/trae-sessions.test.ts
+!web/lan/trae-api.test.ts
 
 
 # Rust and Tauri generated output
@@ -47,22 +51,7 @@ src-tauri/gen/schemas/
 *.sw?
 
 # Tauri generated icons (regenerate with `tauri icon`)
-src-tauri/icons/*
+src-tauri/icons/**
 !src-tauri/icons/ico.svg
 !src-tauri/icons/icon/
-src-tauri/icons/icon/*
-!src-tauri/icons/icon/claude.svg
-!src-tauri/icons/icon/openai.svg
-!src-tauri/icons/icon/opencode.svg
-!src-tauri/icons/icon/bone_block.svg
-!src-tauri/icons/icon/cat.svg
-!src-tauri/icons/icon/experience.svg
-!src-tauri/icons/icon/note_block.svg
-!src-tauri/icons/icon/grass-block.svg
-!src-tauri/icons/icon/sea-lantern.svg
-!src-tauri/icons/icon/deepseek.svg
-!src-tauri/icons/icon/zcode.svg
-!src-tauri/icons/icon/mimo.svg
-!src-tauri/icons/icon/gemini.svg
-!src-tauri/icons/icon/kimi.svg
-!src-tauri/icons/icon/workbuddy.svg
+!src-tauri/icons/icon/*.svg

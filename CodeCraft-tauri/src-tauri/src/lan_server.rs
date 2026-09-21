@@ -331,6 +331,7 @@ fn snapshot_value(app: &tauri::AppHandle) -> Value {
         "dsh": sessions.get("dsh").cloned().unwrap_or(Value::Null),
         "zcode": sessions.get("zcode").cloned().unwrap_or(Value::Null),
         "workbuddy": workbuddy,
+        "trae": crate::trae_get_snapshot(),
         "integrations": integrations,
     });
     if let Ok(mut cache) = state.snapshot_cache.lock() {
@@ -342,6 +343,7 @@ fn snapshot_value(app: &tauri::AppHandle) -> Value {
 fn snapshot_version_fingerprint(snapshot: &Value) -> u64 {
     let mut hash = 0xcbf29ce484222325_u64;
     for source in [
+        "trae",
         "claude",
         "codex",
         "gemini",
@@ -1384,6 +1386,7 @@ async fn security_headers(
 
 fn router(app: tauri::AppHandle) -> Router {
     Router::new()
+        .route("/api/trae/{*action}", post(post_trae))
         .route("/", get(serve_console))
         .route("/api/auth", post(post_auth))
         .route("/api/logout", post(post_logout))
@@ -1416,6 +1419,21 @@ fn router(app: tauri::AppHandle) -> Router {
         .layer(DefaultBodyLimit::max(MAX_BODY_BYTES))
         .layer(axum::middleware::from_fn(security_headers))
         .with_state(LanHttpState { app })
+}
+
+async fn post_trae(State(http_state):State<LanHttpState>,ConnectInfo(client):ConnectInfo<SocketAddr>,axum::extract::Path(action):axum::extract::Path<String>,request:axum::extract::Request)->Response {
+    use codecraft_trae::{protocol::{ApiError,ErrorCode},wire};
+    fn fail(error:ApiError)->Response{(StatusCode::from_u16(error.status()).unwrap_or(StatusCode::INTERNAL_SERVER_ERROR),Json(error)).into_response()}
+    let state=http_state.app.state::<LanServerState>();
+    match check_access(&state,request.headers(),true){Ok(Access::Granted)=>(),_=>return fail(ApiError::new(ErrorCode::Forbidden,"LAN authentication and approval permission are required"))}
+    state.touch_client();
+    let bytes=match axum::body::to_bytes(request.into_body(),wire::MAX_NATIVE).await{Ok(b)=>b,Err(_)=>return fail(ApiError::new(ErrorCode::PayloadTooLarge,"Trae request exceeds 1 MiB"))};
+    let body=match wire::strict_json(&bytes,wire::MAX_NATIVE){Ok(v)=>v,Err(e)=>return fail(ApiError::new(ErrorCode::InvalidArgument,e))};
+    let audit_id=body["decisionId"].as_str().or_else(||body["controlId"].as_str()).unwrap_or("").to_string();let route=action.clone();
+    match tauri::async_runtime::spawn_blocking(move||codecraft_trae::dispatch(&route,body)).await {
+        Ok(Ok(result))=>{if state.config_snapshot().map(|c|c.audit_remote).unwrap_or(true){append_remote_audit(&format!("trae-{action}"),&audit_id,"accepted",client.ip());}Json(result).into_response()},
+        Ok(Err(error))=>fail(error),Err(error)=>fail(ApiError::new(ErrorCode::StateUnavailable,error.to_string()))
+    }
 }
 
 /// Binds synchronously so a busy port surfaces in the settings panel right away

@@ -1,0 +1,85 @@
+{
+  "schemaVersion": 1,
+  "evidenceKind": "runtime_capture_redacted",
+  "productVersion": "3.3.102",
+  "source": "Trae agent-hooks.log, 2026-09-19 20:39 +08:00",
+  "executionEnvironment": "sandbox",
+  "redactions": [
+    "Session and call IDs replaced consistently",
+    "Workspace path replaced consistently"
+  ],
+  "observation": "Successful Write carried the plan path and full new_content; subsequent document_review carried only message and a different tool_use_id",
+  "events": [
+    {
+      "session_id": "fixture-plan-session",
+      "cwd": "D:\\fixture-workspace",
+      "hook_event_name": "PreToolUse",
+      "workspace_roots": [
+        "D:\\fixture-workspace"
+      ],
+      "agent_id": "solo_agent",
+      "agent_type": "solo_agent",
+      "tool_use_id": "fixture-write-plan",
+      "tool_name": "Write",
+      "llm_tool_name": "Write",
+      "tool_input": {
+        "content": "# 验收计划：创建 acceptance-plan.txt\n\n## 摘要\n本计划在批准后创建一个内容为 `PLAN_OK` 的文件 `acceptance-plan.txt`。\n\n## 当前状态\n- 计划尚未批准。\n- 目标文件 `acceptance-plan.txt` 尚不存在。\n\n## 变更内容\n- 创建文件 `D:\\fixture-workspace\\acceptance-plan.txt`。\n- 文件内容为 `PLAN_OK`（无额外换行或多余字符）。\n\n## 决策与假设\n- 文件创建在项目根目录下（与工作目录一致）。\n- 除创建该文件外，不对任何其他文件做修改。\n\n## 验证\n- 批准后创建文件，并确认内容为 `PLAN_OK`。",
+        "file_path": "D:\\fixture-workspace\\.trae\\documents\\acceptance-plan-approval.md"
+      }
+    },
+    {
+      "session_id": "fixture-plan-session",
+      "cwd": "D:\\fixture-workspace",
+      "hook_event_name": "PostToolUse",
+      "workspace_roots": [
+        "D:\\fixture-workspace"
+      ],
+      "agent_id": "solo_agent",
+      "agent_type": "solo_agent",
+      "tool_use_id": "fixture-write-plan",
+      "tool_name": "Write",
+      "llm_tool_name": "Write",
+      "tool_input": {
+        "content": "# 验收计划：创建 acceptance-plan.txt\n\n## 摘要\n本计划在批准后创建一个内容为 `PLAN_OK` 的文件 `acceptance-plan.txt`。\n\n## 当前状态\n- 计划尚未批准。\n- 目标文件 `acceptance-plan.txt` 尚不存在。\n\n## 变更内容\n- 创建文件 `D:\\fixture-workspace\\acceptance-plan.txt`。\n- 文件内容为 `PLAN_OK`（无额外换行或多余字符）。\n\n## 决策与假设\n- 文件创建在项目根目录下（与工作目录一致）。\n- 除创建该文件外，不对任何其他文件做修改。\n\n## 验证\n- 批准后创建文件，并确认内容为 `PLAN_OK`。",
+        "file_path": "D:\\fixture-workspace\\.trae\\documents\\acceptance-plan-approval.md"
+      },
+      "tool_response": {
+        "can_show_diff": true,
+        "changes": [
+          {
+            "file_path": "D:\\fixture-workspace\\.trae\\documents\\acceptance-plan-approval.md",
+            "rename_file_path": null,
+            "file_action": "added",
+            "old_content": "",
+            "new_content": "# 验收计划：创建 acceptance-plan.txt\n\n## 摘要\n本计划在批准后创建一个内容为 `PLAN_OK` 的文件 `acceptance-plan.txt`。\n\n## 当前状态\n- 计划尚未批准。\n- 目标文件 `acceptance-plan.txt` 尚不存在。\n\n## 变更内容\n- 创建文件 `D:\\fixture-workspace\\acceptance-plan.txt`。\n- 文件内容为 `PLAN_OK`（无额外换行或多余字符）。\n\n## 决策与假设\n- 文件创建在项目根目录下（与工作目录一致）。\n- 除创建该文件外，不对任何其他文件做修改。\n\n## 验证\n- 批准后创建文件，并确认内容为 `PLAN_OK`。",
+            "diff_info": {
+              "insert_line_count": 19,
+              "delete_line_count": 0,
+              "replaceable_blocks": null
+            },
+            "apply_model_name": null,
+            "linter_error": "",
+            "linter_error_result": [],
+            "old_diagnostic_result": [],
+            "new_diagnostic_result": [],
+            "cc_aligned_diagnostics": false
+          }
+        ]
+      }
+    },
+    {
+      "session_id": "fixture-plan-session",
+      "cwd": "D:\\fixture-workspace",
+      "hook_event_name": "Notification",
+      "workspace_roots": [
+        "D:\\fixture-workspace"
+      ],
+      "agent_id": "solo_agent",
+      "agent_type": "solo_agent",
+      "notification_type": "document_review",
+      "message": "Tool 'NotifyUser' requires user confirmation",
+      "tool_use_id": "fixture-review-plan"
+    }
+  ],
+  "verificationScope": "Captured before the association fix; replay validates the new association and is not a new live-client acceptance"
+}

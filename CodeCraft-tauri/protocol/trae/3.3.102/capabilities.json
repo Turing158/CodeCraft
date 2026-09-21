@@ -1,0 +1,30 @@
+{
+  "schemaVersion": 1,
+  "product": "Trae CN",
+  "productVersion": "3.3.102",
+  "baseVersion": "1.107.1",
+  "platform": "windows",
+  "status": "tool_approval_enabled",
+  "hookObservation": true,
+  "toolApproval": true,
+  "toolInputMappingsVerified": false,
+  "mcpQuestions": false,
+  "mcpPlanReview": false,
+  "nativeInteractionObservation": false,
+  "nativeAnswerReturn": false,
+  "nativePlanDecisionReturn": false,
+  "verifiedHookTimeoutSeconds": null,
+  "verifiedMcpTimeoutSeconds": null,
+  "stableHostIdentity": null,
+  "stablePromptIdentity": null,
+  "gates": {
+    "P0.1": "pending",
+    "P0.2": "pending",
+    "P0.3": "pending",
+    "P0.4": "pending",
+    "P0.5": "pending",
+    "P0.6": "pending",
+    "P0.7": "pending",
+    "P0.8": "pending"
+  }
+}

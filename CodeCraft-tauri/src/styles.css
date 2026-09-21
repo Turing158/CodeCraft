@@ -980,6 +980,18 @@ button {
   height: 18px;
 }
 
+.session-product__mark[data-themed-icon="true"],
+.session-product__option-mark[data-themed-icon="true"] {
+  color: var(--text-primary);
+}
+
+.session-product__mark[data-themed-icon="true"] img,
+.session-product__option-mark[data-themed-icon="true"] img {
+  display: none;
+}
+
+.session-product__mark[data-themed-icon="true"]::before,
+.session-product__option-mark[data-themed-icon="true"]::before,
 .session-source-card__mark[data-themed-icon="true"]::before,
 .hook-agent-button__mark[data-themed-icon="true"]::before {
   width: 18px;
@@ -3991,6 +4003,44 @@ button {
   overflow: auto;
 }
 
+.trae-detail-context {
+  color: var(--text-muted);
+  font-size: calc(10px * var(--font-scale));
+  line-height: 1.5;
+  overflow-wrap: anywhere;
+}
+
+.trae-detail-context p {
+  margin: 0 0 6px;
+  white-space: pre-wrap;
+}
+
+.trae-detail-context button {
+  padding: 5px 9px;
+  border: 1px solid var(--surface-border);
+  border-radius: 5px;
+  background: var(--surface-background);
+  color: var(--text-primary);
+  cursor: pointer;
+}
+
+.trae-activity-details {
+  color: var(--text-secondary);
+  font-size: calc(10px * var(--font-scale));
+}
+
+.trae-activity-details summary {
+  cursor: pointer;
+}
+
+.trae-activity-details pre {
+  max-height: 220px;
+  overflow: auto;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  user-select: text;
+}
+
 .workbuddy-observation__actions {
   display: grid;
   gap: 6px;
@@ -4517,6 +4567,20 @@ button {
   line-height: 1.4;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+#permission-view[data-review-source="trae"] #permission-summary-text {
+  display: block;
+  max-height: 240px;
+  padding-right: 4px;
+  overflow: auto;
+  font-family: ui-monospace, SFMono-Regular, Consolas, monospace;
+  line-height: 1.55;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  tab-size: 2;
+  -webkit-line-clamp: unset;
+  scrollbar-width: thin;
 }
 
 .permission-cwd[hidden] {

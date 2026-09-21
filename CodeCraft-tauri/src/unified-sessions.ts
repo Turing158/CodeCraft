@@ -1,3 +1,4 @@
+import type { TraeUnifiedSession } from "./trae-sessions";
 import {
   sessionLiveContent,
   sessionLiveStatusText,
@@ -70,7 +71,8 @@ export type UnifiedSession =
   | MimoSession
   | GeminiSession
   | KimiSession
-  | WorkBuddyUnifiedSession;
+  | WorkBuddyUnifiedSession
+  | TraeUnifiedSession;
 
 const CODEX_VISUAL_STATUS: Record<CodexSessionStatus, ClaudeSessionStatus> = {
   working: "working",
@@ -158,39 +160,43 @@ const LIVE_STATUS_RANK: Record<ClaudeSessionStatus, number> = {
   idle: 5,
 };
 
+export const isTraeSession = (session: UnifiedSession): session is TraeUnifiedSession => "source" in session && session.source === "trae";
+
 export const isCodexSession = (
   session: UnifiedSession,
-): session is CodexSession => "pendingInteractionId" in session;
+): session is CodexSession => !isTraeSession(session) && "pendingInteractionId" in session;
 
 export const isOpenCodeSession = (
   session: UnifiedSession,
-): session is OpenCodeSession => "pendingReviews" in session && !("source" in session && session.source === "mimo");
+): session is OpenCodeSession => !isTraeSession(session) && "pendingReviews" in session && !("source" in session && session.source === "mimo");
 
 export const isPiSession = (
   session: UnifiedSession,
-): session is PiSession => "installId" in session;
+): session is PiSession => !isTraeSession(session) && "installId" in session;
 
 export const isDshSession = (
   session: UnifiedSession,
-): session is DshSession => "bridgeInstanceId" in session;
+): session is DshSession => !isTraeSession(session) && "bridgeInstanceId" in session;
 
 export const isZCodeSession = (
   session: UnifiedSession,
-): session is ZCodeSession => "reviewState" in session;
+): session is ZCodeSession => !isTraeSession(session) && "reviewState" in session;
 export const isMimoSession = (session: UnifiedSession): session is MimoSession =>
   "pendingReviews" in session && "source" in session && session.source === "mimo";
 export const isGeminiSession = (session: UnifiedSession): session is GeminiSession =>
-  "pendingInteractions" in session && "integrationStatus" in session && !("kimiSessionId" in session);
+  !isTraeSession(session) && "pendingInteractions" in session && "integrationStatus" in session && !("kimiSessionId" in session);
 export const isKimiSession = (session: UnifiedSession): session is KimiSession =>
-  "kimiSessionId" in session;
+  !isTraeSession(session) && "kimiSessionId" in session;
 export const isWorkBuddySession = (
   session: UnifiedSession,
-): session is WorkBuddyUnifiedSession => "workbuddyVersion" in session;
+): session is WorkBuddyUnifiedSession => !isTraeSession(session) && "workbuddyVersion" in session;
 
 export const unifiedSessionSource = (
   session: UnifiedSession,
-): "claude" | "codex" | "opencode" | "pi" | "dsh" | "zcode" | "mimo" | "gemini" | "kimi" | "workbuddy" =>
-  isWorkBuddySession(session)
+): "claude" | "codex" | "opencode" | "pi" | "dsh" | "zcode" | "mimo" | "gemini" | "kimi" | "workbuddy" | "trae" =>
+  isTraeSession(session)
+    ? "trae"
+    : isWorkBuddySession(session)
     ? "workbuddy"
     : isCodexSession(session)
     ? "codex"
@@ -211,7 +217,9 @@ export const unifiedSessionSource = (
                   : "claude";
 
 export const unifiedSessionKey = (session: UnifiedSession): string =>
-  isWorkBuddySession(session)
+  isTraeSession(session)
+    ? `trae:${session.sessionKey}`
+    : isWorkBuddySession(session)
     ? workBuddySessionKey(session)
     : isOpenCodeSession(session)
     ? openCodeSessionKey(session)

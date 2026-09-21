@@ -14,6 +14,7 @@ use std::{
 };
 
 use serde::{Deserialize, Serialize};
+use codecraft_trae as trae;
 use tauri::{
     menu::{CheckMenuItem, Menu, MenuItem},
     tray::TrayIconBuilder,
@@ -357,6 +358,7 @@ pub(crate) struct ClaudeSessionSnapshot {
 #[derive(Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub(crate) struct AllSessionSnapshots {
+    pub(crate) trae: serde_json::Value,
     pub(crate) claude: ClaudeSessionSnapshot,
     pub(crate) codex: codex::CodexSnapshot,
     pub(crate) gemini: gemini::GeminiSnapshot,
@@ -439,6 +441,7 @@ impl SessionSnapshotCache {
 #[derive(Clone, Copy, Debug, Deserialize, Serialize)]
 #[serde(rename_all = "camelCase")]
 enum HookAgentId {
+    Trae,
     ClaudeCode,
     Codex,
     GeminiCli,
@@ -454,6 +457,7 @@ enum HookAgentId {
 impl hook_config::HookInstallConfig {
     fn is_enabled(&self, agent: HookAgentId) -> bool {
         match agent {
+            HookAgentId::Trae => self.trae,
             HookAgentId::ClaudeCode => self.claude_code,
             HookAgentId::Codex => self.codex,
             HookAgentId::GeminiCli => self.gemini_cli,
@@ -469,6 +473,7 @@ impl hook_config::HookInstallConfig {
 
     fn set_enabled(&mut self, agent: HookAgentId, enabled: bool) {
         match agent {
+            HookAgentId::Trae => self.trae = enabled,
             HookAgentId::ClaudeCode => self.claude_code = enabled,
             HookAgentId::Codex => self.codex = enabled,
             HookAgentId::GeminiCli => self.gemini_cli = enabled,
@@ -486,6 +491,7 @@ impl hook_config::HookInstallConfig {
 impl HookAgentId {
     fn command(self) -> &'static str {
         match self {
+            Self::Trae => "trae-cn",
             Self::ClaudeCode => "claude",
             Self::Codex => "codex",
             Self::GeminiCli => "geminiCli",
@@ -501,6 +507,7 @@ impl HookAgentId {
 
     fn display_name(self) -> &'static str {
         match self {
+            Self::Trae => "Trae CN",
             Self::ClaudeCode => "Claude Code",
             Self::Codex => "Codex",
             Self::GeminiCli => "Gemini CLI",
@@ -567,6 +574,7 @@ fn agent_is_installed(
     agent: HookAgentId,
     zcode_state: &ZCodeIntegrationState,
 ) -> Result<bool, String> {
+    if matches!(agent, HookAgentId::Trae) { return Ok(trae::hook::detect()["detected"] == true); }
     if matches!(agent, HookAgentId::WorkBuddy) {
         return Ok(workbuddy_hook::detect_environment().detected);
     }
@@ -951,6 +959,8 @@ fn hook_statuses_unlocked(
         },
     ];
     statuses.push(workbuddy_integration_status(workbuddy_state, zcode_state)?);
+    let trae_status = trae::hook::status().unwrap_or_else(|e| serde_json::json!({"state":"error","error":e.to_string(),"environment":trae::hook::detect()}));
+    statuses.push(HookIntegrationStatus { id:HookAgentId::Trae,name:"Trae CN",agent_installed:trae_status["environment"]["detected"]==true,hook_installed:trae_status["filesInstalled"]==true,workbuddy:None,install_state:trae_status["state"].as_str().map(str::to_string),install_path:trae_status["installPath"].as_str().map(str::to_string),bundled_version:Some("3.3.102".into()),installed_version:trae_status["environment"]["productVersion"].as_str().map(str::to_string),running_versions:vec![],error:trae_status["error"].as_str().map(str::to_string) });
     Ok(statuses)
 }
 
@@ -2356,6 +2366,7 @@ pub(crate) fn all_sessions_snapshot(
     let zcode = zcode_snapshot(&app.state::<ZCodeIntegrationState>())?;
     let workbuddy = workbuddy_snapshot(app)?;
     Ok(AllSessionSnapshots {
+        trae: trae_get_snapshot(),
         claude,
         codex,
         gemini,
@@ -3255,6 +3266,7 @@ async fn send_opencode_session_message(
 
 #[tauri::command]
 async fn install_agent_hook(agent: HookAgentId, app: tauri::AppHandle) -> Result<(), String> {
+    if matches!(agent,HookAgentId::Trae) {trae::hook::install(&std::env::current_exe().map_err(|e|e.to_string())?,true).map_err(|e|e.to_string())?;save_hook_installation_state(agent,true)?;let _=trae::files::Client::connect(&trae::files::root()).and_then(|c|c.call(serde_json::json!({"kind":"refresh_capabilities"})));return Ok(());}
     tauri::async_runtime::spawn_blocking(move || {
         let _lock = hook_configuration_lock()?;
         let claude_state = app.state::<ClaudeIntegrationState>();
@@ -3272,6 +3284,7 @@ async fn install_agent_hook(agent: HookAgentId, app: tauri::AppHandle) -> Result
 
         let executable = std::env::current_exe().map_err(|error| error.to_string())?;
         match agent {
+            HookAgentId::Trae => unreachable!("Trae handled before shared installer"),
             HookAgentId::ClaudeCode => {
                 claude_hook::install_claude_hooks(&executable)?;
                 save_hook_installation_state(agent, true)?;
@@ -3366,6 +3379,7 @@ async fn install_agent_hook(agent: HookAgentId, app: tauri::AppHandle) -> Result
 
 #[tauri::command]
 async fn uninstall_agent_hook(agent: HookAgentId, app: tauri::AppHandle) -> Result<(), String> {
+    if matches!(agent,HookAgentId::Trae) {trae::hook::install(&std::env::current_exe().map_err(|e|e.to_string())?,false).map_err(|e|e.to_string())?;save_hook_installation_state(agent,false)?;let _=trae::files::Client::connect(&trae::files::root()).and_then(|c|c.call(serde_json::json!({"kind":"refresh_capabilities"})));return Ok(());}
     tauri::async_runtime::spawn_blocking(move || {
         let _lock = hook_configuration_lock()?;
         let claude_state = app.state::<ClaudeIntegrationState>();
@@ -3382,6 +3396,7 @@ async fn uninstall_agent_hook(agent: HookAgentId, app: tauri::AppHandle) -> Resu
         }
 
         match agent {
+            HookAgentId::Trae => unreachable!("Trae handled before shared installer"),
             HookAgentId::ClaudeCode => {
                 claude_hook::uninstall_claude_hooks()?;
                 save_hook_installation_state(agent, false)?;
@@ -4376,6 +4391,9 @@ pub fn run() {
         .manage(PanelShapeState::default())
         .manage(lan_server::LanServerState::default())
         .setup(|app| {
+            let trae_environment=trae::hook::detect();
+            if let Err(error)=trae::store::start(if hook_config::load().trae { trae::protocol::Capabilities::bundled(trae_environment["productVersion"].as_str()) } else { trae::protocol::Capabilities { reason:"Trae integration is disabled".into(), ..Default::default() } }) { eprintln!("Trae bridge: {error}"); }
+            if hook_config::load().trae {if let Ok(exe)=std::env::current_exe(){if let Err(error)=trae::hook::install(&exe,true){eprintln!("Trae Hook repair: {error}");}}}
             let approval_settings = approval_policy::load_settings();
             *app.state::<ApprovalIntegrationState>()
                 .settings
@@ -4800,6 +4818,7 @@ pub fn run() {
             }
         })
         .invoke_handler(tauri::generate_handler![
+            trae_get_snapshot, trae_configuration_preview, trae_set_installation, focus_trae_window, trae_respond_permission, trae_respond_question, trae_respond_plan, trae_cancel_request, trae_create_task, trae_task_action, trae_resolve_external_grant,
             set_panel_expanded,
             set_panel_horizontal_position,
             move_panel_horizontally,
@@ -4890,6 +4909,25 @@ pub fn run() {
             }
         });
 }
+
+#[tauri::command]
+fn trae_get_snapshot()->serde_json::Value {let mut snapshot=trae::store::snapshot();match trae::hook::status(){Ok(status)=>snapshot["hook"]=status,Err(error)=>snapshot["integrationError"]=serde_json::json!(error)}snapshot}
+#[tauri::command]
+fn trae_configuration_preview()->Result<serde_json::Value,trae::protocol::ApiError>{trae::hook::template()}
+#[tauri::command]
+fn trae_set_installation(path:String)->Result<serde_json::Value,trae::protocol::ApiError>{trae::hook::set_installation(&path)}
+#[tauri::command]
+fn focus_trae_window(window:WebviewWindow)->Result<(),String>{focus_external_window_native(&window,"Trae CN",&|_,name,_|if name.eq_ignore_ascii_case("Trae CN.exe"){100}else{0},true)}
+macro_rules! trae_command {
+    ($name:ident,$route:literal)=>{#[tauri::command]async fn $name(body:serde_json::Value)->Result<serde_json::Value,trae::protocol::ApiError>{tauri::async_runtime::spawn_blocking(move||trae::dispatch($route,body)).await.map_err(|e|trae::protocol::ApiError::new(trae::protocol::ErrorCode::StateUnavailable,e.to_string()))?}};
+}
+trae_command!(trae_respond_permission,"permission");
+trae_command!(trae_respond_question,"question");
+trae_command!(trae_respond_plan,"plan");
+trae_command!(trae_cancel_request,"cancel");
+trae_command!(trae_create_task,"tasks");
+trae_command!(trae_task_action,"tasks/action");
+trae_command!(trae_resolve_external_grant,"grants/resolve");
 
 #[cfg(test)]
 mod tests {

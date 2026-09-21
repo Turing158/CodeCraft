@@ -1,0 +1,26 @@
+.trae-dialog { box-sizing: border-box; width: min(760px, calc(100vw - 24px)); max-height: calc(100dvh - 24px); padding: 20px; border: 1px solid #55636b; border-radius: 16px; background: var(--panel-background, #172126); color: var(--text-primary, #f0f4f5); font: inherit; overflow: auto; }
+.trae-dialog::backdrop { background: #0009; }
+.trae-dialog header { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.trae-dialog section { margin-top: 20px; }
+.trae-dialog h2 { font-size: 18px; }
+.trae-dialog h3 { font-size: 15px; }
+.trae-dialog p, .trae-dialog small { line-height: 1.6; overflow-wrap: anywhere; }
+.trae-dialog button { padding: 9px 12px; border: 1px solid #667980; border-radius: 8px; background: #26383e; color: #f0f4f5; cursor: pointer; font: inherit; }
+.trae-dialog button:disabled { opacity: .45; cursor: default; }
+.trae-dialog button:focus-visible, .trae-dialog input:focus-visible, .trae-dialog textarea:focus-visible, .trae-dialog summary:focus-visible { outline: 2px solid #6ce2be; outline-offset: 3px; }
+.trae-actions { display: flex; flex-wrap: wrap; gap: 8px; margin: 12px 0; }
+.trae-dialog label { display: grid; gap: 8px; margin: 12px 0; }
+.trae-dialog input:not([type=radio]):not([type=checkbox]), .trae-dialog textarea { box-sizing: border-box; width: 100%; min-width: 0; padding: 10px; color: inherit; background: #101a1e; border: 1px solid #667980; border-radius: 6px; font: inherit; }
+.trae-dialog textarea { min-height: 88px; resize: vertical; }
+.trae-dialog .trae-option { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+.trae-option small { flex-basis: 100%; margin-left: 25px; }
+.trae-dialog pre { white-space: pre-wrap; overflow-wrap: anywhere; max-height: 400px; overflow: auto; padding: 12px; background: #101a1e; border-radius: 8px; }
+.trae-dialog code { overflow-wrap: anywhere; }
+.trae-request, .trae-grant { padding: 14px; border: 1px solid #53696d; border-radius: 10px; }
+.trae-grant { border-color: #b38e4a; }
+.trae-dialog fieldset { border: 1px solid #53696d; border-radius: 8px; margin: 14px 0; min-width: 0; }
+.trae-dialog legend { overflow-wrap: anywhere; }
+.trae-markdown { line-height: 1.65; overflow-wrap: anywhere; }
+.trae-markdown img { max-width: 100%; }
+.trae-markdown table { display: block; overflow: auto; }
+.trae-dialog summary { cursor: pointer; padding: 10px 0; }

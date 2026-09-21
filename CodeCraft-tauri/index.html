@@ -606,6 +606,45 @@
                     <li class="session-list__empty">暂无活跃会话</li>
                   </ul>
                 </section>
+                <section
+                  id="trae-session-card"
+                  class="session-source-card"
+                  aria-labelledby="trae-session-card-title"
+                >
+                  <header class="session-source-card__header">
+                    <div class="session-source-card__identity">
+                      <span
+                        class="session-source-card__mark session-source-card__mark--trae"
+                        aria-hidden="true"
+                      >
+                        <img id="trae-session-card-icon" alt="" />
+                      </span>
+                      <h2 id="trae-session-card-title">Trae CN</h2>
+                    </div>
+                    <div
+                      id="trae-connection-status"
+                      class="session-source-card__status session-source-card__status--static"
+                      data-connected="false"
+                      title="等待 Trae CN Hook 加载"
+                    >
+                      <span
+                        class="session-source-card__status-dot"
+                        aria-hidden="true"
+                      ></span>
+                      <span class="session-source-card__status-label"
+                        >等待加载</span
+                      >
+                    </div>
+                  </header>
+                  <ul
+                    id="trae-session-list"
+                    class="session-list"
+                    aria-label="Trae CN 会话列表"
+                    aria-live="polite"
+                  >
+                    <li class="session-list__empty">暂无活跃会话</li>
+                  </ul>
+                </section>
               </div>
             </section>
 
@@ -641,6 +680,11 @@
                 </div>
               </header>
 
+              <div id="trae-detail-context" class="trae-detail-context" hidden>
+                <p id="trae-detail-notice"></p>
+                <button id="trae-detail-review" type="button" hidden>查看待处理事项</button>
+              </div>
+
               <section class="detail-section" aria-labelledby="activity-title">
                 <header class="detail-section__header">
                   <h2 id="activity-title">工具调用</h2>
@@ -662,7 +706,7 @@
               >
                 <header class="detail-section__header">
                   <h2 id="output-title">对话</h2>
-                  <span class="detail-section__meta">实时转录</span>
+                  <span id="session-output-source" class="detail-section__meta">实时转录</span>
                 </header>
                 <div
                   id="session-output"
@@ -835,6 +879,14 @@
                   前往WorkBuddy中处理
                 </button>
                 <button
+                  id="question-open-trae"
+                  class="question-action question-action--secondary"
+                  type="button"
+                  hidden
+                >
+                  前往 Trae 中处理
+                </button>
+                <button
                   id="question-reject"
                   class="question-action question-action--secondary"
                   type="button"
@@ -1000,6 +1052,14 @@
                     hidden
                   >
                     前往WorkBuddy中处理
+                  </button>
+                <button
+                    id="permission-return-trae"
+                    class="question-action question-action--primary"
+                    type="button"
+                    hidden
+                  >
+                    交回 Trae 确认
                   </button>
                 </div>
               </section>
@@ -1194,6 +1254,14 @@
                     hidden
                   >
                     前往WorkBuddy中处理
+                  </button>
+                <button
+                    id="plan-open-trae"
+                    class="question-action question-action--primary"
+                    type="button"
+                    hidden
+                  >
+                    前往 Trae 中处理
                   </button>
                 </div>
                 <p

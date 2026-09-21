@@ -45,7 +45,7 @@ export interface ClaudePlanRequest {
   capturedAt: number;
 }
 
-export type ClaudeActivityStatus = "running" | "completed" | "failed";
+export type ClaudeActivityStatus = "running" | "completed" | "failed" | "unknown";
 
 export interface ClaudeActivity {
   id: string;
@@ -59,6 +59,8 @@ export interface ClaudeActivity {
 export interface ClaudeOutputEntry {
   id: string;
   text: string;
+  role?: "user" | "assistant";
+  capturedAt?: number;
 }
 
 export type ClaudeLiveContentKind = "tool" | "output" | "status";

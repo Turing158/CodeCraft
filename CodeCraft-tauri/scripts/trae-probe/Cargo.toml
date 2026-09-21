@@ -1,0 +1,23 @@
+[package]
+name = "codecraft-trae-probe"
+version = "0.1.0"
+edition = "2021"
+rust-version = "1.88"
+publish = false
+
+# P0 is deliberately independent of Tauri and does not enable an integration.
+[dependencies]
+base64 = "0.22"
+fs2 = "0.4"
+getrandom = "0.3"
+rmcp = { version = "=3.4.0", default-features = false, features = ["server", "transport-io"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+serde_jcs = "0.2"
+sha2 = "0.10"
+tokio = { version = "1", features = ["rt-multi-thread", "macros", "io-util", "io-std", "sync", "time"] }
+uuid = { version = "1", features = ["v4", "serde"] }
+
+[target.'cfg(windows)'.dependencies]
+windows-sys = { version = "0.61", features = ["Win32_Foundation", "Win32_System_Threading", "Win32_System_Diagnostics_ToolHelp"] }
+

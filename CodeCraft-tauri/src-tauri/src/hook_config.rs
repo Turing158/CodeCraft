@@ -18,6 +18,7 @@ pub(crate) struct HookInstallConfig {
     pub deep_seek_harness: bool,
     pub z_code: bool,
     pub work_buddy: bool,
+    pub trae: bool,
 }
 
 impl Default for HookInstallConfig {
@@ -33,6 +34,7 @@ impl Default for HookInstallConfig {
             deep_seek_harness: false,
             z_code: false,
             work_buddy: false,
+            trae: false,
         }
     }
 }

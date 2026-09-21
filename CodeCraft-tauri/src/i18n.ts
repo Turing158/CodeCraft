@@ -1,3 +1,4 @@
+import { TRAE_TRANSLATIONS } from "./trae-i18n";
 export const LANGUAGE_STORAGE_KEY = "codecraft.language";
 
 const LANGUAGE_MENU_TRANSITION_MS = 180;
@@ -738,6 +739,10 @@ const TRADITIONAL_CHARACTER_MAP: Record<string, string> = {
   声: "聲",
 };
 
+for (const [phrase, [english, traditional]] of Object.entries(TRAE_TRANSLATIONS)) {
+  ENGLISH[phrase] = english;
+  TRADITIONAL_OVERRIDES[phrase] = traditional;
+}
 const toTraditional = (source: string): string => {
   const override = TRADITIONAL_OVERRIDES[source];
   if (override) return override;

@@ -1,3 +1,5 @@
+import { TraeView } from "../../src/trae-view";
+import { readTraeSnapshot } from "../../src/trae-sessions";
 /**
  * LAN web console entry point.
  *
@@ -254,7 +256,7 @@ const syncLayout = () => {
       filteredEntries().length,
     )
   ) {
-    selectedKey = filteredEntries().find((entry) => entry.source !== "workbuddy")?.key;
+    selectedKey = filteredEntries().find((entry) => entry.source !== "workbuddy" && entry.source !== "trae")?.key;
     questionRequestId = undefined;
     renderedReviewSignature = undefined;
     renderSessionList();
@@ -527,7 +529,7 @@ const updateSessionCardView = (view: SessionCardView, entry: ConsoleEntry) => {
   view.card.setAttribute("aria-current", String(entry.key === selectedKey));
   swapText(
     view.source,
-    entry.source === "claude"
+    entry.source === "trae" ? "Trae CN" : entry.source === "claude"
       ? "Claude"
       : entry.source === "codex"
         ? "Codex"
@@ -582,9 +584,13 @@ const renderSessionList = () => {
 };
 
 const renderActivities = (entry: ConsoleEntry) => {
+  const expanded = new Set(activityList.dataset.sessionKey === entry.key
+    ? [...activityList.querySelectorAll<HTMLDetailsElement>("details[open]")].map(el => el.dataset.activityId)
+    : []);
+  activityList.dataset.sessionKey = entry.key;
   activityEmpty.hidden = entry.activities.length > 0;
   activityList.replaceChildren(
-    ...entry.activities.slice(-24).map((activity) => {
+    ...(entry.source === "trae" ? entry.activities : entry.activities.slice(-24)).map((activity) => {
       const item = document.createElement("li");
       item.className = "activity";
       item.dataset.status = activity.status;
@@ -598,6 +604,18 @@ const renderActivities = (entry: ConsoleEntry) => {
       summary.textContent = activity.summary;
 
       item.append(tool, summary);
+      if (entry.source === "trae") {
+        const details = document.createElement("details");
+        details.dataset.activityId = activity.id;
+        details.open = expanded.has(activity.id);
+        const label = document.createElement("summary");
+        label.textContent = "查看参数与结果";
+        const body = document.createElement("pre");
+        body.style.cssText = "white-space:pre-wrap;overflow-wrap:anywhere;max-height:240px;overflow:auto";
+        body.textContent = activity.summary;
+        details.append(label, body);
+        item.append(details);
+      }
       return item;
     }),
   );
@@ -606,13 +624,23 @@ const renderActivities = (entry: ConsoleEntry) => {
 const renderOutputs = (entry: ConsoleEntry) => {
   outputEmpty.hidden = entry.outputs.length > 0;
   outputList.replaceChildren(
-    ...entry.outputs.slice(-12).map((output) => {
+    ...(entry.source === "trae" ? entry.outputs : entry.outputs.slice(-12)).map((output) => {
       const item = document.createElement("li");
       item.className = "output markdown";
       item.innerHTML = renderMarkdown(output.text);
+      if (output.role) {
+        const meta = document.createElement("header");
+        meta.textContent = `${output.role === "user" ? "用户" : "Trae"}${output.capturedAt ? " · " + formatSessionTime(output.capturedAt) : ""}`;
+        item.prepend(meta);
+      }
       return item;
     }),
   );
+  if (entry.detailNotice) {
+    const notice = document.createElement("li");
+    notice.textContent = entry.detailNotice;
+    outputList.prepend(notice);
+  }
 };
 
 const actionButton = (
@@ -748,6 +776,14 @@ const renderReview = (entry: ConsoleEntry | undefined) => {
     reviewQuestions.replaceChildren();
     questionRequestId = undefined;
     renderedReviewSignature = undefined;
+    return;
+  }
+
+  if (entry.source === "trae") {
+    reviewKindLabel.textContent = pendingLabel(pending);
+    reviewQuestions.replaceChildren();
+    reviewNotice.hidden = true;
+    reviewActions.append(actionButton("查看待处理事项", "primary", () => traeView.open(entry.sessionId)));
     return;
   }
 
@@ -1077,7 +1113,7 @@ const renderDetail = () => {
   detailStatus.dataset.status = entry.status;
   swapText(detailStatus, entry.statusLabel, motion);
   detailMeta.textContent = [
-    entry.source === "claude"
+    entry.source === "trae" ? "Trae CN" : entry.source === "claude"
       ? "Claude Code"
       : entry.source === "codex"
         ? "Codex"
@@ -1123,8 +1159,10 @@ const selectEntry = (key: string, nextView: ConsoleView) => {
   }
 };
 
+const traeView = new TraeView(api.submitTrae, async () => { applySnapshot(await api.fetchState()); });
 const applySnapshot = (raw: unknown) => {
   snapshot = mergeSnapshot((raw ?? {}) as Record<string, never>);
+  traeView.update(readTraeSnapshot((raw as { trae?: unknown })?.trae), snapshot.allowApprovals);
   const visible = filteredEntries();
   if (selectedKey && !visible.some((entry) => entry.key === selectedKey)) {
     selectedKey = undefined;
@@ -1133,7 +1171,7 @@ const applySnapshot = (raw: unknown) => {
 
   // Surface a new request without stealing the screen from an active review.
   const pendingEntry = visible.find(
-    (entry) => entry.source !== "workbuddy" && entry.pending !== null,
+    (entry) => entry.source !== "workbuddy" && entry.source !== "trae" && entry.pending !== null,
   );
   if (
     pendingEntry?.pending &&
@@ -1377,7 +1415,9 @@ void api
   });
 
 const revealShell = () => {
-  animate(workspace, enterAnimation(motion));
+  const entrance = animate(workspace, enterAnimation(motion));
+  // A filled transform would trap the fixed phone detail beneath the scrim.
+  void entrance?.finished.then(() => entrance.cancel(), () => {});
   window.setTimeout(() => {
     syncSegmented(themeSegmented, root.dataset.theme ?? "dark", "themeValue");
     syncSegmented(motionSegmented, motion.enabled ? "on" : "off", "motionValue");

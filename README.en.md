@@ -23,7 +23,7 @@ A lightweight desktop workbench focused on AI coding sessions · Built for Windo
 
 ## What is this?
 
-If you use AI coding assistants like **Claude Code**, **Codex**, **OpenCode**, **PI**, **DeepSeek Harness**, **ZCode**, **Gemini CLI**, or **WorkBuddy**, you have probably run into this:
+If you use AI coding assistants like **Claude Code**, **Codex**, **OpenCode**, **PI**, **DeepSeek Harness**, **ZCode**, **Gemini CLI**, **WorkBuddy**, or **Trae CN**, you have probably run into this:
 
 - You hand it a task, then sit there staring at a black terminal window with no idea whether it has finished;
 - Halfway through it asks "can I run this command?", you don't notice, and it just waits forever;
@@ -37,7 +37,7 @@ CodeCraft exists to fix that. Most of the time it's just an almost invisible sli
 
 | | Capability | Details |
 | :---: | --- | --- |
-| 📋 | **All sessions in one place** | Tasks from Claude Code, Codex, OpenCode, PI, Mimo, DeepSeek Harness, ZCode, Gemini CLI, and WorkBuddy side by side, with status at a glance: working, waiting for input, needs attention, done, failed. |
+| 📋 | **All sessions in one place** | Tasks from Claude Code, Codex, OpenCode, PI, Mimo, DeepSeek Harness, ZCode, Gemini CLI, WorkBuddy, and Trae CN side by side, with status at a glance: working, waiting for input, needs attention, done, failed. |
 | ✅ | **One-click approval** | When an assistant wants to run a command or edit a file, the request pops up on the panel. Click "Allow once", "Always allow", or "Deny" — no need to switch back to the terminal. |
 | ❓ | **Answer on its behalf** | When an assistant asks a question, pick an option or type a note right in the panel, and the answer is sent back to it. |
 | 📝 | **Confirm plans** | Once an assistant lays out its plan, you decide: click "Run plan" to let it start, or write down what to change so it revises first. |
@@ -61,8 +61,9 @@ CodeCraft doesn't write code itself — it watches the AI coding assistants belo
 | <img src="docs/assets/agent-zcode.svg" width="20" height="20" align="absmiddle" alt="" />&nbsp; **ZCode**<br /><sub>Z.ai</sub> | The official seven-event Hook synchronizes external Desktop/CLI sessions, tool results, final answers, questions, and plan review. Ordinary tools offer only "Allow once" and "Deny"; questions and plans always require a person, even in automatic mode. |
 | <img src="docs/assets/agent-gemini.svg" width="20" height="20" align="absmiddle" alt="" />&nbsp; **Gemini CLI**<br /><sub>Google</sub> | A user-level Hook observes sessions, prompts, tool activity, results, notifications, and plan paths from ordinary Gemini terminals. Every interaction is read-only; Desktop can only attempt to focus the original Gemini terminal, while LAN can only explain how to handle it on the device running Gemini. |
 | <img src="docs/assets/agent-workbuddy.svg" width="20" height="20" align="absmiddle" alt="" />&nbsp; **WorkBuddy** | A user-level local plugin provides read-only observation of sessions, tool activity, questions, plans, and permission requests. All approvals and answers are handled in WorkBuddy; Desktop provides an “Open WorkBuddy to handle” button, while LAN only directs you to the device running WorkBuddy. |
+| <img src="docs/assets/agent-trae.svg" width="20" height="20" align="absmiddle" alt="" />&nbsp; **Trae CN**<br /><sub>ByteDance</sub> | Six user-level Hook events synchronize sessions, user prompts, final responses, and tool arguments and results. Ordinary tools can be allowed once, denied, or returned to Trae from CodeCraft. Native questions and Plan/Spec reviews are read-only and must be handled in Trae. |
 
-All nine agents can run at the same time. The filter buttons at the top of the panel let you look at just one of them, or "All" together.
+All ten agents can run at the same time. The filter buttons at the top of the panel let you look at just one of them, or "All" together.
 
 > DeepSeek Harness is currently a Developer Preview. CodeCraft primarily targets `@deepseek-ai/dsh@0.1.1-rc.2` and also supports `0.1.2-alpha.2`; the local bridge rejects interactions when the runtime version is unknown or outside this compatibility list.
 
@@ -74,7 +75,7 @@ Run the installer, then start CodeCraft. It won't appear in the taskbar — move
 
 **2. Connect your AI assistant (the key step)**
 
-Expand the panel → click ⚙️ in the top right → **General → Hook management** → click the agent you want to connect.
+Expand the panel → click ⚙️ in the top right → **Hook → Hook management** → click the agent you want to connect.
 
 What does this do? CodeCraft adds a "notification hook" to that assistant's configuration so it proactively tells CodeCraft when it starts working, wants to call a tool, or finishes a task. Without it, the panel stays empty. You can uninstall from the same place at any time, and your configuration is restored.
 
@@ -85,6 +86,8 @@ ZCode uses the user-level `~/.zcode/cli/config.json`. CodeCraft structurally mer
 Gemini CLI uses the user-level `~/.gemini/settings.json`. CodeCraft structurally merges the eight `SessionStart`, `SessionEnd`, `BeforeAgent`, `AfterAgent`, `BeforeTool`, `AfterTool`, `Notification`, and `PreCompress` events, creates a non-overwriting `.bak` before changes, and preserves other Hooks, matchers, unknown fields, and security settings. Install, refresh, repair, and uninstall are idempotent; uninstall removes only CodeCraft-owned handlers. The Hook writes only to a restricted local inbox and always returns `{}` on stdout, so it never blocks, approves, denies, or changes Gemini's native behavior.
 
 WorkBuddy uses the user-level `%USERPROFILE%/.workbuddy/settings.json`, or the configured root when `WORKBUDDY_HOME` is set. CodeCraft installs and manages only its own marked local marketplace, plugin files, and `enabledPlugins` entry, preserving the user's existing Hooks, MCP, permissions, and other settings. The plugin sends observation events to CodeCraft and returns an empty response; it never approves, denies, answers questions, or confirms plans on the user's behalf.
+
+Trae CN uses the user-level `%USERPROFILE%/.trae-cn/hooks.json`. Installing **Trae CN** in Hook management merges six official events: `SessionStart`, `UserPromptSubmit`, `PreToolUse`, `PostToolUse`, `Stop`, and `Notification`. CodeCraft creates a unique `*.bak` before changes, preserves existing Hooks and unknown fields, and removes only its own entries during uninstall. No additional MCP service or CodeCraft task is required.
 
 ### Gemini CLI Hook-only support matrix
 
@@ -109,6 +112,19 @@ CodeCraft never answers questions, submits approvals or denials, chooses a plan 
 | Streaming assistant output | Not available in the current protocol |
 
 CodeCraft does not treat WorkBuddy's native decisions as its own approvals and provides no return path for allow-once, session-allow, question-answer, or plan decisions. The validated baseline is bundled CLI `2.137.1`; other standalone CLIs or later Desktop versions are handled as best-effort observation and do not automatically enable bidirectional features.
+
+### Trae CN support matrix
+
+| Capability | Trae CN |
+| --- | --- |
+| Session status, user prompts, final responses, tool arguments and results | Desktop and LAN show records collected after integration; earlier history and streaming text are not available |
+| Ordinary tool permissions | Follow the global approval mode; manual mode offers allow once, deny, and return to Trae, without “Always allow” |
+| Native questions and Plan/Spec | Automatically open read-only reminders; submit answers and plan decisions in Trae |
+| Desktop “Open in Trae” | Focuses a uniquely identified Trae CN window; asks you to switch manually if the target is ambiguous or unavailable |
+| LAN tool approvals | Read-only by default; enable “Allow decisions from the web” to submit tool decisions. Questions and plans remain read-only |
+| LAN “Open in Trae” | Directs you to the device running Trae |
+
+The current integration targets Trae CN `3.3.102` on Windows; tool decisions for other versions return to Trae's native confirmation flow. Tool approvals wait up to 120 seconds for a user decision before returning to Trae. See the [Trae integration guide](CodeCraft-tauri/protocol/trae/README.md) (Chinese) for setup, compatibility limits, and verification scope.
 
 **3. Use your assistant as usual**
 
@@ -142,7 +158,7 @@ A few security notes:
 
 - **Auto-collapse**: the panel shrinks back to a thin line about 0.25s after your mouse leaves; while tasks are running, a small live status strip stays visible.
 - **Auto-cleanup**: idle or stopped sessions are moved out of the list after a configurable time (30 minutes by default). Sessions that are working or waiting on you are left alone.
-- **Auto-approval**: all connected agents share one policy — confirm each request manually, auto-approve low-risk tools, or auto-approve ordinary tool requests. DSH and ZCode do not expose a persistent "Always allow" action, and ZCode questions and plans always require a person.
+- **Auto-approval**: agents with tool approval support share one policy — confirm each request manually, auto-approve low-risk tools, or auto-approve ordinary tool requests. DSH, ZCode, and Trae CN do not expose a persistent "Always allow" action. ZCode questions and plans always require a person; Trae's native questions and plans must still be handled in Trae.
 - **Position as you like**: drag it left and right along the top edge, or snap it left, center, or right in one click.
 
 ## Requirements

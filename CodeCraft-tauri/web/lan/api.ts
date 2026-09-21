@@ -22,6 +22,7 @@ const parseError = async (response: Response): Promise<string> => {
   try {
     const body = (await response.json()) as { error?: unknown };
     if (typeof body.error === "string") return body.error;
+    if (body.error && typeof body.error === "object" && "message" in body.error) return `${"code" in body.error ? body.error.code : "TRAE"}: ${body.error.message}`;
   } catch {
     // Fall through to the generic message below.
   }
@@ -280,3 +281,5 @@ export const submitZCodePlan = (
     method: "POST",
     body: JSON.stringify({ ...target, requestId, approved, feedback }),
   });
+
+export const submitTrae = (route: string, body: unknown) => request<unknown>(`/api/trae/${route}`, { method: "POST", body: JSON.stringify(body) });

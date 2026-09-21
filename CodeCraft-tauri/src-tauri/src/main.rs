@@ -2,6 +2,13 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
 fn main() {
+    if std::env::args_os().any(|argument| argument == "--codecraft-trae-hook") {
+        std::process::exit(codecraft_trae::hook::capture());
+    }
+    if std::env::args_os().any(|argument| argument == "--codecraft-trae-mcp") {
+        if let Err(error) = codecraft_trae::run_mcp() { eprintln!("{error}"); std::process::exit(1); }
+        return;
+    }
     codecraft_tauri_lib::install_panic_hook();
 
     if std::env::args_os().any(|argument| argument == "--codecraft-zcode-hook") {

@@ -1,0 +1,22 @@
+// Generated from Rust JSON Schema. Run scripts/generate-trae-types.mjs.
+export type ErrorCode = "INVALID_ARGUMENT" | "PAYLOAD_TOO_LARGE" | "TICKET_INVALID" | "TICKET_EXPIRED" | "ARGUMENT_MISMATCH" | "IDEMPOTENCY_CONFLICT" | "BRIDGE_UNAVAILABLE" | "STATE_UNAVAILABLE" | "QUEUE_FULL" | "REQUEST_EXPIRED" | "CANCELLED" | "TASK_CHANGED" | "PLAN_CHANGED" | "DELIVERY_UNCONFIRMED" | "UNSUPPORTED_VERSION" | "FORBIDDEN" | "NOT_FOUND" | "REQUEST_CONFLICT" | "NATIVE_CONFIRMATION_PENDING";
+export type ErrorDetail = { "code": ErrorCode; "currentRevision": number | null; "message": string; "retryable": boolean };
+export type ApiError = { "error": ErrorDetail; "schemaVersion": 1 };
+export type CreateTask = { "controlId": string; "primaryRoot": string; "schemaVersion": 1; "title": string; "workspaceRoots": Array<string> };
+export type Action = { "decision": PermissionDecision; "kind": "permission"; "message": string | null } | { "answers": Array<Answer>; "kind": "question" } | { "contentHash": string; "decision": PlanDecision; "feedback": string | null; "kind": "plan"; "revision": number } | { "kind": "cancel"; "reason": string | null };
+export type Answer = { "questionId": string; "selectedOptionIds": Array<string>; "status": AnswerStatus; "text": string | null };
+export type AnswerStatus = "answered" | "skipped";
+export type PermissionDecision = "allow" | "deny" | "ask";
+export type PlanDecision = "approved" | "changes_requested" | "rejected";
+export type Target = { "appEpoch": string; "requestId": string; "requestVersion": number; "sessionKey": string; "taskId": string | null; "turnEpoch": number };
+export type DecisionRequest = { "action": Action; "decisionId": string; "schemaVersion": 1; "target": Target };
+export type PlanInput = { "baseRevision": number; "bridgeTicket"?: string; "documentPath": string; "planId": string; "planMarkdown": string; "schemaVersion": 1 };
+export type Question = { "allowText": boolean; "kind": QuestionKind; "maxSelections": number; "minSelections": number; "options": Array<QuestionOption>; "prompt": string; "questionId": string; "required": boolean };
+export type QuestionKind = "single" | "multiple" | "text";
+export type QuestionOption = { "description": string | null; "label": string; "optionId": string };
+export type QuestionInput = { "bridgeTicket"?: string; "questions": Array<Question>; "schemaVersion": 1 };
+export type GrantResolution = "confirmed_cancelled_in_trae" | "confirmed_completed_in_trae";
+export type ResolveGrant = { "action": GrantResolution; "controlId": string; "expectedVersion": number; "grantId": string; "schemaVersion": 1 };
+export type TaskActionKind = "pause" | "resume" | "end" | "revoke_plan";
+export type TaskAction = { "action": TaskActionKind; "controlId": string; "expectedVersion": number; "schemaVersion": 1; "taskId": string };
+export type ToolResult = { "error": ErrorDetail | null; "operationId": string | null; "payload": { "answers": Array<Answer>; "kind": "question" } | { "contentHash": string; "decision": "approved" | "changes_requested" | "rejected"; "feedback": string | null; "kind": "plan"; "planId": string; "revision": number } | null; "requestId": string | null; "schemaVersion": 1; "status": "completed" | "cancelled" | "expired" | "failed" };
