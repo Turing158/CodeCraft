@@ -1,0 +1,2 @@
+# Evidence hashes cover file bytes, so Windows checkout must preserve LF.
+*.json text eol=lf

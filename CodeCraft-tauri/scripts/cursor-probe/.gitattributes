@@ -1,0 +1,4 @@
+# Runtime evidence records these probe source bytes.
+verify-extension-access.mjs text eol=lf
+extension-access/*.cjs text eol=lf
+extension-access/package.json text eol=lf

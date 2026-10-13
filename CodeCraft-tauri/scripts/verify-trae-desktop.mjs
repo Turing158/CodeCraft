@@ -113,7 +113,7 @@ try {
   await page.locator('#plan-block-title').hover();
   await page.locator('#plan-back').click();
   await page.locator('#session-detail-view').waitFor({ state: 'visible' });
-  await page.locator('#trae-detail-review').click();
+  await page.locator('#session-detail-review').click();
   await page.locator('#plan-view').waitFor({ state: 'visible' });
   await page.getByRole('button', { name: '结束当前事件', exact: true }).click();
   await page.locator('#session-detail-view').waitFor({ state: 'visible' });

@@ -1,0 +1,84 @@
+{
+  "schemaVersion": 1,
+  "validationType": "cursorV5FinalValidationAttempt",
+  "observedAt": "2026-09-24T11:49:39Z",
+  "cursorVersion": "3.21.18",
+  "executableSha256": "9F1254D69328308FAA3E5989124B61B845D2F56E52940317D1937D0498D5063B",
+  "run": "v5-live-97c98612-a4fe-424b-803f-c762344c75e9",
+  "previousAttempt": "v5-final-validation-20260924.json",
+  "sources": ["computerUseObservation", "productionWorkflowState", "productionObservedHistory"],
+  "mcp": {
+    "initialState": "Disabled",
+    "scope": "project",
+    "action": "Enabled the existing codecraft_cursor project source in Cursor Customize > MCPs",
+    "cursorStateBackupCreated": true,
+    "stateAfterAction": "Connected",
+    "enabledTools": [
+      "codecraft_list_projects",
+      "codecraft_start_workflow",
+      "codecraft_ask_user",
+      "codecraft_review_plan",
+      "codecraft_get_result",
+      "codecraft_cancel_request",
+      "codecraft_end_workflow"
+    ]
+  },
+  "plan": {
+    "modeObserved": "Plan",
+    "conversationId": "5260d6e9-9cbc-4ebd-a13c-61c6b261a0e5",
+    "promptSubmitted": true,
+    "initialAttempt": "No matching codecraft tools while the project MCP source was disabled",
+    "retryAfterMcpEnabled": true,
+    "hook": {
+      "requestId": "11ea06eb-2a5e-419e-bbb5-8477d50c1f49",
+      "eventName": "beforeMCPExecution",
+      "toolName": "codecraft_cursor · codecraft_list_projects",
+      "phase": "expired",
+      "transport": "notStarted",
+      "reason": "HUMAN_WAIT_EXPIRED",
+      "decision": null
+    },
+    "observedToolHistory": {
+      "callId": "424e672c-e9a6-4ed6-9493-21fb87ae4b54",
+      "name": "MCP:codecraft_list_projects",
+      "outcome": "failedObserved"
+    },
+    "clientMessage": "You've hit your usage limit",
+    "workflowCreated": false,
+    "planReviewCreated": false,
+    "decisionReturnedToCursor": false,
+    "passed": false
+  },
+  "ask": {
+    "requestSubmitted": false,
+    "decisionReturnedToCursor": false,
+    "status": "notRun"
+  },
+  "desktop": {
+    "productionProcessRunning": true,
+    "userOpenedSettings": true,
+    "settingsObservedAsOverlay": true,
+    "panelTargetableThroughComputerUse": false,
+    "userCollapsedSettingsAfterInspection": true,
+    "realDesktopSubmission": false
+  },
+  "lan": {
+    "connected": true,
+    "viewportWidth": 390,
+    "viewportHeight": 844,
+    "expiredHookDisplayed": true,
+    "expiredDecisionButtonsDisabled": true,
+    "pendingRequestNavigationPassed": false,
+    "basicNavigationEvidence": "v5-final-validation-20260924.json"
+  },
+  "remaining": [
+    "Final EXE narrow-screen navigation while a real request is pending",
+    "Real desktop decision submission and delivery back to Cursor",
+    "Plan independent review and result delivery",
+    "Ask independent question and result delivery"
+  ],
+  "requiredExternalChange": "Restore usable Cursor model/account quota before continuing live requests",
+  "nativeShared": false,
+  "complete": false,
+  "conclusion": "Project MCP activation was repaired and all seven tools loaded. A real Plan-mode MCP hook was observed, but it expired without a decision; Cursor displayed a usage-limit error and no independent workflow was created. No complete Plan/Ask or desktop submission verdict is claimed."
+}

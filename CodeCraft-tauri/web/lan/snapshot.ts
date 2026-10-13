@@ -1,3 +1,4 @@
+import { readCursorSnapshot, toCursorUnifiedSession, cursorActivityLabel, type CursorSnapshot } from "../../src/cursor-sessions";
 import { readTraeSnapshot, traeReviews, toTraeUnifiedSession, type TraeSnapshot } from "../../src/trae-sessions";
 import {
   sessionEntryView,
@@ -89,7 +90,8 @@ export type ConsoleSource =
   | "gemini"
   | "kimi"
   | "workbuddy"
-  | "trae";
+  | "trae"
+  | "cursor";
 
 export type PendingKind = "permission" | "question" | "plan";
 
@@ -97,6 +99,7 @@ export interface ConsoleActivity {
   id: string;
   tool: string;
   summary: string;
+  details?: string;
   status: string;
   updatedAt: number;
 }
@@ -201,6 +204,7 @@ export interface RawSnapshot {
   gemini?: GeminiSnapshot | null;
   kimi?: KimiSnapshot | null;
   workbuddy?: WorkBuddySnapshot | null;
+  cursor?: CursorSnapshot | null;
   trae?: TraeSnapshot | null;
   integrations?: RawHookIntegration[] | null;
 }
@@ -761,13 +765,14 @@ const sourceFromHookId = (id: string | undefined): ConsoleSource | undefined => 
   if (id === "zCode") return "zcode";
   if (id === "geminiCli") return "gemini";
   if (id === "kimiCode") return "kimi";
+  if (id === "cursor") return "cursor";
   if (id === "trae") return "trae";
   if (id === "workBuddy") return "workbuddy";
   return undefined;
 };
 
 const integrationName = (source: ConsoleSource): string =>
-  source === "trae" ? "Trae CN" : source === "claude"
+  source === "cursor" ? "Cursor" : source === "trae" ? "Trae CN" : source === "claude"
     ? "Claude Code"
     : source === "codex"
       ? "Codex"
@@ -1009,8 +1014,20 @@ export const mergeSnapshot = (raw: RawSnapshot): ConsoleSnapshot => {
     ? { ...emptyWorkBuddy, ...(raw.workbuddy as WorkBuddySnapshot) }
     : emptyWorkBuddy;
 
-  const trae = readTraeSnapshot(raw.trae);
+  const cursorObserved = readCursorSnapshot(raw.cursor);
+  const traeObserved = readTraeSnapshot(raw.trae);
+  const uninstalled = (id: string) => Array.isArray(raw.integrations) && raw.integrations.some(status => status.id === id && status.hookInstalled === false);
+  const cursor = uninstalled("cursor") ? { ...cursorObserved, connected: false, sessions: [], requests: [] } : cursorObserved;
+  const trae = uninstalled("trae") ? { ...traeObserved, connected: false, sessions: [], requests: [] } : traeObserved;
   const entries = [
+    ...cursor.sessions.map((session): ConsoleEntry => {
+      const adapted = toCursorUnifiedSession(session, cursor.requests);
+      const request=cursor.requests.find(r=>r.sessionKey===session.key&&r.actionable);
+      return { key: `cursor:${session.key}`, source: "cursor", sessionId: session.key, title: session.title,
+        status: adapted.status, statusLabel: adapted.pendingReviewId ? sessionStatusLabel(adapted.status) : cursorActivityLabel(session.activity), cwd: "", updatedAt: session.updatedAt,
+        activities: adapted.activities, outputs: adapted.outputs, detailNotice: adapted.detailNotice,
+        pending: request?{kind:request.body.kind,requestId:request.requestId,readOnly:!cursor.connected||!raw.allowApprovals}:null };
+    }),
     ...trae.sessions.map((session): ConsoleEntry => {
       const adapted = toTraeUnifiedSession(session); const request = traeReviews(trae).find(r => r.sessionKey === session.sessionKey);
       return { key: `trae:${session.sessionKey}`, source: "trae", sessionId: session.sessionKey, title: session.title, status: adapted.status, statusLabel: session.status, cwd: adapted.cwd, updatedAt: adapted.updatedAt, activities: adapted.activities, outputs: adapted.outputs, detailNotice: adapted.detailNotice, pending: request ? { kind: request.kind, requestId: request.key, readOnly: request.kind !== "permission" || !trae.connected || !raw.allowApprovals } : null };
@@ -1038,6 +1055,7 @@ export const mergeSnapshot = (raw: RawSnapshot): ConsoleSnapshot => {
     gemini: gemini.sessions.length,
     kimi: kimi.sessions.length,
     workbuddy: workbuddy.sessions.length,
+    cursor: cursor.sessions.length,
     trae: trae.sessions.length,
   };
 
@@ -1059,7 +1077,8 @@ const buildIntegrations = (
     // connected summary. With no install report we cannot prove a hook is
     // missing, so treat every agent as installed and keep it visible.
     return [
-      ...(raw.trae ? [{ source: "trae" as const, name: "Trae CN", connected: raw.trae.connected, error: null, sessionCount: counts.trae, agentInstalled: true, hookInstalled: true }] : []),
+      ...(raw.cursor ? [{ source: "cursor" as const, name: "Cursor", connected: readCursorSnapshot(raw.cursor).connected, error: readCursorSnapshot(raw.cursor).integrationError, sessionCount: counts.cursor, agentInstalled: raw.cursor.hook?.detected === true, hookInstalled: raw.cursor.hook?.filesInstalled === true }] : []),
+      ...(raw.trae ? [{ source: "trae" as const, name: "Trae CN", connected: readTraeSnapshot(raw.trae).connected, error: null, sessionCount: counts.trae, agentInstalled: raw.trae.hook?.environment?.detected === true, hookInstalled: raw.trae.hook?.enabled === true && raw.trae.hook.filesInstalled === true }] : []),
       {
         source: "claude",
         name: integrationName("claude"),
@@ -1157,7 +1176,7 @@ const buildIntegrations = (
     const source = sourceFromHookId(status.id);
     if (!source) return [];
     const connected =
-      source === "trae" ? readTraeSnapshot(raw.trae).connected : source === "claude"
+      source === "cursor" ? readCursorSnapshot(raw.cursor).connected : source === "trae" ? readTraeSnapshot(raw.trae).connected : source === "claude"
         ? claudeConnected(raw)
         : source === "codex"
           ? codexConnected(raw)
@@ -1180,7 +1199,7 @@ const buildIntegrations = (
       {
         source,
         name: status.name ?? integrationName(source),
-        connected,
+        connected: status.hookInstalled === true && connected,
         error: integrationError(raw, source),
         sessionCount: sessionCountFor(source, counts),
         agentInstalled: status.agentInstalled === true,
@@ -1212,6 +1231,7 @@ const workbuddyConnected = (raw: RawSnapshot): boolean =>
   isRecord(raw.workbuddy) ? raw.workbuddy.connected === true : false;
 
 const integrationError = (raw: RawSnapshot, source: ConsoleSource): string | null => {
+  if (source === "cursor") return readCursorSnapshot(raw.cursor).integrationError;
   if (source === "trae") return readTraeSnapshot(raw.trae).capabilities.reason || null;
   const value =
     source === "claude"

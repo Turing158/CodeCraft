@@ -289,6 +289,37 @@ pub fn status() -> Result<Value> {
         json!({"environment":env,"filesInstalled":present,"enabled":record["enabled"]==true,"traeEnabled":if recent{Some(true)}else{None},"recentEvents":recent,"state":if present{"installed"}else if groups.is_empty(){"notInstalled"}else{"modified"},"installPath":path,"capabilities":Capabilities::bundled(env["productVersion"].as_str())}),
     )
 }
+/// Public connection state includes installation; the internal store may stay
+/// alive to retain history while this integration is disabled.
+pub fn snapshot() -> Value {
+    snapshot_with_status(crate::store::snapshot(), status())
+}
+
+fn snapshot_with_status(mut snapshot: Value, status: Result<Value>) -> Value {
+    let installed = match status {
+        Ok(hook) => {
+            let installed = hook["enabled"] == true && hook["filesInstalled"] == true;
+            snapshot["hook"] = hook;
+            installed
+        }
+        Err(error) => {
+            snapshot["integrationError"] = json!(error.to_string());
+            false
+        }
+    };
+    if !installed {
+        snapshot["connected"] = json!(false);
+        snapshot["capabilities"] = json!(Capabilities {
+            reason: "Trae integration is disabled".into(),
+            ..Capabilities::default()
+        });
+        for key in ["sessions", "requests", "tasks", "grants"] {
+            snapshot[key] = json!([]);
+        }
+    }
+    snapshot
+}
+
 pub fn template() -> Result<Value> {
     let exe = env::current_exe()?;
     Ok(
@@ -505,6 +536,37 @@ pub fn capture() -> i32 {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn public_snapshot_hides_disabled_history_and_keeps_installed_unknown_versions_connected() {
+        let stored = json!({"source":"trae","connected":true,"sessions":[{"sessionKey":"old"}],
+            "requests":[{"id":"old-request"}],"tasks":[{}],"grants":[{}],
+            "capabilities":Capabilities::bundled(Some("unknown"))});
+        for (enabled, files_installed) in [(false, false), (false, true), (true, false)] {
+            let view = snapshot_with_status(
+                stored.clone(),
+                Ok(json!({"enabled":enabled,"filesInstalled":files_installed})),
+            );
+            assert_eq!(view["connected"], false);
+            for key in ["sessions", "requests", "tasks", "grants"] {
+                assert_eq!(view[key], json!([]));
+            }
+        }
+        let installed = snapshot_with_status(
+            stored.clone(),
+            Ok(json!({"enabled":true,"filesInstalled":true})),
+        );
+        assert_eq!(installed["connected"], true);
+        assert_eq!(installed["capabilities"]["toolApproval"], false);
+        assert_eq!(installed["sessions"], stored["sessions"]);
+        let error = snapshot_with_status(stored, Err(invalid("Unreadable installation record")));
+        assert_eq!(error["connected"], false);
+        assert_eq!(error["sessions"], json!([]));
+        assert!(error["integrationError"]
+            .as_str()
+            .unwrap()
+            .contains("Unreadable installation record"));
+    }
     fn chat_input() -> Value {
         serde_json::from_str::<Value>(include_str!(
             "../../protocol/trae/3.3.102/fixtures/workspace-less-chat.json"

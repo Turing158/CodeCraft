@@ -1,3 +1,5 @@
+import { createCursorPreviewSnapshot, isCursorPreview, applyCursorPreviewDecision } from "../../src/cursor-preview";
+export { isCursorPreview };
 /** Thin fetch wrapper for the LAN console API.
  *
  * Every write carries the custom header the server requires; browsers cannot add
@@ -57,7 +59,9 @@ export const authenticate = (token: string) =>
 
 export const signOut = () => request<{ ok: boolean }>("/api/logout", { method: "POST" });
 
-export const fetchState = () => request<Record<string, unknown>>("/api/state");
+export const fetchState = (): Promise<Record<string, unknown>> => isCursorPreview()
+  ? Promise.resolve({ generatedAt: Date.now(), allowApprovals: new URLSearchParams(window.location.search).get("interactions")==="1", cursor: createCursorPreviewSnapshot(), integrations: [{ id: "cursor", name: "Cursor", agentInstalled: true, hookInstalled: true }] })
+  : request<Record<string, unknown>>("/api/state");
 
 export type PermissionDecision = "allow" | "allowAlways" | "deny";
 
@@ -283,3 +287,8 @@ export const submitZCodePlan = (
   });
 
 export const submitTrae = (route: string, body: unknown) => request<unknown>(`/api/trae/${route}`, { method: "POST", body: JSON.stringify(body) });
+
+/** The server revalidates the capability and exact request version. Settings
+ * and installation operations are intentionally absent from the LAN API. */
+export const submitCursor = (route: "permission" | "question" | "plan" | "cancel", body: unknown) =>
+  isCursorPreview()?Promise.resolve().then(()=>applyCursorPreviewDecision(body)):request<unknown>(`/api/cursor/${route}`, { method: "POST", body: JSON.stringify(body) });

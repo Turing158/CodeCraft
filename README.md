@@ -10,7 +10,7 @@
 
 <p>
   <img src="https://img.shields.io/badge/平台-Windows-0078D4?style=flat-square" alt="平台 Windows" />
-  <img src="https://img.shields.io/badge/版本-0.1.1-4C8BF5?style=flat-square" alt="版本 0.1.1" />
+  <img src="https://img.shields.io/badge/版本-0.1.2-4C8BF5?style=flat-square" alt="版本 0.1.2" />
   <img src="https://img.shields.io/badge/技术-Rust%20%2B%20Tauri%202-DEA584?style=flat-square" alt="Rust + Tauri 2" />
   <img src="https://img.shields.io/badge/语言-简中%20%2F%20繁中%20%2F%20EN-2EA043?style=flat-square" alt="多语言" />
 </p>
@@ -65,7 +65,7 @@ CodeCraft 自己不写代码，它负责盯着下面这些 AI 编程助手。装
 
 十个 Agent 可以同时开着，面板顶部的筛选按钮能只看其中一家，或者"全部"一起看。
 
-> DeepSeek Harness 当前是 Developer Preview。CodeCraft 优先适配 `@deepseek-ai/dsh@0.1.1-rc.2`，并兼容 `0.1.2-alpha.2`；检测不到版本或版本不在兼容列表中时，本地桥会拒绝交互并显示兼容错误。
+> CodeCraft 不检测 DeepSeek Harness 的运行版本，也不按版本号限制 Hook 安装、会话同步和交互。
 
 ## 快速上手
 
@@ -190,3 +190,9 @@ npm run tauri build # 打包 Windows 安装包（NSIS）
 **在一个安静、紧凑的界面中，掌握编程助手的工作状态。**
 
 </div>
+
+## Cursor（Windows）
+
+现已接入 Cursor 的只读会话采集、工具/子代理活动、完成回复及桌面/LAN 展示。安装、修复、卸载和程序路径配置位于桌面设置 → Hook，修改前保留 `.bak`，只更新 CodeCraft 自有条目。接入前的历史不读取；重启后的未确认活动显示为中断或结果未知。
+
+v5 已接入公开 Hook 工具审批与独立 MCP 问答、计划审阅，桌面和 LAN 共用决定状态。在设置 → Hook 安装 Cursor 时，会一并安装或修复 Hook、MCP 与当前本机项目的引导规则，并维护已启用项目；MCP 可创建绑定项目的独立工作流；答案和审阅结果仅交付一次，支持取消、版本替换及断线只读恢复。Hook 故障或超时按既定策略放行，允许决定也不能覆盖 Cursor 自身权限。独立计划审阅不拦截未关联的原生工具，Cursor 原生双端审批同步不属于本版范围。实测覆盖与使用步骤见 [产品接入说明](CodeCraft-tauri/protocol/cursor/product-integration.md)。

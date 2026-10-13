@@ -17,14 +17,15 @@ use uuid::Uuid;
 
 use crate::{dsh, DshIntegrationState};
 
-pub(crate) const PLUGIN_VERSION: &str = "0.1.2";
-pub(crate) const TARGET_DSH_VERSION: &str = "0.1.1-rc.2";
-pub(crate) const SUPPORTED_DSH_VERSIONS: &[&str] = &["0.1.1-rc.2", "0.1.2-alpha.2"];
-// The previous CodeCraft bundle is safe to replace; any other hash remains a user modification.
-const LEGACY_BUNDLED_PLUGIN_SHA256: &str =
-    "91f96091cb4c344d51bddca7ed47f6267408038079caaa31ef2076279427a936";
-const PREVIOUS_BUNDLED_PLUGIN_SHA256: &str =
-    "e25c0f3ccd7bdb32a17b82513cfa375f3e28c74d2e6d283dc81f74acc1a41d5c";
+pub(crate) const PLUGIN_VERSION: &str = "0.1.3";
+// Known CodeCraft bundles can be refreshed without treating their metadata as
+// a compatibility restriction. Other contents remain a user modification.
+const LEGACY_BUNDLED_PLUGIN_SHA256: &[&str] = &[
+    "91f96091cb4c344d51bddca7ed47f6267408038079caaa31ef2076279427a936",
+    "e25c0f3ccd7bdb32a17b82513cfa375f3e28c74d2e6d283dc81f74acc1a41d5c",
+    "a38f30ef24a0dfd59273689eb42e6a3f4600c097aa5fd677605348fc137781e6",
+    "2dcbbc8d7db2b2b96a83619fc6056e4c3a55072a009ac2f853ab7aa4f78474d1",
+];
 const OWNER: &str = "CodeCraft";
 const PATCH_START: &str = "# codecraft-dsh-plugin:start";
 const PATCH_END: &str = "# codecraft-dsh-plugin:end";
@@ -200,7 +201,6 @@ pub(crate) enum DshHookInstallState {
     Installed,
     Modified,
     Conflict,
-    Incompatible,
 }
 
 #[derive(Clone, Debug, Serialize)]
@@ -210,7 +210,8 @@ pub(crate) struct DshHookStatus {
     pub(crate) install_path: String,
     pub(crate) bundled_version: &'static str,
     pub(crate) installed_version: Option<String>,
-    pub(crate) target_dsh_version: &'static str,
+    #[serde(skip)]
+    pub(crate) needs_sync: bool,
     pub(crate) error: Option<String>,
 }
 
@@ -227,15 +228,6 @@ struct InstallManifest {
     plugin_version: String,
     protocol: String,
     protocol_version: u32,
-    target_dsh_version: String,
-}
-
-fn supports_dsh_version(version: &str) -> bool {
-    SUPPORTED_DSH_VERSIONS.contains(&version)
-}
-
-fn supported_dsh_versions_label() -> String {
-    SUPPORTED_DSH_VERSIONS.join("、")
 }
 
 fn status_at(home: &Path) -> DshHookStatus {
@@ -249,7 +241,7 @@ fn status_at(home: &Path) -> DshHookStatus {
             install_path,
             bundled_version: PLUGIN_VERSION,
             installed_version: None,
-            target_dsh_version: TARGET_DSH_VERSION,
+            needs_sync: false,
             error: None,
         };
     }
@@ -261,7 +253,7 @@ fn status_at(home: &Path) -> DshHookStatus {
                 install_path,
                 bundled_version: PLUGIN_VERSION,
                 installed_version: None,
-                target_dsh_version: TARGET_DSH_VERSION,
+                needs_sync: false,
                 error: Some(
                     "The CodeCraft DSH plugin exists without its overlay marker".to_string(),
                 ),
@@ -273,7 +265,7 @@ fn status_at(home: &Path) -> DshHookStatus {
                 install_path,
                 bundled_version: PLUGIN_VERSION,
                 installed_version: None,
-                target_dsh_version: TARGET_DSH_VERSION,
+                needs_sync: false,
                 error: Some(error),
             }
         }
@@ -288,7 +280,7 @@ fn status_at(home: &Path) -> DshHookStatus {
             install_path,
             bundled_version: PLUGIN_VERSION,
             installed_version: None,
-            target_dsh_version: TARGET_DSH_VERSION,
+            needs_sync: false,
             error: Some("The CodeCraft DSH ownership manifest is missing or invalid".to_string()),
         };
     };
@@ -301,39 +293,23 @@ fn status_at(home: &Path) -> DshHookStatus {
             install_path,
             bundled_version: PLUGIN_VERSION,
             installed_version: Some(manifest.plugin_version),
-            target_dsh_version: TARGET_DSH_VERSION,
+            needs_sync: false,
             error: Some(
                 "The DSH plugin at the CodeCraft path is not owned by CodeCraft".to_string(),
             ),
         };
     }
-    if !supports_dsh_version(&manifest.target_dsh_version) {
-        return DshHookStatus {
-            state: DshHookInstallState::Incompatible,
-            install_path,
-            bundled_version: PLUGIN_VERSION,
-            installed_version: Some(manifest.plugin_version),
-            target_dsh_version: TARGET_DSH_VERSION,
-            error: Some(format!(
-                "The installed DSH plugin targets {}, but CodeCraft supports {}",
-                manifest.target_dsh_version,
-                supported_dsh_versions_label()
-            )),
-        };
-    }
     let bytes = fs::read(plugin_path(home)).unwrap_or_default();
     let plugin_hash = sha256(&bytes);
     let bundled_hash = sha256(BUNDLED_PLUGIN.as_bytes());
-    let is_known_legacy_bundle = manifest.plugin_version != PLUGIN_VERSION
-        && [LEGACY_BUNDLED_PLUGIN_SHA256, PREVIOUS_BUNDLED_PLUGIN_SHA256]
-            .contains(&plugin_hash.as_str());
+    let is_known_legacy_bundle = LEGACY_BUNDLED_PLUGIN_SHA256.contains(&plugin_hash.as_str());
     if plugin_hash != bundled_hash && !is_known_legacy_bundle {
         return DshHookStatus {
             state: DshHookInstallState::Modified,
             install_path,
             bundled_version: PLUGIN_VERSION,
             installed_version: Some(manifest.plugin_version),
-            target_dsh_version: TARGET_DSH_VERSION,
+            needs_sync: false,
             error: Some("The managed DSH plugin was modified after installation".to_string()),
         };
     }
@@ -345,36 +321,19 @@ fn status_at(home: &Path) -> DshHookStatus {
                 install_path,
                 bundled_version: PLUGIN_VERSION,
                 installed_version: Some(manifest.plugin_version),
-                target_dsh_version: TARGET_DSH_VERSION,
+                needs_sync: false,
                 error: Some(error),
             }
         }
     };
-    if !marker_has_plugin_url(&patch_contents[marker.0..marker.1], &expected_plugin_name) {
-        return DshHookStatus {
-            state: DshHookInstallState::Incompatible,
-            install_path,
-            bundled_version: PLUGIN_VERSION,
-            installed_version: Some(manifest.plugin_version),
-            target_dsh_version: TARGET_DSH_VERSION,
-            error: Some(
-                "The CodeCraft DSH overlay uses a profile-relative plugin path; reinstalling it will migrate the overlay to an absolute file URL".to_string(),
-            ),
-        };
-    }
-    let state = if manifest.plugin_version == PLUGIN_VERSION && plugin_hash == bundled_hash {
-        DshHookInstallState::Installed
-    } else {
-        DshHookInstallState::Incompatible
-    };
     DshHookStatus {
-        state,
+        state: DshHookInstallState::Installed,
         install_path,
         bundled_version: PLUGIN_VERSION,
         installed_version: Some(manifest.plugin_version),
-        target_dsh_version: TARGET_DSH_VERSION,
-        error: (state != DshHookInstallState::Installed)
-            .then(|| "The installed DSH plugin version does not match CodeCraft".to_string()),
+        needs_sync: plugin_hash != bundled_hash
+            || !marker_has_plugin_url(&patch_contents[marker.0..marker.1], &expected_plugin_name),
+        error: None,
     }
 }
 
@@ -461,20 +420,7 @@ fn validate_bridge_envelope(
     if envelope.token != token || envelope.bridge_instance_id != bridge_id {
         return Err("unauthorized".to_string());
     }
-    if supports_dsh_version(&envelope.dsh_version) {
-        return Ok(());
-    }
-    if envelope.dsh_version == "unknown" {
-        return Err(format!(
-            "无法确定正在运行的 DeepSeek Harness 版本；CodeCraft 当前兼容 {}",
-            supported_dsh_versions_label()
-        ));
-    }
-    Err(format!(
-        "正在运行的 DeepSeek Harness {} 与 CodeCraft 兼容版本 {} 不一致",
-        envelope.dsh_version,
-        supported_dsh_versions_label()
-    ))
+    Ok(())
 }
 
 async fn handle_connection<S>(stream: S, app: tauri::AppHandle, bridge_id: String, token: String)
@@ -505,23 +451,10 @@ where
     };
     let state = app.state::<DshIntegrationState>();
     if let Err(error) = validate_bridge_envelope(&envelope, &bridge_id, &token) {
-        if error != "unauthorized" {
-            if let Ok(mut hook_error) = state.hook_error.lock() {
-                *hook_error = Some(error.clone());
-            }
-        }
         let _ = stream
             .write_all(format!("{}\n", json!({"ok":false,"error":error})).as_bytes())
             .await;
         return;
-    }
-    if let Ok(mut hook_error) = state.hook_error.lock() {
-        if hook_error.as_deref().is_some_and(|error| {
-            error.starts_with("无法确定正在运行的 DeepSeek Harness 版本")
-                || error.starts_with("正在运行的 DeepSeek Harness ")
-        }) {
-            *hook_error = None;
-        }
     }
     let request_id = envelope.request_id.clone();
     let ingest = state
@@ -705,10 +638,13 @@ mod tests {
         fs::write(patch_path(&home), marker_block("./codecraft/index.mjs")).unwrap();
 
         let before = status_at(&home);
-        assert_eq!(before.state, DshHookInstallState::Incompatible);
+        assert!(before.installed());
+        assert!(before.needs_sync);
+        assert!(before.error.is_none());
 
         let after = install_at(&home).unwrap();
         assert_eq!(after.state, DshHookInstallState::Installed);
+        assert!(!after.needs_sync);
         let patch = fs::read_to_string(patch_path(&home)).unwrap();
         let plugin_name = plugin_url(&home).unwrap();
         assert!(patch.contains(&format!("name: \"{plugin_name}\"")));
@@ -751,20 +687,44 @@ mod tests {
     }
 
     #[test]
-    fn status_accepts_a_plugin_manifest_targeting_the_newer_compatible_runtime() {
+    fn status_does_not_gate_on_manifest_version_metadata() {
         let home = temp_home();
         fs::create_dir_all(plugin_dir(&home)).unwrap();
         fs::write(plugin_path(&home), BUNDLED_PLUGIN).unwrap();
-        let mut manifest: Value = serde_json::from_str(BUNDLED_MANIFEST).unwrap();
-        manifest["targetDshVersion"] = Value::String("0.1.2-alpha.2".to_string());
-        fs::write(
-            manifest_path(&home),
-            serde_json::to_vec_pretty(&manifest).unwrap(),
-        )
-        .unwrap();
         fs::write(patch_path(&home), marker_block(&plugin_url(&home).unwrap())).unwrap();
 
-        assert_eq!(status_at(&home).state, DshHookInstallState::Installed);
+        for target in [None, Some("unknown"), Some("99.0.0")] {
+            let mut manifest: Value = serde_json::from_str(BUNDLED_MANIFEST).unwrap();
+            manifest["pluginVersion"] = Value::String("different-metadata".to_string());
+            if let Some(target) = target {
+                manifest["targetDshVersion"] = Value::String(target.to_string());
+            }
+            fs::write(
+                manifest_path(&home),
+                serde_json::to_vec_pretty(&manifest).unwrap(),
+            )
+            .unwrap();
+
+            let status = status_at(&home);
+            assert!(status.installed());
+            assert!(!status.needs_sync);
+            assert!(status.error.is_none());
+        }
+    }
+
+    #[test]
+    fn ignoring_version_metadata_preserves_modified_file_protection() {
+        let home = temp_home();
+        install_at(&home).unwrap();
+        fs::write(plugin_path(&home), "// User-owned changes\n").unwrap();
+
+        assert_eq!(status_at(&home).state, DshHookInstallState::Modified);
+        assert!(install_at(&home).is_err());
+        assert!(uninstall_at(&home).is_err());
+        assert_eq!(
+            fs::read_to_string(plugin_path(&home)).unwrap(),
+            "// User-owned changes\n"
+        );
     }
 
     fn bridge_envelope() -> dsh::DshEnvelope {
@@ -776,7 +736,6 @@ mod tests {
             "bridgeInstanceId": "bridge-1",
             "pluginInstanceId": "plugin-1",
             "pluginVersion": PLUGIN_VERSION,
-            "dshVersion": TARGET_DSH_VERSION,
             "dshProcessId": 42,
             "sessionId": Value::Null,
             "turnId": Value::Null,
@@ -793,7 +752,7 @@ mod tests {
 
     #[test]
     fn bridge_identity_rejects_bad_token_and_old_generation() {
-        let envelope = bridge_envelope();
+        let mut envelope = bridge_envelope();
         assert_eq!(
             validate_bridge_envelope(&envelope, "bridge-1", "wrong").unwrap_err(),
             "unauthorized"
@@ -802,24 +761,23 @@ mod tests {
             validate_bridge_envelope(&envelope, "bridge-2", "secret").unwrap_err(),
             "unauthorized"
         );
+        envelope.protocol_version += 1;
+        assert!(envelope.validate().is_err());
     }
 
     #[test]
-    fn bridge_identity_reports_unknown_and_incompatible_runtime_versions() {
+    fn bridge_accepts_absent_unknown_and_arbitrary_runtime_versions() {
         let mut envelope = bridge_envelope();
-        envelope.dsh_version = "unknown".to_string();
-        assert!(validate_bridge_envelope(&envelope, "bridge-1", "secret")
-            .unwrap_err()
-            .contains("无法确定"));
-
-        envelope.dsh_version = "0.1.2-alpha.2".to_string();
-        assert!(validate_bridge_envelope(&envelope, "bridge-1", "secret").is_ok());
-
-        envelope.dsh_version = "0.1.3-alpha.1".to_string();
-        let error = validate_bridge_envelope(&envelope, "bridge-1", "secret").unwrap_err();
-        assert!(error.contains("0.1.3-alpha.1"));
-        for version in SUPPORTED_DSH_VERSIONS {
-            assert!(error.contains(version));
+        assert!(envelope.dsh_version.is_empty());
+        for version in ["", "unknown", "0.1.2-alpha.2", "0.1.3-alpha.1", "99.0.0"] {
+            envelope.dsh_version = version.to_string();
+            assert!(validate_bridge_envelope(&envelope, "bridge-1", "secret").is_ok());
+            let mut store = dsh::DshStore::default();
+            store.set_bridge_instance_id(Some("bridge-1".to_string()));
+            store.ingest(&envelope).unwrap();
+            let snapshot = store.snapshot();
+            assert!(snapshot.connected);
+            assert!(snapshot.integration_error.is_none());
         }
     }
 }

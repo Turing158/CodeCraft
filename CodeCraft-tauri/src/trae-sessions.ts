@@ -126,6 +126,7 @@ export interface TraeGrant {
 }
 export interface TraeSnapshot {
   source: "trae"; appEpoch: string; version: number; connected: boolean;
+  hook?: { enabled: boolean; filesInstalled: boolean; environment?: { detected?: boolean } };
   integrationError?: unknown;
   capabilities: { toolApproval: boolean; mcpQuestions: boolean; mcpPlanReview: boolean; nativeObservation: boolean; reason: string; verifiedVersion: string | null };
   sessions: TraeNativeSession[]; requests: TraeRequest[]; tasks: TraeTask[]; grants: TraeGrant[];
@@ -138,7 +139,11 @@ export const emptyTraeSnapshot = (): TraeSnapshot => ({
 export function readTraeSnapshot(value: unknown): TraeSnapshot {
   if (!value || typeof value !== "object" || (value as TraeSnapshot).source !== "trae") return emptyTraeSnapshot();
   const v = value as TraeSnapshot;
-  return { ...emptyTraeSnapshot(), ...v, sessions: Array.isArray(v.sessions) ? v.sessions : [], requests: Array.isArray(v.requests) ? v.requests : [], tasks: Array.isArray(v.tasks) ? v.tasks : [], grants: Array.isArray(v.grants) ? v.grants : [] };
+  const hook = v.hook && typeof v.hook.enabled === "boolean" && typeof v.hook.filesInstalled === "boolean" ? v.hook : undefined;
+  const snapshot = { ...emptyTraeSnapshot(), ...v, hook, sessions: Array.isArray(v.sessions) ? v.sessions : [], requests: Array.isArray(v.requests) ? v.requests : [], tasks: Array.isArray(v.tasks) ? v.tasks : [], grants: Array.isArray(v.grants) ? v.grants : [] };
+  return hook && (!hook.enabled || !hook.filesInstalled)
+    ? { ...snapshot, connected: false, sessions: [], requests: [], tasks: [], grants: [] }
+    : snapshot;
 }
 export const traePending = (request: TraeRequest) => ["pending", "user_decided", "delivery_prepared"].includes(request.state);
 export const traeStatus = (status: string): ClaudeSessionStatus => ({ waitingForInput: "waiting", waitingForApproval: "attention", working: "working", stopped: "stopped", idle: "idle" } as Record<string, ClaudeSessionStatus>)[status] ?? "attention";

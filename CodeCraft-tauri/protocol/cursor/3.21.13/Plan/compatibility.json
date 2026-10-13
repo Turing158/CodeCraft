@@ -1,0 +1,314 @@
+{
+  "schemaVersion": 1,
+  "identity": {
+    "mode": "Plan",
+    "platform": "windows",
+    "configFingerprint": "",
+    "cursorVersion": "3.21.13",
+    "clientFingerprint": "e281e163c887bed31e17c088b7594f9faaf5c821bec08c2b116a1ce15164e58a",
+    "architecture": "x64"
+  },
+  "captureScope": "observedOnly",
+  "checks": {
+    "P0-01": {
+      "status": "notRun",
+      "evidence": [],
+      "reason": "No reviewed Cursor runtime evidence for this mode.",
+      "verifiedAt": null
+    },
+    "P0-02": {
+      "status": "notRun",
+      "evidence": [],
+      "reason": "No reviewed Cursor runtime evidence for this mode.",
+      "verifiedAt": null
+    },
+    "P0-03": {
+      "status": "notRun",
+      "evidence": [],
+      "reason": "No reviewed Cursor runtime evidence for this mode.",
+      "verifiedAt": null
+    },
+    "P0-04": {
+      "status": "notRun",
+      "evidence": [],
+      "reason": "No reviewed Cursor runtime evidence for this mode.",
+      "verifiedAt": null
+    },
+    "P0-05": {
+      "status": "notRun",
+      "evidence": [],
+      "reason": "No reviewed Cursor runtime evidence for this mode.",
+      "verifiedAt": null
+    },
+    "P0-06": {
+      "status": "notRun",
+      "evidence": [],
+      "reason": "No reviewed Cursor runtime evidence for this mode.",
+      "verifiedAt": null
+    },
+    "P0-07": {
+      "status": "notRun",
+      "evidence": [],
+      "reason": "No reviewed Cursor runtime evidence for this mode.",
+      "verifiedAt": null
+    },
+    "P0-08": {
+      "status": "notRun",
+      "evidence": [],
+      "reason": "No reviewed Cursor runtime evidence for this mode.",
+      "verifiedAt": null
+    },
+    "P0-09": {
+      "status": "notRun",
+      "evidence": [],
+      "reason": "No reviewed Cursor runtime evidence for this mode.",
+      "verifiedAt": null
+    },
+    "P0-10": {
+      "status": "notRun",
+      "evidence": [],
+      "reason": "No reviewed Cursor runtime evidence for this mode.",
+      "verifiedAt": null
+    },
+    "P0-11": {
+      "status": "notRun",
+      "evidence": [],
+      "reason": "No reviewed Cursor runtime evidence for this mode.",
+      "verifiedAt": null
+    },
+    "V01": {
+      "status": "notRun",
+      "evidence": [],
+      "reason": "No reviewed Cursor runtime evidence for this mode.",
+      "verifiedAt": null
+    },
+    "V02": {
+      "status": "notRun",
+      "evidence": [],
+      "reason": "No reviewed Cursor runtime evidence for this mode.",
+      "verifiedAt": null
+    },
+    "V03": {
+      "status": "notRun",
+      "evidence": [],
+      "reason": "No reviewed Cursor runtime evidence for this mode.",
+      "verifiedAt": null
+    },
+    "V04": {
+      "status": "notRun",
+      "evidence": [],
+      "reason": "No reviewed Cursor runtime evidence for this mode.",
+      "verifiedAt": null
+    },
+    "V05": {
+      "status": "notRun",
+      "evidence": [],
+      "reason": "No reviewed Cursor runtime evidence for this mode.",
+      "verifiedAt": null
+    },
+    "V06": {
+      "status": "notRun",
+      "evidence": [],
+      "reason": "No reviewed Cursor runtime evidence for this mode.",
+      "verifiedAt": null
+    },
+    "V07": {
+      "status": "notRun",
+      "evidence": [],
+      "reason": "No reviewed Cursor runtime evidence for this mode.",
+      "verifiedAt": null
+    },
+    "V08": {
+      "status": "notRun",
+      "evidence": [],
+      "reason": "No reviewed Cursor runtime evidence for this mode.",
+      "verifiedAt": null
+    },
+    "V09": {
+      "status": "notRun",
+      "evidence": [],
+      "reason": "No reviewed Cursor runtime evidence for this mode.",
+      "verifiedAt": null
+    },
+    "V10": {
+      "status": "notRun",
+      "evidence": [],
+      "reason": "No reviewed Cursor runtime evidence for this mode.",
+      "verifiedAt": null
+    },
+    "V11": {
+      "status": "notRun",
+      "evidence": [],
+      "reason": "No reviewed Cursor runtime evidence for this mode.",
+      "verifiedAt": null
+    },
+    "V12": {
+      "status": "notRun",
+      "evidence": [],
+      "reason": "No reviewed Cursor runtime evidence for this mode.",
+      "verifiedAt": null
+    },
+    "V13": {
+      "status": "notRun",
+      "evidence": [],
+      "reason": "No reviewed Cursor runtime evidence for this mode.",
+      "verifiedAt": null
+    },
+    "V14": {
+      "status": "notRun",
+      "evidence": [],
+      "reason": "No reviewed Cursor runtime evidence for this mode.",
+      "verifiedAt": null
+    },
+    "V15": {
+      "status": "notRun",
+      "evidence": [],
+      "reason": "No reviewed Cursor runtime evidence for this mode.",
+      "verifiedAt": null
+    },
+    "V16": {
+      "status": "notRun",
+      "evidence": [],
+      "reason": "No reviewed Cursor runtime evidence for this mode.",
+      "verifiedAt": null
+    },
+    "V17": {
+      "status": "notRun",
+      "evidence": [],
+      "reason": "No reviewed Cursor runtime evidence for this mode.",
+      "verifiedAt": null
+    },
+    "V18": {
+      "status": "notRun",
+      "evidence": [],
+      "reason": "No reviewed Cursor runtime evidence for this mode.",
+      "verifiedAt": null
+    },
+    "V19": {
+      "status": "notRun",
+      "evidence": [],
+      "reason": "No reviewed Cursor runtime evidence for this mode.",
+      "verifiedAt": null
+    },
+    "V20": {
+      "status": "notRun",
+      "evidence": [],
+      "reason": "No reviewed Cursor runtime evidence for this mode.",
+      "verifiedAt": null
+    },
+    "V21": {
+      "status": "notRun",
+      "evidence": [],
+      "reason": "No reviewed Cursor runtime evidence for this mode.",
+      "verifiedAt": null
+    },
+    "V22": {
+      "status": "notRun",
+      "evidence": [],
+      "reason": "No reviewed Cursor runtime evidence for this mode.",
+      "verifiedAt": null
+    },
+    "V23": {
+      "status": "notRun",
+      "evidence": [],
+      "reason": "No reviewed Cursor runtime evidence for this mode.",
+      "verifiedAt": null
+    },
+    "V24": {
+      "status": "notRun",
+      "evidence": [],
+      "reason": "No reviewed Cursor runtime evidence for this mode.",
+      "verifiedAt": null
+    },
+    "V25": {
+      "status": "notRun",
+      "evidence": [],
+      "reason": "No reviewed Cursor runtime evidence for this mode.",
+      "verifiedAt": null
+    },
+    "V26": {
+      "status": "notRun",
+      "evidence": [],
+      "reason": "No reviewed Cursor runtime evidence for this mode.",
+      "verifiedAt": null
+    },
+    "V27": {
+      "status": "notRun",
+      "evidence": [],
+      "reason": "No reviewed Cursor runtime evidence for this mode.",
+      "verifiedAt": null
+    },
+    "V28": {
+      "status": "notRun",
+      "evidence": [],
+      "reason": "No reviewed Cursor runtime evidence for this mode.",
+      "verifiedAt": null
+    },
+    "V29": {
+      "status": "notRun",
+      "evidence": [],
+      "reason": "No reviewed Cursor runtime evidence for this mode.",
+      "verifiedAt": null
+    },
+    "V30": {
+      "status": "notRun",
+      "evidence": [],
+      "reason": "No reviewed Cursor runtime evidence for this mode.",
+      "verifiedAt": null
+    },
+    "V31": {
+      "status": "notRun",
+      "evidence": [],
+      "reason": "No reviewed Cursor runtime evidence for this mode.",
+      "verifiedAt": null
+    },
+    "V32": {
+      "status": "notRun",
+      "evidence": [],
+      "reason": "No reviewed Cursor runtime evidence for this mode.",
+      "verifiedAt": null
+    },
+    "V33": {
+      "status": "notRun",
+      "evidence": [],
+      "reason": "No reviewed Cursor runtime evidence for this mode.",
+      "verifiedAt": null
+    },
+    "V34": {
+      "status": "notRun",
+      "evidence": [],
+      "reason": "No reviewed Cursor runtime evidence for this mode.",
+      "verifiedAt": null
+    }
+  },
+  "toolCoverage": {},
+  "qualifiedToolNames": {},
+  "protocol": {
+    "clientWaitBudget": null,
+    "schemaValidationStage": null,
+    "updatedInputPropagation": null,
+    "subagentScope": null,
+    "entryDeadlineLimitMs": 60000,
+    "hookPayloadVersion": null,
+    "nativeTerminationMapping": null,
+    "effectiveConfigSources": [],
+    "generationConfirmation": null,
+    "serverIdentity": null,
+    "mcpProtocolVersion": null,
+    "twoEventOrder": null
+  },
+  "nativeAdapter": {
+    "approvalIdSemantics": null,
+    "queryEvidence": null,
+    "reconnectBudget": null,
+    "interfaceStability": null,
+    "versionFingerprint": null,
+    "supportedToolCategories": [],
+    "interfaceSource": null,
+    "atomicDecision": null,
+    "acceptanceEvidence": null,
+    "sharedWaitOrder": null,
+    "status": "unverified",
+    "host": null
+  }
+}

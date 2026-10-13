@@ -1,7 +1,7 @@
 {
   "name": "codecraft-tauri",
   "private": true,
-  "version": "0.1.1",
+  "version": "0.1.2",
   "type": "module",
   "scripts": {
     "dev": "vite",
@@ -11,6 +11,7 @@
     "test:workbuddy-fixtures": "node --test scripts/verify-workbuddy-fixtures.mjs",
     "preview": "vite preview",
     "tauri": "tauri",
+    "icons": "tauri icon src-tauri/icons/ico.svg",
     "package:single-exe": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/package-single-exe.ps1",
     "package:single-exe-plus": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/package-single-exe-plus.ps1"
   },

@@ -1,0 +1,57 @@
+{
+  "schemaVersion": 1,
+  "validationType": "cursorV5FinalValidationAttempt",
+  "observedAt": "2026-09-24T10:57:00.8702692Z",
+  "cursorVersion": "3.21.18",
+  "executable": "D:\\EducationalData\\rust\\CodeCraft\\CodeCraft-tauri\\src-tauri\\target\\release\\codecraft-tauri.exe",
+  "executableSha256": "9F1254D69328308FAA3E5989124B61B845D2F56E52940317D1937D0498D5063B",
+  "run": "v5-live-97c98612-a4fe-424b-803f-c762344c75e9",
+  "lan": {
+    "connected": true,
+    "viewportChecks": [
+      {
+        "width": 760,
+        "height": 900,
+        "openedDetail": true,
+        "returnedBy": "button",
+        "remainedListAfterSnapshotMs": 1200,
+        "passed": true
+      },
+      {
+        "width": 390,
+        "height": 844,
+        "openedDetail": true,
+        "returnedBy": "button",
+        "remainedListAfterSnapshotMs": 1000,
+        "passed": true
+      },
+      {
+        "width": 390,
+        "height": 844,
+        "openedDetail": true,
+        "returnedBy": "Escape",
+        "remainedListAfterSnapshotMs": 600,
+        "passed": true
+      }
+    ],
+    "sourceSession": "Cursor 7a43ebc9-929",
+    "sourceSessionStatus": "unknown",
+    "pendingRequestsObserved": 0
+  },
+  "cursor": {
+    "projectWindowObserved": true,
+    "promptSubmitted": true,
+    "toolCallsObservedByLan": 0,
+    "connectionFailure": "The connection failed 10 times. Please check your network connection and try again.",
+    "askModeVisible": true,
+    "planModeVisible": true,
+    "askPlanRequestsSubmitted": false
+  },
+  "desktop": {
+    "productionProcessRunning": true,
+    "panelTargetableThroughComputerUse": false,
+    "realDesktopSubmission": false
+  },
+  "nativeShared": false,
+  "conclusion": "Final binary and LAN responsive navigation checks passed; live Cursor native request and desktop submission remained blocked by Cursor provider connection failure and non-targetable transparent CodeCraft panel."
+}

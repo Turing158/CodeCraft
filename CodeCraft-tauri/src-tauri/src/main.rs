@@ -2,6 +2,13 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
 fn main() {
+    if std::env::args_os().any(|a| a == "--codecraft-cursor-hook") {
+        std::process::exit(codecraft_cursor::capture());
+    }
+    if std::env::args_os().any(|a| a == "--codecraft-cursor-mcp") {
+        if let Err(error) = codecraft_cursor::run_mcp() { eprintln!("{error}"); std::process::exit(1); }
+        return;
+    }
     if std::env::args_os().any(|argument| argument == "--codecraft-trae-hook") {
         std::process::exit(codecraft_trae::hook::capture());
     }

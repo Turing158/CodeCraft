@@ -1,0 +1,70 @@
+.cursor-interaction-active > :not(.cursor-interactions) { display: none !important; }
+.cursor-interactions:not(.cursor-interactions--desktop) { box-sizing: border-box; width: 100%; min-height: 0; max-height: 100%; overflow: auto; padding: 16px; color: inherit; font-size: 13px; line-height: 1.6; }
+.cursor-interactions:not(.cursor-interactions--desktop) header { display:flex; align-items:center; gap:12px; margin-bottom:12px; }
+.cursor-interactions:not(.cursor-interactions--desktop) h2,.cursor-interactions:not(.cursor-interactions--desktop) h3,.cursor-interactions:not(.cursor-interactions--desktop) p { margin: 0 0 12px; }
+.cursor-interactions__notice,.cursor-interactions:not(.cursor-interactions--desktop) small { opacity:.76; }
+.cursor-interactions:not(.cursor-interactions--desktop) form { display:flex; flex-direction:column; gap:12px; }
+.cursor-interactions:not(.cursor-interactions--desktop) fieldset { margin:0; padding:12px; border:1px solid rgba(128,128,128,.35); border-radius:10px; min-width:0; }
+.cursor-interactions:not(.cursor-interactions--desktop) legend { padding:0 5px; font-weight:600; white-space:pre-wrap; }
+.cursor-interactions:not(.cursor-interactions--desktop) label { display:flex; gap:9px; align-items:flex-start; padding:5px 0; flex-wrap:wrap; }
+.cursor-interactions:not(.cursor-interactions--desktop) label textarea { flex-basis:100%; }
+.cursor-interactions:not(.cursor-interactions--desktop) input[type=checkbox],.cursor-interactions:not(.cursor-interactions--desktop) input[type=radio] { flex:none; margin-top:4px; accent-color:#58a888; }
+.cursor-interactions:not(.cursor-interactions--desktop) textarea { box-sizing:border-box; width:100%; border:1px solid rgba(128,128,128,.45); border-radius:8px; padding:9px; background:rgba(128,128,128,.07); color:inherit; font:inherit; resize:vertical; }
+.cursor-interactions:not(.cursor-interactions--desktop) pre { white-space:pre-wrap; overflow-wrap:anywhere; font-size:12px; background:rgba(128,128,128,.09); padding:12px; border-radius:8px; }
+.cursor-interactions__markdown { overflow-wrap:anywhere; }
+.cursor-interactions__markdown table { display:block; overflow:auto; }
+.cursor-interactions:not(.cursor-interactions--desktop) button { border:1px solid rgba(128,128,128,.35); background:rgba(128,128,128,.1); color:inherit; padding:9px 13px; border-radius:8px; font:inherit; cursor:pointer; }
+.cursor-interactions__actions { display:flex; flex-wrap:wrap; gap:8px; padding-bottom:8px; }
+.cursor-interactions__actions button:first-child { background:#8ee0b6; color:#17382b; border-color:transparent; }
+.cursor-interactions:not(.cursor-interactions--desktop) button:disabled { opacity:.48; cursor:default; }
+.cursor-interactions:not(.cursor-interactions--desktop) :focus-visible { outline:2px solid #56b28c; outline-offset:2px; }
+.cursor-interactions__error { color:#df7373; white-space:pre-wrap; }
+
+/* Desktop cards inherit the shared agent review styles without the LAN form skin. */
+.cursor-interactions--desktop {
+  min-width: 0;
+  width: 100%;
+}
+.cursor-review-form,
+.cursor-question-page {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 7px;
+  margin: 0;
+}
+.cursor-question-page[hidden],
+.cursor-review-form > .permission-submit-status:empty,
+.cursor-review-status > :empty {
+  display: none;
+}
+.cursor-review-form .cursor-tool-input,
+.cursor-review-form .cursor-recorded {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+.cursor-review-form .cursor-recorded {
+  margin: 0;
+  font-family: inherit;
+}
+.cursor-plan-secondary {
+  margin-top: 7px;
+}
+
+.cursor-tool-input { white-space: pre-wrap; overflow-wrap: anywhere; }
+.cursor-tool-details { min-width: 0; margin-top: 7px; }
+.cursor-tool-details > summary { width: fit-content; cursor: pointer; font-size: 12px; }
+.cursor-tool-details > summary:focus-visible { outline: 2px solid #56b28c; outline-offset: 2px; }
+.cursor-tool-details > pre {
+  max-height: 180px;
+  margin: 7px 0 0;
+  padding: 9px;
+  overflow: auto;
+  border-radius: 6px;
+  background: rgba(128,128,128,.09);
+  font-size: 12px;
+  line-height: 1.5;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  user-select: text;
+}

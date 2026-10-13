@@ -1,3 +1,9 @@
+import { hookKnownUninstalled, installedSessionProducts, sessionProductVisible, type SessionSourceProductId } from "./session-installation";
+import { createCursorPreviewSnapshot, isCursorPreview, applyCursorPreviewDecision } from "./cursor-preview";
+import { CursorView } from "./cursor-view";
+import { renderSessionDetailContent } from "./session-detail";
+import { emptyCursorSnapshot, readCursorSnapshot, toCursorUnifiedSession, CursorSnapshotTracker, type CursorSnapshot } from "./cursor-sessions";
+import { isCursorSession } from "./unified-sessions";
 import { emptyTraeSnapshot, readTraeSnapshot, toTraeUnifiedSession, traeReviews, traeQuestionRequest, traePlanRequest, traePermissionRequest, TraeReviewQueue, TraeDecisionIds, canDecide, type TraeReview, type TraeSnapshot } from "./trae-sessions";
 import { isTraeSession } from "./unified-sessions";
 import { WorkBuddyHandoffUi } from "./workbuddy-handoff";
@@ -35,7 +41,6 @@ import {
   questionAnswerOptions,
   sessionEntryView,
   type ClaudeAnswerOption,
-  type ClaudeOutputEntry,
   type ClaudePlanRequest,
   type ClaudePermissionRequest,
   type ClaudeQuestion,
@@ -468,7 +473,7 @@ document.addEventListener("transitionrun", handleAnimationStart, true);
 applyAppearanceSettings(false);
 applyInterfaceSettings();
 
-const codeCraftIconUrl = new URL("../src-tauri/icons/ico.svg", import.meta.url)
+const codeCraftIconUrl = new URL("../src-tauri/icons/ico.svg?no-inline", import.meta.url)
   .href;
 // Keep the small logo external because Tauri's CSP rejects Vite data URLs.
 const claudeCodeIconUrl = new URL(
@@ -507,6 +512,7 @@ const kimiIconUrl = new URL(
   "../src-tauri/icons/icon/kimi.svg?no-inline",
   import.meta.url,
 ).href;
+const cursorIconUrl = new URL("../src-tauri/icons/icon/cursor.svg?no-inline", import.meta.url).href;
 const traeIconUrl = new URL("../src-tauri/icons/icon/trae.svg?no-inline", import.meta.url).href;
 const workbuddyIconUrl = new URL(
   "../src-tauri/icons/icon/workbuddy.svg?no-inline",
@@ -1577,6 +1583,7 @@ let selectedZCodeSessionKey: string | undefined;
 let selectedGeminiSessionId: string | undefined;
 let selectedKimiSessionId: string | undefined;
 let selectedWorkBuddySessionId: string | undefined;
+let selectedCursorSessionKey: string | undefined;
 let selectedTraeSessionKey: string | undefined;
 type ReviewSource =
   | "claude"
@@ -1589,7 +1596,8 @@ type ReviewSource =
   | "gemini"
   | "kimi"
   | "workbuddy"
-  | "trae";
+  | "trae"
+  | "cursor";
 let selectedSessionSource: ReviewSource = "claude";
 let lastRefreshError: string | undefined;
 let lastOpenCodeRefreshError: string | undefined;
@@ -1607,6 +1615,14 @@ let zcodeSessionItems = new Map<string, HTMLLIElement>();
 let geminiSessionItems = new Map<string, HTMLLIElement>();
 let kimiSessionItems = new Map<string, HTMLLIElement>();
 let workbuddySessionItems = new Map<string, HTMLLIElement>();
+let latestCursorSnapshot = emptyCursorSnapshot();
+const cursorSnapshotTracker = new CursorSnapshotTracker();
+const cursorView = new CursorView(async(action,body)=>{if(isCursorPreview()&&!isTauriRuntime){applyCursorPreviewDecision(body);return;}return invoke("cursor_respond",{action,body});},async()=>{renderCursorSnapshot(isCursorPreview()&&!isTauriRuntime?createCursorPreviewSnapshot():await invoke("cursor_get_snapshot"));},
+  (request,decision)=>renderCursorSnapshot(cursorSnapshotTracker.recordDecision(request,decision)));
+let revealedCursorRequestId: string | undefined;
+let activeCursorRequestId: string | undefined;
+let activeCursorRequestEpoch: string | undefined;
+let cursorRequestOrigin: ContentView | undefined = "sessions";
 let latestTraeSnapshot = emptyTraeSnapshot();
 interface AllSessionSnapshots {
   claude: ClaudeSessionSnapshot;
@@ -1619,6 +1635,7 @@ interface AllSessionSnapshots {
   gemini: GeminiSnapshot;
   kimi: KimiSnapshot;
   workbuddy: WorkBuddySnapshot;
+  cursor: CursorSnapshot;
   trae: TraeSnapshot;
 }
 
@@ -1633,6 +1650,7 @@ interface ActiveSessionCounts {
   gemini: number;
   kimi: number;
   workbuddy: number;
+  cursor: number;
   trae: number;
 }
 
@@ -1647,6 +1665,7 @@ let latestActiveSessionCounts: ActiveSessionCounts = {
   gemini: 0,
   kimi: 0,
   workbuddy: 0,
+  cursor: 0,
   trae: 0,
 };
 
@@ -1810,6 +1829,7 @@ const soundSourcePrimed: Record<
   gemini: false,
   kimi: false,
   workbuddy: false,
+  cursor: false,
   trae: false,
 };
 
@@ -2012,20 +2032,7 @@ let settingsPanelTransition: Animation | undefined;
 let settingsPanelTransitionToken = 0;
 let displayedSettingsSection = "general";
 let requestedSettingsSection = "general";
-type SessionProductId =
-  | "all"
-  | "claude-code"
-  | "codex"
-  | "opencode"
-  | "mimo"
-  | "pi"
-  | "dsh"
-  | "zcode"
-  | "gemini"
-  | "kimi"
-  | "workbuddy"
-  | "trae";
-type SessionSourceProductId = Exclude<SessionProductId, "all">;
+type SessionProductId = "all" | SessionSourceProductId;
 type SessionProduct = {
   id: SessionProductId;
   triggerLabel: string;
@@ -2042,11 +2049,13 @@ type SessionProduct = {
     | "gemini"
     | "kimi"
     | "workbuddy"
-  | "trae";
+  | "trae"
+  | "cursor";
   iconUrl: string;
 };
 
 const sessionProducts: SessionProduct[] = [
+  { id: "cursor", triggerLabel: "Cursor", optionLabel: "Cursor", kind: "cursor", iconUrl: cursorIconUrl },
   { id: "trae", triggerLabel: "Trae CN", optionLabel: "Trae CN", kind: "trae", iconUrl: traeIconUrl },
   {
     id: "all",
@@ -2126,7 +2135,7 @@ const sessionProducts: SessionProduct[] = [
     iconUrl: workbuddyIconUrl,
   },
 ];
-const installedSessionProductIds = new Set<SessionSourceProductId>();
+let installedSessionProductIds = new Set<SessionSourceProductId>();
 let selectedSessionProductId: SessionProductId = "all";
 const SESSION_PRODUCT_MENU_TRANSITION_MS = 180;
 const SESSION_PRODUCT_MENU_FADE_MS = 150;
@@ -2284,7 +2293,7 @@ const GITHUB_RELEASES_API_URL =
   "https://api.github.com/repos/Turing158/CodeCraft/releases?per_page=1";
 
 /** Latest upstream release tag, or null when the release feed is unreachable. */
-let installedCodeVersion = "0.1.1";
+let installedCodeVersion = "0.1.2";
 let latestReleaseTag: string | null | undefined;
 let autoUpdateCheckStarted = false;
 let updateLifecycle: UpdateLifecycle = "idle";
@@ -2773,6 +2782,7 @@ const rememberReviewOrigin = (reviewView: ReviewContentView) => {
 };
 
 const hasSelectedSessionDetail = () =>
+  selectedSessionSource === "cursor" ? latestCursorSnapshot.sessions.some(s => s.key === selectedCursorSessionKey) :
   selectedSessionSource === "trae"
     ? latestTraeSnapshot.sessions.some(session => session.sessionKey === selectedTraeSessionKey)
     : selectedSessionSource === "codex"
@@ -3641,6 +3651,7 @@ const renderCurrentQuestion = (animate = false) => {
 };
 
 const renderQuestionRequest = (request: ClaudeQuestionRequest) => {
+  cursorView.detach();
   if (request.id === renderedQuestionRequestId) return;
   if (
     activeQuestionRequest &&
@@ -4158,6 +4169,7 @@ questionSubmitButton.addEventListener("click", async () => {
 });
 
 const renderPermissionRequest = (request: ClaudePermissionRequest) => {
+  cursorView.detach();
   if (request.id === renderedPermissionRequestId) return;
 
   renderedPermissionRequestId = request.id;
@@ -4620,6 +4632,7 @@ const renderPlanRequest = (
   source: ReviewSource = "claude",
   codexThreadId?: string,
 ) => {
+  cursorView.detach();
   const unchanged =
     request.id === renderedPlanRequestId && activePlanSource === source;
   activePlanSource = source;
@@ -4857,7 +4870,7 @@ const configureSessionProductIcon = (
   image.draggable = false;
   image.setAttribute("aria-hidden", "true");
   mark.replaceChildren(image);
-  if (product.kind === "trae") {
+  if (product.kind === "trae" || product.kind === "cursor") {
     configureThemedAgentIcon(mark, image, product.iconUrl);
   } else {
     delete mark.dataset.themedIcon;
@@ -5041,82 +5054,28 @@ const animateSessionProductOptionToFirst = async (
 };
 
 const syncProductVisibility = () => {
-  const showClaude =
-    installedSessionProductIds.has("claude-code") &&
-    (selectedSessionProductId === "all" ||
-      selectedSessionProductId === "claude-code");
-  const showCodex =
-    installedSessionProductIds.has("codex") &&
-    (selectedSessionProductId === "all" ||
-      selectedSessionProductId === "codex");
-  const showOpenCode =
-    installedSessionProductIds.has("opencode") &&
-    (selectedSessionProductId === "all" ||
-      selectedSessionProductId === "opencode");
-  const showMimo =
-    installedSessionProductIds.has("mimo") &&
-    (selectedSessionProductId === "all" || selectedSessionProductId === "mimo");
-  const showPi =
-    installedSessionProductIds.has("pi") &&
-    (selectedSessionProductId === "all" || selectedSessionProductId === "pi");
-  const showDsh =
-    installedSessionProductIds.has("dsh") &&
-    (selectedSessionProductId === "all" || selectedSessionProductId === "dsh");
-  const showZCode =
-    installedSessionProductIds.has("zcode") &&
-    (selectedSessionProductId === "all" || selectedSessionProductId === "zcode");
-  const showGemini =
-    installedSessionProductIds.has("gemini") &&
-    (selectedSessionProductId === "all" || selectedSessionProductId === "gemini");
-  const showKimi =
-    installedSessionProductIds.has("kimi") &&
-    (selectedSessionProductId === "all" || selectedSessionProductId === "kimi");
-  const showWorkBuddy =
-    installedSessionProductIds.has("workbuddy") &&
-    (selectedSessionProductId === "all" ||
-      selectedSessionProductId === "workbuddy");
-  claudeSessionCard.hidden = !showClaude;
-  codexSessionCard.hidden = !showCodex;
-  openCodeSessionCard.hidden = !showOpenCode;
-  mimoSessionCard.hidden = !showMimo;
-  piSessionCard.hidden = !showPi;
-  dshSessionCard.hidden = !showDsh;
-  zcodeSessionCard.hidden = !showZCode;
-  geminiSessionCard.hidden = !showGemini;
-  kimiSessionCard.hidden = !showKimi;
-  workbuddySessionCard.hidden = !showWorkBuddy;
-  document.querySelector<HTMLElement>("#trae-session-card")!.hidden = selectedSessionProductId !== "all" && selectedSessionProductId !== "trae";
+  const visible = (product: SessionSourceProductId) =>
+    sessionProductVisible(product, selectedSessionProductId, installedSessionProductIds);
+  claudeSessionCard.hidden = !visible("claude-code");
+  codexSessionCard.hidden = !visible("codex");
+  openCodeSessionCard.hidden = !visible("opencode");
+  mimoSessionCard.hidden = !visible("mimo");
+  piSessionCard.hidden = !visible("pi");
+  dshSessionCard.hidden = !visible("dsh");
+  zcodeSessionCard.hidden = !visible("zcode");
+  geminiSessionCard.hidden = !visible("gemini");
+  kimiSessionCard.hidden = !visible("kimi");
+  workbuddySessionCard.hidden = !visible("workbuddy");
+  document.querySelector<HTMLElement>("#cursor-session-card")!.hidden = !visible("cursor");
+  document.querySelector<HTMLElement>("#trae-session-card")!.hidden = !visible("trae");
   sessionSourceCards.dataset.filter = selectedSessionProductId;
   renderSessionSummary();
-};
-
-const sessionProductIdForHookAgent = (
-  id: string,
-): SessionSourceProductId | undefined => {
-  if (id === "claudeCode") return "claude-code";
-  if (id === "codex") return "codex";
-  if (id === "openCode") return "opencode";
-  if (id === "mimo") return "mimo";
-  if (id === "pi") return "pi";
-  if (id === "deepSeekHarness") return "dsh";
-  if (id === "zCode") return "zcode";
-  if (id === "geminiCli") return "gemini";
-  if (id === "kimiCode") return "kimi";
-  if (id === "trae") return "trae";
-  if (id === "workBuddy") return "workbuddy";
-  return undefined;
 };
 
 const syncInstalledSessionProducts = (
   statuses: ReadonlyArray<{ id: string; hookInstalled: boolean }>,
 ) => {
-  installedSessionProductIds.clear();
-  installedSessionProductIds.add("trae");
-  for (const status of statuses) {
-    if (!status.hookInstalled) continue;
-    const productId = sessionProductIdForHookAgent(status.id);
-    if (productId) installedSessionProductIds.add(productId);
-  }
+  installedSessionProductIds = installedSessionProducts(statuses);
 
   if (
     selectedSessionProductId !== "all" &&
@@ -5338,19 +5297,6 @@ claudeConnectionStatus.addEventListener("click", () => {
     });
 });
 
-const activityStatusLabel = (status: string) => {
-  switch (status) {
-    case "running":
-      return "执行中";
-    case "failed":
-      return "失败";
-    case "unknown":
-      return "结果未知";
-    default:
-      return "已完成";
-  }
-};
-
 const createPixelStatusSvg = (status: string, className: string) => {
   const svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
   svg.classList.add(className);
@@ -5399,6 +5345,7 @@ function* latestUnifiedSessions(): Generator<UnifiedSession> {
   yield* latestGeminiSnapshot.sessions;
   yield* latestKimiSnapshot.sessions;
   yield* latestWorkBuddySnapshot.sessions.map(toWorkBuddyUnifiedSession);
+  yield* latestCursorSnapshot.sessions.map(s => toCursorUnifiedSession(s, latestCursorSnapshot.requests));
   yield* latestTraeSnapshot.sessions.map(toTraeUnifiedSession);
 }
 
@@ -5572,13 +5519,18 @@ const syncCollapsedSessionState = () => {
 };
 
 const renderSessionDetail = (session: UnifiedSession) => {
+  const cursor = isCursorSession(session);
   const trae = isTraeSession(session);
-  document.querySelector<HTMLElement>("#trae-detail-context")!.hidden = !trae;
-  document.querySelector<HTMLElement>("#session-output-source")!.textContent = trae ? "已采集记录" : "实时转录";
-  if (trae) {
-    document.querySelector<HTMLElement>("#trae-detail-notice")!.textContent = [session.cwd, session.detailNotice].filter(Boolean).join("\n");
-    document.querySelector<HTMLButtonElement>("#trae-detail-review")!.hidden = !traeReviews(latestTraeSnapshot).some(r => r.sessionKey === session.sessionKey);
-  }
+  const pendingReview = cursor ? session.pendingReviewId !== null
+    : trae && traeReviews(latestTraeSnapshot).some(r => r.sessionKey === session.sessionKey);
+  document.querySelector<HTMLElement>("#session-detail-context")!.hidden = !trae && !pendingReview;
+  const notice = document.querySelector<HTMLElement>("#session-detail-notice")!;
+  notice.hidden = !trae;
+  notice.textContent = trae ? [session.cwd, session.detailNotice].filter(Boolean).join("\n") : "";
+  document.querySelector<HTMLButtonElement>("#session-detail-review")!.hidden = !pendingReview;
+  const outputSource = document.querySelector<HTMLElement>("#session-output-source")!;
+  outputSource.textContent = (trae || cursor) ? "已采集记录" : "实时转录";
+  outputSource.title = cursor ? session.detailNotice : "";
   const signature = JSON.stringify([
     unifiedSessionKey(session),
     session.status,
@@ -5597,14 +5549,7 @@ const renderSessionDetail = (session: UnifiedSession) => {
   ]);
   if (signature === renderedDetailSignature) return;
 
-  const previousSessionId = sessionDetailView.dataset.sessionId;
   const sessionKey = unifiedSessionKey(session);
-  const outputWasAtEnd =
-    previousSessionId !== sessionKey ||
-    sessionOutput.scrollHeight -
-      sessionOutput.scrollTop -
-      sessionOutput.clientHeight <
-      24;
 
   renderedDetailSignature = signature;
   sessionDetailView.dataset.sessionId = sessionKey;
@@ -5617,118 +5562,42 @@ const renderSessionDetail = (session: UnifiedSession) => {
     document.createTextNode(unifiedSessionStatusLabel(session)),
   );
 
-  const runningCount = session.activities.filter(
-    (activity) => activity.status === "running",
-  ).length;
-  activitySummary.textContent =
-    runningCount > 0
-      ? `${runningCount} 项执行中`
-      : `${session.activities.length} 项记录`;
-
-  if (session.activities.length === 0) {
-    const empty = document.createElement("li");
-    empty.className = "detail-empty";
-    empty.textContent = "等待会话调用工具";
-    sessionActivityList.replaceChildren(empty);
-  } else {
-    const expanded = new Set(previousSessionId === sessionKey
-      ? [...sessionActivityList.querySelectorAll<HTMLDetailsElement>("details[open]")].map(el => el.dataset.activityId) : []);
-    const items = [...session.activities].reverse().map((activity) => {
-      const item = document.createElement("li");
-      item.className = "activity-item";
-      item.dataset.activityStatus = activity.status;
-
-      const status = document.createElement("span");
-      status.className = "activity-item__status";
-      status.ariaHidden = "true";
-
-      const statusText = document.createElement("span");
-      statusText.className = "sr-only";
-      statusText.textContent = activityStatusLabel(activity.status);
-
-      const content = document.createElement("span");
-      content.className = "activity-item__content";
-      const tool = document.createElement("span");
-      tool.className = "activity-item__tool";
-      tool.textContent = activity.tool;
-      const summary = document.createElement("span");
-      summary.className = "activity-item__summary";
-      summary.textContent = activity.summary;
-      summary.title = activity.summary;
-      content.append(tool, summary);
-      if (trae) {
-        const details = document.createElement("details");
-        details.className = "trae-activity-details";
-        details.dataset.activityId = activity.id;
-        details.open = expanded.has(activity.id);
-        const label = document.createElement("summary");
-        label.textContent = "查看参数与结果";
-        const body = document.createElement("pre");
-        body.textContent = activity.summary;
-        details.append(label, body);
-        content.append(details);
-      }
-
-      const time = document.createElement("time");
-      time.className = "activity-item__time";
-      time.dateTime = new Date(activity.updatedAt).toISOString();
-      time.textContent = formatSessionTime(activity.updatedAt);
-
-      item.append(status, statusText, content, time);
-      return item;
-    });
-    sessionActivityList.replaceChildren(...items);
-  }
-
-  if (session.outputs.length === 0) {
-    const empty = document.createElement("p");
-    empty.className = "detail-empty";
-    empty.textContent = "等待会话产生可读取的输出";
-    sessionOutput.replaceChildren(empty);
-  } else {
-    const outputEntries = session.outputs.map((output: ClaudeOutputEntry) => {
-      const entry = document.createElement("article");
-      entry.className = "output-entry markdown-content";
-      entry.dataset.outputId = output.id;
-      entry.innerHTML = renderMarkdown(output.text);
-      if (output.role) {
-        const meta = document.createElement("header");
-        meta.className = "detail-section__meta";
-        meta.textContent = `${output.role === "user" ? "用户" : "Trae"}${output.capturedAt ? " · " + formatSessionTime(output.capturedAt) : ""}`;
-        entry.prepend(meta);
-      }
-      return entry;
-    });
-    sessionOutput.replaceChildren(...outputEntries);
-  }
-
-  if (isKimiSession(session)) {
-    for (const observation of session.pendingInteractions) {
-      const entry = document.createElement("article");
-      entry.className = "output-entry markdown-content";
-      const heading = document.createElement("strong");
-      heading.textContent = observation.title;
-      const detail = document.createElement("p");
-      detail.textContent = observation.detail;
-      entry.append(heading, detail);
-      if (observation.kind === "askUser") {
-        for (const raw of observation.questions) {
-          const question = document.createElement("pre");
-          question.textContent = typeof raw === "string" ? raw : JSON.stringify(raw, null, 2);
-          entry.append(question);
+  renderSessionDetailContent({
+    activitySummary,
+    activityList: sessionActivityList,
+    output: sessionOutput,
+  }, {
+    key: sessionKey,
+    assistantLabel: sessionProducts.find(product => product.kind === unifiedSessionSource(session))?.triggerLabel ?? "助手",
+    activities: trae
+      ? session.activities.map(activity => ({ ...activity, details: activity.details ?? activity.summary }))
+      : session.activities,
+    outputs: session.outputs,
+    appendOutputs: isKimiSession(session) ? host => {
+      for (const observation of session.pendingInteractions) {
+        const entry = document.createElement("article");
+        entry.className = "output-entry markdown-content";
+        const heading = document.createElement("strong");
+        heading.textContent = observation.title;
+        const detail = document.createElement("p");
+        detail.textContent = observation.detail;
+        entry.append(heading, detail);
+        if (observation.kind === "askUser") {
+          for (const raw of observation.questions) {
+            const question = document.createElement("pre");
+            question.textContent = typeof raw === "string" ? raw : JSON.stringify(raw, null, 2);
+            entry.append(question);
+          }
         }
+        if (observation.plan || observation.planReadError) {
+          const plan = document.createElement("div");
+          plan.innerHTML = renderMarkdown(observation.plan ?? observation.planReadError ?? "");
+          entry.append(plan);
+        }
+        host.append(entry);
       }
-      if (observation.plan || observation.planReadError) {
-        const plan = document.createElement("div");
-        plan.innerHTML = renderMarkdown(observation.plan ?? observation.planReadError ?? "");
-        entry.append(plan);
-      }
-      sessionOutput.append(entry);
-    }
-  }
-  if (outputWasAtEnd) {
-    sessionOutput.scrollTop = sessionOutput.scrollHeight;
-  }
+    } : undefined,
+  });
 };
 
 const setSelectedSession = (sessionId: string) => {
@@ -6199,6 +6068,7 @@ const renderSessionSummary = () => {
     gemini: latestActiveSessionCounts.gemini,
     kimi: latestActiveSessionCounts.kimi,
     workbuddy: latestActiveSessionCounts.workbuddy,
+    cursor: latestCursorSnapshot.sessions.filter(s => s.activity === "working").length,
     trae: activeSessionCount(latestTraeSnapshot.sessions),
   };
   const connectionStates: Record<SessionSourceProductId, boolean> = {
@@ -6212,6 +6082,7 @@ const renderSessionSummary = () => {
     gemini: latestGeminiSnapshot.connected,
     kimi: latestKimiSnapshot.connected,
     workbuddy: latestWorkBuddySnapshot.connected,
+    cursor: latestCursorSnapshot.connected,
     trae: latestTraeSnapshot.connected,
   };
   const selectedSources =
@@ -7112,6 +6983,7 @@ sessionDetailBack.addEventListener("click", () => {
   selectedZCodeSessionKey = undefined;
   renderedDetailSignature = undefined;
   selectedKimiSessionId = undefined;
+  selectedCursorSessionKey = undefined;
   selectedTraeSessionKey = undefined;
   switchContentView("sessions");
 });
@@ -7873,7 +7745,8 @@ type HookAgentId =
   | "geminiCli"
   | "kimiCode"
   | "workBuddy"
-  | "trae";
+  | "trae"
+  | "cursor";
 type HookIntegrationStatus = {
   id: HookAgentId;
   name: string;
@@ -8051,6 +7924,7 @@ const syncHookRefreshButton = () => {
 };
 
 const hookIconUrl = (id: HookAgentId) => {
+  if (id === "cursor") return cursorIconUrl;
   if (id === "trae") return traeIconUrl;
   if (id === "geminiCli") return geminiIconUrl;
   if (id === "kimiCode") return kimiIconUrl;
@@ -8088,6 +7962,7 @@ const syncWorkBuddyHookStatus = () => {
 };
 
 const hookIntegrationDetail = (status: HookIntegrationStatus): string => {
+  if (status.id === "cursor") return "CodeCraft 独立工具审批、问答与计划审阅；不与 Cursor 原生审批同步，计划结果不拦截未关联的原生工具。";
   if (status.id === "workBuddy") {
     const view = workBuddyHookPresentation(status.workbuddy);
     return `${status.hookInstalled ? "已安装 · " : ""}${view.label}`;
@@ -8180,7 +8055,7 @@ const syncHookAgentButton = (
   button.dataset.agentInstalled = String(status.agentInstalled);
   button.dataset.busy = String(activeOperation !== undefined);
   button.dataset.refreshing = String(hookRefreshing);
-  const canOperate = status.agentInstalled || (status.id === "workBuddy" && status.hookInstalled);
+  const canOperate = status.agentInstalled || ((status.id === "workBuddy" || status.id === "cursor") && status.hookInstalled);
   button.disabled = hookMutationsBlocked() || !canOperate;
   button.setAttribute(
     "aria-label",
@@ -8268,6 +8143,8 @@ const renderHookIntegrations = (
   syncOpenCodeHookStatus();
   syncMimoHookStatus();
   syncWorkBuddyHookStatus();
+  if (hookKnownUninstalled(nextStatuses, "cursor")) renderCursorSnapshot(latestCursorSnapshot);
+  if (hookKnownUninstalled(nextStatuses, "trae")) renderTraeSnapshot(latestTraeSnapshot);
   if (isTauriRuntime && isCodexHookKnownUninstalled()) {
     // Removing a Hook must clear any already-rendered Codex detail or pending
     // request immediately; waiting for the next session poll leaves stale
@@ -8348,7 +8225,7 @@ const fadeHookOperation = async (id: HookAgentId) => {
 
 async function toggleAgentHook(id: HookAgentId) {
   const status = hookIntegrations.find((item) => item.id === id);
-  if (!status || (!status.agentInstalled && !(id === "workBuddy" && status.hookInstalled)) || hookMutationsBlocked())
+  if (!status || (!status.agentInstalled && !((id === "workBuddy" || id === "cursor") && status.hookInstalled)) || hookMutationsBlocked())
     return;
   hookOperation = { id, installing: !status.hookInstalled };
   setHookSettingsError();
@@ -8381,6 +8258,11 @@ async function toggleAgentHook(id: HookAgentId) {
     await fadeHookOperation(id);
     hookOperation = undefined;
     renderHookIntegrations(nextStatuses);
+    // Apply the new installation state before rendering sessions; the previous
+    // Hook list would otherwise hide a just-installed Cursor snapshot.
+    if (isTauriRuntime && id === "cursor") {
+      renderCursorSnapshot(await invoke("cursor_get_snapshot"));
+    }
   } catch (error) {
     await fadeHookOperation(id);
     hookOperation = undefined;
@@ -9719,6 +9601,77 @@ const openWorkBuddyRequest = async (requestKey: string) => {
 };
 
 const workBuddyHandoffUi = new WorkBuddyHandoffUi(openWorkBuddyRequest);
+const cursorSessionItems = new Map<string, HTMLLIElement>();
+const cursorReviewIsVisible = () =>
+  (requestedContentView === "question" && activeQuestionSource === "cursor") ||
+  (requestedContentView === "permission" && activePermissionSource === "cursor") ||
+  (requestedContentView === "plan" && activePlanSource === "cursor");
+const closeCursorRequest = () => {
+  const visible = cursorReviewIsVisible();
+  cursorView.detach();
+  activeCursorRequestId = undefined;
+  activeCursorRequestEpoch = undefined;
+  if (activeQuestionSource === "cursor") { clearActiveQuestionRequest(); activeQuestionSource = "claude"; }
+  if (activePermissionSource === "cursor") { clearActivePermissionRequest(); activePermissionSource = "claude"; }
+  if (activePlanSource === "cursor") clearActivePlanRequest();
+  const target = returnViewForReview(cursorRequestOrigin);
+  if (visible) switchContentView(target === "detail" && !hasSelectedSessionDetail() ? "sessions" : target);
+};
+const renderCursorSnapshot = (value: unknown) => {
+  const observed = cursorSnapshotTracker.accept(value);
+  const uninstalled = hookKnownUninstalled(hookIntegrations, "cursor") ||
+    (observed.hook !== null && (!observed.hook.enabled || !observed.hook.filesInstalled));
+  const snapshot = uninstalled ? { ...observed, connected: false, sessions: [], requests: [] } : observed;
+  if (uninstalled) {
+    const reviewing = cursorReviewIsVisible();
+    closeCursorRequest();
+    if (reviewing) switchContentView("sessions");
+  }
+  latestCursorSnapshot = { ...snapshot, sessions: filterDismissedSessions(snapshot.sessions, dismissedSessionKeys, s => `cursor:${s.key}`, s => s.activity === "working" || s.hasCurrentRequest).filter(s => s.hasCurrentRequest || !shouldAutoCleanupSession(toCursorUnifiedSession(s).status, s.updatedAt, sessionCleanupSettings)) };
+  const selected = latestCursorSnapshot.sessions.find(s => s.key === selectedCursorSessionKey);
+  const active = latestCursorSnapshot.requests.find(r => r.requestId === activeCursorRequestId);
+  if (activeCursorRequestId && (active ? active.phase !== "pending" || active.submission.appEpoch !== snapshot.appEpoch : snapshot.connected || snapshot.appEpoch !== activeCursorRequestEpoch)) {
+    closeCursorRequest();
+  }
+  if (selectedSessionSource === "cursor") cursorView.update(latestCursorSnapshot,isTauriRuntime || isCursorPreview());
+  if (selectedSessionSource === "cursor") {
+    if (selected) renderSessionDetail(toCursorUnifiedSession(selected, latestCursorSnapshot.requests));
+    else { selectedCursorSessionKey = undefined; if (requestedContentView === "detail") switchContentView("sessions"); }
+  }
+  renderUnifiedSessionList(document.querySelector<HTMLUListElement>("#cursor-session-list")!, latestCursorSnapshot.sessions.map(s => toCursorUnifiedSession(s, latestCursorSnapshot.requests)), cursorSessionItems);
+  const status = document.querySelector<HTMLElement>("#cursor-connection-status")!;
+  setSourceStatusLabel(status, uninstalled ? "Hook 未安装" : snapshot.connected ? "独立交互已连接" : "Hook 未连接");
+  status.dataset.connected = String(snapshot.connected);
+  status.title = snapshot.integrationError ?? snapshot.capabilities.reason;
+  const pending=latestCursorSnapshot.requests.find(r=>r.actionable);
+  const canReveal = requestedContentView === "sessions" || (requestedContentView === "detail" && selectedSessionSource === "cursor");
+  if (pending && pending.requestId!==revealedCursorRequestId && canReveal && collapseExpandSettings.approvalAutoExpand) {
+    openCursorRequest(pending.requestId);void revealPanelForAttention();
+  }
+};
+const openCursorRequest = (id: string) => {
+  const request=latestCursorSnapshot.requests.find(r=>r.requestId===id);if(!request)return;
+  if (!cursorReviewIsVisible()) cursorRequestOrigin=requestedContentView;
+  selectedCursorSessionKey=request.sessionKey;selectedSessionSource="cursor";
+  clearActiveQuestionRequest();clearActivePermissionRequest();clearActivePlanRequest();
+  const kind=request.body.kind;
+  activeCursorRequestId=id;activeCursorRequestEpoch=request.submission.appEpoch;revealedCursorRequestId=id;
+  if(kind==="question")activeQuestionSource="cursor";else if(kind==="permission")activePermissionSource="cursor";else activePlanSource="cursor";
+  cursorView.update(latestCursorSnapshot,isTauriRuntime || isCursorPreview());
+  cursorView.show(kind==="question"?questionView:kind==="plan"?planView:permissionView,id,closeCursorRequest);
+  switchContentView(kind);
+};
+const openCursorSession = (key: string) => {
+  const session = latestCursorSnapshot.sessions.find(s => s.key === key);
+  if (!session) return;
+  selectedCursorSessionKey = key; selectedSessionSource = "cursor";
+  renderSessionDetail(toCursorUnifiedSession(session, latestCursorSnapshot.requests));
+  renderUnifiedSessionList(document.querySelector<HTMLUListElement>("#cursor-session-list")!, latestCursorSnapshot.sessions.map(s => toCursorUnifiedSession(s, latestCursorSnapshot.requests)), cursorSessionItems);
+  switchContentView("detail"); sessionDetailBack.focus({ preventScroll: true });
+};
+const cursorCardIcon = document.querySelector<HTMLImageElement>("#cursor-session-card-icon")!;
+cursorCardIcon.src = cursorIconUrl;
+configureThemedAgentIcon(cursorCardIcon.closest<HTMLElement>(".session-source-card__mark"), cursorCardIcon, cursorIconUrl);
 const traeSessionItems = new Map<string, HTMLLIElement>();
 const traeReviewQueue = new TraeReviewQueue();
 const traeDecisionIds = new TraeDecisionIds();
@@ -9762,6 +9715,10 @@ const renderTraeReview = (review: TraeReview, reveal = false) => {
   if (reveal && collapseExpandSettings.approvalAutoExpand) void revealPanelForAttention().catch(console.error);
 };
 const renderTraeSnapshot = (snapshot: TraeSnapshot) => {
+  snapshot = readTraeSnapshot(snapshot);
+  const uninstalled = hookKnownUninstalled(hookIntegrations, "trae") ||
+    (snapshot.hook !== undefined && (!snapshot.hook.enabled || !snapshot.hook.filesInstalled));
+  if (uninstalled) snapshot = { ...snapshot, connected: false, sessions: [], requests: [], tasks: [], grants: [] };
   snapshot = {
     ...snapshot,
     sessions: filterDismissedSessions(
@@ -9787,7 +9744,7 @@ const renderTraeSnapshot = (snapshot: TraeSnapshot) => {
   }
   renderUnifiedSessionList(document.querySelector<HTMLUListElement>("#trae-session-list")!, snapshot.sessions.map(toTraeUnifiedSession), traeSessionItems);
   const status = document.querySelector<HTMLElement>("#trae-connection-status")!;
-  status.textContent = !snapshot.connected ? "Hook 未连接" : snapshot.capabilities.toolApproval ? "Hook 已连接" : "当前版本暂不支持工具审批";
+  setSourceStatusLabel(status, uninstalled ? "Hook 未安装" : !snapshot.connected ? "Hook 未连接" : snapshot.capabilities.toolApproval ? "Hook 已连接" : "当前版本暂不支持工具审批");
   status.dataset.connected = String(snapshot.connected);
   const reviews = traeReviews(snapshot);
   const visible = traeReviewIsVisible();
@@ -9814,7 +9771,14 @@ const openTraeSession = (sessionKey: string) => {
   switchContentView("detail");
   sessionDetailBack.focus({ preventScroll: true });
 };
-document.querySelector<HTMLButtonElement>("#trae-detail-review")!.addEventListener("click", () => {
+document.querySelector<HTMLButtonElement>("#session-detail-review")!.addEventListener("click", () => {
+  if (selectedSessionSource === "cursor") {
+    const session = latestCursorSnapshot.sessions.find(s => s.key === selectedCursorSessionKey);
+    const requestId = session ? toCursorUnifiedSession(session, latestCursorSnapshot.requests).pendingReviewId : null;
+    if (requestId) openCursorRequest(requestId);
+    return;
+  }
+  if (selectedSessionSource !== "trae") return;
   const review = traeReviews(latestTraeSnapshot).find(r => r.sessionKey === selectedTraeSessionKey);
   if (review) renderTraeReview(review, true);
 });
@@ -10221,7 +10185,7 @@ const createSessionButton = (session: UnifiedSession): HTMLLIElement => {
   button.setAttribute(
     "aria-pressed",
     String(
-      isTraeSession(session)
+      isCursorSession(session) ? selectedSessionSource === "cursor" && session.sessionKey === selectedCursorSessionKey : isTraeSession(session)
         ? selectedSessionSource === "trae" && session.sessionKey === selectedTraeSessionKey
         : isCodexSession(session)
         ? session.id === selectedCodexSessionId
@@ -10244,7 +10208,7 @@ const createSessionButton = (session: UnifiedSession): HTMLLIElement => {
   );
   button.title = `${unifiedSessionStatusLabel(session)} · ${session.title}`;
   button.addEventListener("click", () =>
-    isTraeSession(session)
+    isCursorSession(session) ? openCursorSession(session.sessionKey) : isTraeSession(session)
       ? openTraeSession(session.sessionKey)
       : isCodexSession(session)
       ? setSelectedCodexSession(session.id)
@@ -10338,7 +10302,7 @@ const updateSessionButton = (
   if (button.dataset.sessionKey !== sessionKey) button.dataset.sessionKey = sessionKey;
   if (button.dataset.sessionSource !== sessionSource) button.dataset.sessionSource = sessionSource;
   const pressed = String(
-    isTraeSession(session)
+    isCursorSession(session) ? selectedSessionSource === "cursor" && session.sessionKey === selectedCursorSessionKey : isTraeSession(session)
       ? selectedSessionSource === "trae" && session.sessionKey === selectedTraeSessionKey
       : isCodexSession(session)
       ? session.id === selectedCodexSessionId
@@ -10652,6 +10616,7 @@ const refreshAllSessions = async () => {
   try {
     const bundle = await invoke<AllSessionSnapshots>("list_all_sessions");
     latestActiveSessionCounts = {
+      cursor: readCursorSnapshot(bundle.cursor).sessions.filter(s => s.activity === "working").length,
       trae: activeSessionCount(bundle.trae?.sessions ?? []),
       claude: activeSessionCount(bundle.claude.sessions),
       codex: activeSessionCount(bundle.codex.sessions),
@@ -10706,6 +10671,7 @@ const refreshAllSessions = async () => {
     ) {
       renderWorkBuddySnapshot(bundle.workbuddy);
     }
+    renderCursorSnapshot(bundle.cursor);
     renderTraeSnapshot(readTraeSnapshot(bundle.trae));
     latestActiveSessionCounts = {
       claude: activeSessionCount(latestSessions),
@@ -10718,6 +10684,7 @@ const refreshAllSessions = async () => {
       gemini: activeSessionCount(latestGeminiSnapshot.sessions),
       kimi: activeSessionCount(latestKimiSnapshot.sessions),
       workbuddy: latestActiveSessionCounts.workbuddy,
+    cursor: latestCursorSnapshot.sessions.filter(s => s.activity === "working").length,
     trae: activeSessionCount(latestTraeSnapshot.sessions),
     };
     renderSessionSummary();
@@ -10734,6 +10701,7 @@ const refreshAllSessions = async () => {
       refreshGeminiSessions(),
       refreshKimiSessions(),
       refreshWorkBuddySessions(),
+      invoke<CursorSnapshot>("cursor_get_snapshot").then(renderCursorSnapshot),
       invoke<TraeSnapshot>("trae_get_snapshot").then(renderTraeSnapshot),
     ]);
   } finally {
@@ -10852,6 +10820,7 @@ const dismissSessionFromList = (data: CodeCraftContextData | undefined) => {
       data.sessionSource === "mimo" ||
       data.sessionSource === "kimi" ||
       data.sessionSource === "workbuddy" ||
+      data.sessionSource === "cursor" ||
       data.sessionSource === "trae"
       ? sessionKey
       : `${data.sessionSource}:${sessionKey}`,
@@ -10939,6 +10908,8 @@ const dismissSessionFromList = (data: CodeCraftContextData | undefined) => {
         (session) => session.id !== data.sessionId,
       ),
     });
+  } else if (data.sessionSource === "cursor") {
+    renderCursorSnapshot(latestCursorSnapshot);
   } else if (data.sessionSource === "trae") {
     renderTraeSnapshot({
       ...latestTraeSnapshot,
@@ -11012,6 +10983,7 @@ const contextMenu = new ContextMenuController<CodeCraftContextData>(
           sessionSource === "zcode" ||
           sessionSource === "kimi" ||
           sessionSource === "workbuddy" ||
+          sessionSource === "cursor" ||
           sessionSource === "trae")
       ) {
         return {
@@ -11436,6 +11408,13 @@ if (isTauriRuntime) {
         ]
       : [],
   });
+  if (isCursorPreview()) {
+    void startupSequencePromise.then(() => controller.revealIfCollapsed());
+    browserHookIntegrations.push({ id: "cursor", name: "Cursor", agentInstalled: true, hookInstalled: true });
+    renderHookIntegrations(browserHookIntegrations, false);
+    renderCursorSnapshot(createCursorPreviewSnapshot());
+
+  }
   if (previewKimi === "question" || previewKimi === "permission" || previewKimi === "plan") {
     const now = Date.now();
     const interaction: KimiSession["pendingInteractions"][number] = {

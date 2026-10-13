@@ -1,0 +1,36 @@
+#[path = "../src/cursor_compatibility.rs"]
+pub mod compatibility;
+#[path = "../src/cursor_files.rs"]
+pub mod files;
+#[path = "../src/cursor_history.rs"]
+pub mod history;
+#[path = "../src/cursor_install.rs"]
+pub mod install;
+#[path = "../src/cursor_interaction.rs"]
+pub mod interaction;
+#[path = "../src/cursor_mcp.rs"]
+pub mod mcp;
+#[path = "../src/cursor_process.rs"]
+pub mod process;
+#[path = "../src/cursor_product.rs"]
+pub mod product;
+#[path = "../src/cursor_project_rules.rs"]
+pub mod project_rules;
+#[path = "../src/cursor_projects.rs"]
+pub mod projects;
+#[path = "../src/cursor_protocol.rs"]
+pub mod protocol;
+#[path = "../src/cursor_runtime.rs"]
+pub mod runtime;
+#[path = "../src/cursor_schema.rs"]
+pub mod schema;
+#[path = "../src/cursor_store.rs"]
+pub mod store;
+#[path = "../src/cursor_tickets.rs"]
+pub mod tickets;
+#[path = "../src/cursor_transport.rs"]
+pub mod transport;
+#[path = "../src/cursor_workflow.rs"]
+pub mod workflow;
+
+pub use runtime::{capture, dispatch, run_mcp, snapshot, start};

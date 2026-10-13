@@ -1,0 +1,78 @@
+{
+  "schemaVersion": 1,
+  "evidenceKind": "sourceAnalysis",
+  "cursorClientExecuted": false,
+  "cursorVersion": "3.21.16",
+  "platform": "windows",
+  "architecture": "x64",
+  "inspectedAt": "2026-09-21T12:22:35.093Z",
+  "observations": [
+    {
+      "kind": "agentHost",
+      "relativePath": "extensions/cursor-agent-host/dist/main.js",
+      "sha256": "28a304e5c466a347022d44a3d3f33760e15ac09aecdd2ee2053c914950db4535",
+      "findings": [
+        {
+          "needle": "const h=`MCP:${t.toolName}`",
+          "found": true,
+          "offset": 3789160,
+          "excerpt": " p=Object.fromEntries(Object.entries(t.args).map(([e,t])=>[e,null==t?void 0:t.toJson()]));const h=`MCP:${t.toolName}`;try{const r=yield this.hookExecutor.executeHookForStep(E._E.preToolUse,Object.assign(Object.assign({},l),{tool_name:h,tool_input:p,tool_use_id:u}));if(\"deny\"===(null==r?void 0:r.permission)){const t=r.user_message||\"MCP tool blocked by preToolUse hook\";try{(0,F.Bv)(d,(0,F.JJ)({hookEventName:E._E.preToolUse,additionalContext:r.additional_context}))"
+        },
+        {
+          "needle": "mcp_server_name:t.providerIdentifier",
+          "found": true,
+          "offset": 3791486,
+          "excerpt": "].filter(Boolean).join(\" \")}}else g={command:t.providerIdentifier};const y=Object.assign({mcp_server_name:t.providerIdentifier},void 0!==A?{mcp_server_url:A}:{}),w=Object.assign(Object.assign(Object.assign(Object.assign({},l),{tool_name:t.toolName,tool_input:JSON.stringify(p)}),y),g),v=yield this.hookExecutor.executeHookForStep(E._E.beforeMCPExecution,w);if(\"deny\"===(null==v?void 0:v.permission)){const t=J(\"MCP tool execution\",v.user_message);return yield this.firePostToo"
+        },
+        {
+          "needle": "pendingDecisionProvider.requestApproval",
+          "found": true,
+          "offset": 1420364,
+          "excerpt": "isibleError:e,isReadonly:t?.isReadonly??!1})}})});if(null!==e)return e}const a=await this.pendingDecisionProvider.requestApproval({type:qn.Delete,details:{path:o},toolCallId:t.toolCallId});if(!a.approved)return new Dn.Pi({result:{case:\"rejected\",value:new Dn.iq({path:o,reason:a.reason||\"\"})}});let c;try{c=await(0,n.stat)(o)}catch(e){return\"ENOENT\"===e.code?new Dn.Pi({result:{case:\"fileNotFound\",value:new Dn.n0({path:o})}}):new Dn.Pi({result:{case:\"error\",value:new Dn.GU({pat"
+        },
+        {
+          "needle": "updated_input",
+          "found": true,
+          "offset": 3548720,
+          "excerpt": "n.user_message,agentMessage:null==n?void 0:n.agent_message,updatedInput:(null==n?void 0:n.updated_input)?JSON.stringify(n.updated_input):void 0,additionalContext:null==n?void 0:n.additional_context})}})})}case\"postToolUse\":{const e=J.request.value,t=e.toolInput?e.toolInput.toJson():{},r=Object.assign(Object.assign({conversation_id:null!==(k=e.conversationId)&&void 0!==k?k:\"\",generation_id:null!==(B=e.generationId)&&void 0!==B?B:\"\",model:null!==(x=e."
+        },
+        {
+          "needle": "firePostToolUseFailureAsync",
+          "found": true,
+          "offset": 3789744,
+          "excerpt": "arrier\",{toolName:h,actualLength:t.actualLength,maxLength:t.maxLength})}return yield this.firePostToolUseFailureAsync(e,l,h,p,t,\"permission_denied\",0,u,!1,d),new Le.iz({result:{case:\"permissionDenied\",value:new Le.HQ({error:J(\"MCP tool execution\",t),isReadonly:!1})}})}if(null==r?void 0:r.updated_input)try{for(const[e,n]of Object.entries(r.updated_input))void 0!==n&&(t.args[e]=$e.Value.fromJson(n));p=Object.fromEntries(Object.entries(t.args).map(([e,t])=>[e,null=="
+        }
+      ]
+    },
+    {
+      "kind": "extensionApi",
+      "relativePath": "out/vscode-dts/vscode.d.ts",
+      "sha256": "e0e5b7e6fb00a581c1d37fcc7dcf743992bad238736144453242de53e43c430b",
+      "findings": [
+        {
+          "needle": "namespace cursor",
+          "found": false,
+          "offset": -1,
+          "excerpt": null
+        },
+        {
+          "needle": "nativeApprovalId",
+          "found": false,
+          "offset": -1,
+          "excerpt": null
+        },
+        {
+          "needle": "submitApproval",
+          "found": false,
+          "offset": -1,
+          "excerpt": null
+        }
+      ]
+    }
+  ],
+  "conclusions": {
+    "mcpPreToolIdentity": "Installed wrapper uses MCP:<toolName>; no server identity in that preToolUse payload. Requires runtime verification and a non-ambiguous binding before injection.",
+    "nativeShared": "Internal requestApproval references are implementation details. No reachable adapter, versioned atomic submission or acceptance/query path has been verified.",
+    "supported": false
+  }
+}

@@ -55,8 +55,8 @@
   --working-square-image: none;
   --startup-panel-height: 132px;
   --content-max-height: 640px;
-  --settings-min-height: 300px;
-  --settings-max-height: 780px;
+  --settings-min-height: 240px;
+  --settings-max-height: 400px;
   --session-list-max-height: 276px;
 }
 
@@ -4003,19 +4003,19 @@ button {
   overflow: auto;
 }
 
-.trae-detail-context {
+.session-detail-context {
   color: var(--text-muted);
   font-size: calc(10px * var(--font-scale));
   line-height: 1.5;
   overflow-wrap: anywhere;
 }
 
-.trae-detail-context p {
+.session-detail-context p {
   margin: 0 0 6px;
   white-space: pre-wrap;
 }
 
-.trae-detail-context button {
+.session-detail-context button {
   padding: 5px 9px;
   border: 1px solid var(--surface-border);
   border-radius: 5px;
@@ -4024,16 +4024,16 @@ button {
   cursor: pointer;
 }
 
-.trae-activity-details {
+.session-activity-details {
   color: var(--text-secondary);
   font-size: calc(10px * var(--font-scale));
 }
 
-.trae-activity-details summary {
+.session-activity-details summary {
   cursor: pointer;
 }
 
-.trae-activity-details pre {
+.session-activity-details pre {
   max-height: 220px;
   overflow: auto;
   white-space: pre-wrap;
@@ -4338,7 +4338,7 @@ button {
   white-space: pre-wrap;
 }
 
-#plan-popover {
+:is(#plan-popover, .plan-popover) {
   max-height: 240px;
 }
 
@@ -4685,7 +4685,7 @@ button {
   -webkit-user-select: text;
 }
 
-#plan-summary-text {
+:is(#plan-summary-text, .plan-summary-text) {
   display: -webkit-box;
   overflow: hidden;
   -webkit-box-orient: vertical;
@@ -4786,7 +4786,7 @@ button {
   white-space: normal;
 }
 
-#plan-custom-input {
+:is(#plan-custom-input, .plan-custom-input) {
   box-sizing: border-box;
   min-width: 0;
   height: 40px;
@@ -4809,28 +4809,28 @@ button {
     box-shadow 180ms ease;
 }
 
-#plan-custom-input::placeholder {
+:is(#plan-custom-input, .plan-custom-input)::placeholder {
   color: #697482;
 }
 
-#plan-custom-input:focus-visible {
+:is(#plan-custom-input, .plan-custom-input):focus-visible {
   border-color: rgba(94, 234, 212, 0.5);
   box-shadow: 0 0 0 2px rgba(94, 234, 212, 0.12);
 }
 
-#plan-custom-input:disabled,
-#plan-custom-submit:disabled {
+:is(#plan-custom-input, .plan-custom-input):disabled,
+:is(#plan-custom-submit, .plan-custom-submit):disabled {
   opacity: 0.7;
 }
 
-#plan-custom-submit {
+:is(#plan-custom-submit, .plan-custom-submit) {
   box-sizing: border-box;
   height: 40px;
   min-height: 40px;
   padding: 0 14px;
 }
 
-#plan-options {
+:is(#plan-options, .plan-options) {
   display: grid;
   grid-template-columns: 1fr auto;
   gap: 5px 7px;
@@ -4838,7 +4838,8 @@ button {
 }
 
 #plan-auto,
-#plan-auto-remember {
+#plan-auto-remember,
+.plan-execute-option {
   grid-column: 1 / -1;
   min-height: 40px;
   flex: 0 0 40px;
@@ -5120,7 +5121,7 @@ button {
 :root[data-theme="light"] .plan-markdown h3,
 :root[data-theme="light"] .plan-markdown h4,
 :root[data-theme="light"] .plan-markdown strong,
-:root[data-theme="light"] #plan-custom-input,
+:root[data-theme="light"] :is(#plan-custom-input, .plan-custom-input),
 :root[data-theme="light"] .session-live {
   color: #0f172a;
 }
@@ -5155,7 +5156,7 @@ button {
 :root[data-theme="light"] .question-header-badge,
 :root[data-theme="light"] .question-block--extra textarea::placeholder,
 :root[data-theme="light"] .permission-cwd,
-:root[data-theme="light"] #plan-custom-input::placeholder,
+:root[data-theme="light"] :is(#plan-custom-input, .plan-custom-input)::placeholder,
 :root[data-theme="light"] .session-live__chevron {
   color: #64748b;
 }
@@ -5457,7 +5458,7 @@ button {
 :root[data-theme="light"] .question-option,
 :root[data-theme="light"] .question-action,
 :root[data-theme="light"] .question-block--extra textarea,
-:root[data-theme="light"] #plan-custom-input {
+:root[data-theme="light"] :is(#plan-custom-input, .plan-custom-input) {
   border-color: rgba(15, 23, 42, 0.13);
   background: var(--surface-background);
 }

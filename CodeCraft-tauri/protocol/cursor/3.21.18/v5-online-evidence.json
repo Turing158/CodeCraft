@@ -1,0 +1,427 @@
+{
+  "schemaVersion": 1,
+  "evidenceKind": "cursorIndependentRuntime",
+  "scope": "v5-public-hooks-and-independent-mcp",
+  "cursorClientExecuted": true,
+  "probeInjected": false,
+  "nativeShared": false,
+  "cursorVersion": "3.21.18",
+  "mode": "Agent",
+  "platform": "windows",
+  "sourceRun": "v5-live-b9b4ff3a-988f-4b85-b553-a26f018cbcf5",
+  "testedExeSha256": "88B7806D51173C36AA523CB42008FFFFB18F74B211DA279FBD3D356AB0FD494A",
+  "capturedAt": "2026-09-24T11:31:18.5958881+08:00",
+  "observedVia": [
+    "real Cursor desktop conversation",
+    "production EXE LAN approval UI",
+    "production broker state and afterAgentResponse history"
+  ],
+  "requests": [
+    {
+      "requestId": "15b66a2b-a2b7-4c87-ae02-45c0d5f7a89f",
+      "clientRequestId": "0930e516-5a1b-4b21-b994-63dd6b466ca9",
+      "kind": "permission",
+      "eventName": "beforeMCPExecution",
+      "toolName": "codecraft_cursor · codecraft_get_result",
+      "phase": "decided",
+      "transport": "written",
+      "reason": null,
+      "plan": null,
+      "decision": {
+        "submissionVersion": 2,
+        "value": {
+          "kind": "permission",
+          "action": "allowOnce"
+        }
+      }
+    },
+    {
+      "requestId": "1a6b685d-2b12-4cff-b670-58068676f0a8",
+      "clientRequestId": "de5bad98-a997-4a41-ab62-32aa428f6bf3",
+      "kind": "permission",
+      "eventName": "beforeMCPExecution",
+      "toolName": "codecraft_cursor · codecraft_get_result",
+      "phase": "expired",
+      "transport": "notStarted",
+      "reason": "HUMAN_WAIT_EXPIRED",
+      "plan": null,
+      "decision": null
+    },
+    {
+      "requestId": "375847b7-e734-42ce-a91f-dd73c6cd1c7a",
+      "clientRequestId": "fa2e5d6d-eee5-47d6-bffc-887e079e39de",
+      "kind": "permission",
+      "eventName": "beforeMCPExecution",
+      "toolName": "codecraft_cursor · codecraft_get_result",
+      "phase": "expired",
+      "transport": "notStarted",
+      "reason": "HUMAN_WAIT_EXPIRED",
+      "plan": null,
+      "decision": null
+    },
+    {
+      "requestId": "4ada6a61-3988-4704-a05a-bf9bae49dba2",
+      "clientRequestId": "6d776d4a-e314-44ee-8108-041959dbbe06",
+      "kind": "permission",
+      "eventName": "beforeMCPExecution",
+      "toolName": "codecraft_cursor · codecraft_end_workflow",
+      "phase": "decided",
+      "transport": "written",
+      "reason": null,
+      "plan": null,
+      "decision": {
+        "submissionVersion": 2,
+        "value": {
+          "kind": "permission",
+          "action": "allowOnce"
+        }
+      }
+    },
+    {
+      "requestId": "614dc9e6-81ab-4eca-9c41-007083768987",
+      "clientRequestId": "31d8220e-dcdf-4ea5-b35e-773e776aaeb8",
+      "kind": "permission",
+      "eventName": "beforeMCPExecution",
+      "toolName": "codecraft_cursor · codecraft_get_result",
+      "phase": "expired",
+      "transport": "notStarted",
+      "reason": "HUMAN_WAIT_EXPIRED",
+      "plan": null,
+      "decision": null
+    },
+    {
+      "requestId": "65884e30-8664-480b-9dca-79a247532c83",
+      "clientRequestId": "a8465173-eabe-40b4-8d58-367e533752d1",
+      "kind": "permission",
+      "eventName": "beforeMCPExecution",
+      "toolName": "codecraft_cursor · codecraft_start_workflow",
+      "phase": "expired",
+      "transport": "notStarted",
+      "reason": "HUMAN_WAIT_EXPIRED",
+      "plan": null,
+      "decision": null
+    },
+    {
+      "requestId": "69c9b3ed-18e7-4aed-8c3a-b69e86987b5b",
+      "clientRequestId": "b94f0522-d2f4-4f4e-960b-46c29967b912",
+      "kind": "permission",
+      "eventName": "beforeMCPExecution",
+      "toolName": "codecraft_cursor · codecraft_get_result",
+      "phase": "decided",
+      "transport": "written",
+      "reason": null,
+      "plan": null,
+      "decision": {
+        "submissionVersion": 2,
+        "value": {
+          "kind": "permission",
+          "action": "allowOnce"
+        }
+      }
+    },
+    {
+      "requestId": "81992068-7aae-4997-be67-8ea73b6bc92d",
+      "clientRequestId": "ca0f56ad-7c7f-456a-b983-6d9433197f1e",
+      "kind": "permission",
+      "eventName": "beforeMCPExecution",
+      "toolName": "codecraft_cursor · codecraft_review_plan",
+      "phase": "disconnected",
+      "transport": "written",
+      "reason": "DELIVERY_LEASE_EXPIRED",
+      "plan": null,
+      "decision": {
+        "submissionVersion": 2,
+        "value": {
+          "kind": "permission",
+          "action": "allowOnce"
+        }
+      }
+    },
+    {
+      "requestId": "8529de89-be31-49a5-be6d-ec9e25f5096b",
+      "clientRequestId": "1c07f3c5-dba1-48f0-9f83-323d136cdc45",
+      "kind": "permission",
+      "eventName": "beforeMCPExecution",
+      "toolName": "codecraft_cursor · codecraft_get_result",
+      "phase": "expired",
+      "transport": "notStarted",
+      "reason": "HUMAN_WAIT_EXPIRED",
+      "plan": null,
+      "decision": null
+    },
+    {
+      "requestId": "a0da5c0d-ec47-47b3-93df-5011ac3a3002",
+      "clientRequestId": "936d6de3-6e85-4b39-b74f-5854a012c081",
+      "kind": "permission",
+      "eventName": "preToolUse",
+      "toolName": "Shell",
+      "phase": "decided",
+      "transport": "written",
+      "reason": null,
+      "plan": null,
+      "decision": {
+        "submissionVersion": 2,
+        "value": {
+          "kind": "permission",
+          "action": "deny"
+        }
+      }
+    },
+    {
+      "requestId": "a349e99d-ecd0-4bdf-b40a-9b02ca7b32c2",
+      "clientRequestId": "add522fb-1548-444e-96e2-425d0b1a2a61",
+      "kind": "permission",
+      "eventName": "beforeMCPExecution",
+      "toolName": "codecraft_cursor · codecraft_ask_user",
+      "phase": "expired",
+      "transport": "notStarted",
+      "reason": "HUMAN_WAIT_EXPIRED",
+      "plan": null,
+      "decision": null
+    },
+    {
+      "requestId": "a38e52f2-184c-4a83-a329-ff2ec2b3e188",
+      "clientRequestId": "adfdac97-cb96-469a-a560-d401ba77b56b",
+      "kind": "permission",
+      "eventName": "beforeMCPExecution",
+      "toolName": "codecraft_cursor · codecraft_get_result",
+      "phase": "decided",
+      "transport": "written",
+      "reason": null,
+      "plan": null,
+      "decision": {
+        "submissionVersion": 2,
+        "value": {
+          "kind": "permission",
+          "action": "allowOnce"
+        }
+      }
+    },
+    {
+      "requestId": "bad663e6-aff6-4537-bb80-f2e0f25dd8fb",
+      "clientRequestId": "live-plan-20260924-01",
+      "kind": "plan",
+      "eventName": null,
+      "toolName": null,
+      "phase": "decided",
+      "transport": "written",
+      "reason": null,
+      "plan": {
+        "planId": "live-plan",
+        "revision": 1,
+        "contentDigest": "d07fc294b18894f4f6f240b19da5e063fc7a7735366d21b97760f268b6242ef5"
+      },
+      "decision": {
+        "submissionVersion": 2,
+        "value": {
+          "kind": "plan",
+          "action": "revise",
+          "feedback": "请增加结果只领取一次的验证。"
+        }
+      }
+    },
+    {
+      "requestId": "bec8e877-fb5c-428a-98fa-e7d7aa709414",
+      "clientRequestId": "a44f8fb7-120b-4fda-a59f-989e16dfb60b",
+      "kind": "permission",
+      "eventName": "beforeMCPExecution",
+      "toolName": "codecraft_cursor · codecraft_get_result",
+      "phase": "decided",
+      "transport": "written",
+      "reason": null,
+      "plan": null,
+      "decision": {
+        "submissionVersion": 2,
+        "value": {
+          "kind": "permission",
+          "action": "allowOnce"
+        }
+      }
+    },
+    {
+      "requestId": "c6cb1406-726b-41e0-a11f-bed40a70d0b1",
+      "clientRequestId": "732d7298-cc0d-4d92-9aa5-c21c772f33ff",
+      "kind": "permission",
+      "eventName": "beforeMCPExecution",
+      "toolName": "codecraft_cursor · codecraft_ask_user",
+      "phase": "decided",
+      "transport": "written",
+      "reason": null,
+      "plan": null,
+      "decision": {
+        "submissionVersion": 2,
+        "value": {
+          "kind": "permission",
+          "action": "allowOnce"
+        }
+      }
+    },
+    {
+      "requestId": "d73c264f-312d-4db5-89c2-a9b3f139dd70",
+      "clientRequestId": "live-question-20260924-02",
+      "kind": "question",
+      "eventName": null,
+      "toolName": null,
+      "phase": "decided",
+      "transport": "written",
+      "reason": null,
+      "plan": null,
+      "decision": {
+        "submissionVersion": 2,
+        "value": {
+          "kind": "answered",
+          "answers": [
+            {
+              "questionId": "transport",
+              "selectedOptionIds": [
+                "pass"
+              ],
+              "text": "LAN 实机回传验证 20260924-02",
+              "skipped": false
+            }
+          ]
+        }
+      }
+    },
+    {
+      "requestId": "f281ce4e-4337-454f-b1fd-ed198ce468b4",
+      "clientRequestId": "live-question-20260924-01",
+      "kind": "question",
+      "eventName": null,
+      "toolName": null,
+      "phase": "expired",
+      "transport": "notStarted",
+      "reason": "HUMAN_WAIT_EXPIRED",
+      "plan": null,
+      "decision": {
+        "submissionVersion": 2,
+        "value": {
+          "kind": "answered",
+          "answers": [
+            {
+              "questionId": "transport",
+              "selectedOptionIds": [
+                "pass"
+              ],
+              "text": "LAN 实机回传验证 20260924",
+              "skipped": false
+            }
+          ]
+        }
+      }
+    },
+    {
+      "requestId": "f98d37f2-abb6-4a7b-a651-6cd40e2d34f2",
+      "clientRequestId": "be970ace-48ef-4737-abf7-1cf1fd35fd24",
+      "kind": "permission",
+      "eventName": "beforeMCPExecution",
+      "toolName": "codecraft_cursor · codecraft_get_result",
+      "phase": "decided",
+      "transport": "written",
+      "reason": null,
+      "plan": null,
+      "decision": {
+        "submissionVersion": 2,
+        "value": {
+          "kind": "permission",
+          "action": "allowOnce"
+        }
+      }
+    },
+    {
+      "requestId": "fad1766d-10ef-4ac3-bd1d-6e2a5cf0d464",
+      "clientRequestId": "8cb49d39-1599-489a-842d-26265212cb95",
+      "kind": "permission",
+      "eventName": "beforeMCPExecution",
+      "toolName": "codecraft_cursor · codecraft_list_projects",
+      "phase": "expired",
+      "transport": "notStarted",
+      "reason": "HUMAN_WAIT_EXPIRED",
+      "plan": null,
+      "decision": null
+    },
+    {
+      "requestId": "fe7d7d2e-a6ee-4e1d-90af-92e91dd5426b",
+      "clientRequestId": "live-plan-20260924-02",
+      "kind": "plan",
+      "eventName": null,
+      "toolName": null,
+      "phase": "decided",
+      "transport": "written",
+      "reason": null,
+      "plan": {
+        "planId": "live-plan",
+        "revision": 2,
+        "contentDigest": "f8fad2252546e3e1661a3687cec45b45ea9dbb53c57673b7d42b1be155406cb1"
+      },
+      "decision": {
+        "submissionVersion": 2,
+        "value": {
+          "kind": "plan",
+          "action": "approved",
+          "feedback": ""
+        }
+      }
+    },
+    {
+      "requestId": "ff2b324b-7782-47b9-8b84-8c0921004d70",
+      "clientRequestId": "6369441b-89f1-4793-83be-8e23930a215a",
+      "kind": "permission",
+      "eventName": "beforeMCPExecution",
+      "toolName": "codecraft_cursor · codecraft_review_plan",
+      "phase": "expired",
+      "transport": "notStarted",
+      "reason": "HUMAN_WAIT_EXPIRED",
+      "plan": null,
+      "decision": null
+    }
+  ],
+  "clientResponses": [
+    {
+      "generation": "9ca69b33-4bfb-4e3b-89b6-17d4acb3eb7a",
+      "text": "```json\n{\"instructions\":\"Keep this workflowId for this review. Use codecraft_get_result until a human decision is returned. This does not control native Cursor tools.\",\"scope\":\"independent\",\"workflowId\":\"workflow-c93188f3-959a-4392-88b9-69a89bd82af1\"}\n```",
+      "truncated": false
+    },
+    {
+      "generation": "32176fcf-54b2-4000-a55e-1914dc86ad43",
+      "text": "```json\n{\"phase\":\"expired\",\"pollAfterMs\":1000,\"reason\":\"HUMAN_WAIT_EXPIRED\",\"requestId\":\"f281ce4e-4337-454f-b1fd-ed198ce468b4\",\"status\":\"terminated\",\"transport\":\"notStarted\"}\n```",
+      "truncated": false
+    },
+    {
+      "generation": "086608d4-5bb3-47ee-9e4e-8c04acd32536",
+      "text": "两次调用均为 `pending`。\n\n**codecraft_ask_user**（`clientRequestId=live-question-20260924-02`）\n```json\n{\"expiresInMs\":300000,\"pollAfterMs\":1000,\"requestId\":\"d73c264f-312d-4db5-89c2-a9b3f139dd70\",\"status\":\"pending\"}\n```\n\n**codecraft_review_plan**（`clientRequestId=live-plan-20260924-01`）\n```json\n{\"expiresInMs\":300000,\"pollAfterMs\":1000,\"requestId\":\"bad663e6-aff6-4537-bb80-f2e0f25dd8fb\",\"status\":\"pending\"}\n```\n\n- 问答 `requestId`: `d73c264f-312d-4db5-89c2-a9b3f139dd70`\n- 计划审阅 `requestId`: `bad663e6-aff6-4537-bb80-f2e0f25dd8fb`",
+      "truncated": false
+    },
+    {
+      "generation": "1d957cba-3548-45c7-b399-bb3992be4981",
+      "text": "**`d73c264f-312d-4db5-89c2-a9b3f139dd70`**\n```json\n{\"decision\":{\"answers\":[{\"questionId\":\"transport\",\"selectedOptionIds\":[\"pass\"],\"skipped\":false,\"text\":\"LAN 实机回传验证 20260924-02\"}],\"kind\":\"answered\"},\"plan\":null,\"requestId\":\"d73c264f-312d-4db5-89c2-a9b3f139dd70\",\"status\":\"decided\"}\n```\n\n**`bad663e6-aff6-4537-bb80-f2e0f25dd8fb`**\n```json\n{\"decision\":{\"action\":\"revise\",\"feedback\":\"请增加结果只领取一次的验证。\",\"kind\":\"plan\"},\"plan\":{\"contentDigest\":\"d07fc294b18894f4f6f240b19da5e063fc7a7735366d21b97760f268b6242ef5\",\"planId\":\"live-plan\",\"revision\":1},\"requestId\":\"bad663e6-aff6-4537-bb80-f2e0f25dd8fb\",\"status\":\"decided\"}\n```",
+      "truncated": false
+    },
+    {
+      "generation": "dfbe2fbc-6b84-4a1f-857b-c9192a1d7182",
+      "text": "**1. 再次领取 `d73c264f-312d-4db5-89c2-a9b3f139dd70`**\n```json\n{\"phase\":\"decided\",\"pollAfterMs\":1000,\"reason\":null,\"requestId\":\"d73c264f-312d-4db5-89c2-a9b3f139dd70\",\"status\":\"alreadyDelivered\",\"transport\":\"written\"}\n```\n状态为 `alreadyDelivered`，未再次返回 `decision` / 答案正文。\n\n**2. 修订计划 `codecraft_review_plan`（`clientRequestId=live-plan-20260924-02`）**\n```json\n{\"expiresInMs\":300000,\"pollAfterMs\":1000,\"requestId\":\"fe7d7d2e-a6ee-4e1d-90af-92e91dd5426b\",\"status\":\"pending\"}\n```\n计划审阅 `requestId`: `fe7d7d2e-a6ee-4e1d-90af-92e91dd5426b`",
+      "truncated": false
+    },
+    {
+      "generation": "94b2d360-f183-4191-b6a3-b6c0ae24f287",
+      "text": "**`codecraft_get_result`（`fe7d7d2e-a6ee-4e1d-90af-92e91dd5426b`）**\n```json\n{\"decision\":{\"action\":\"approved\",\"feedback\":\"\",\"kind\":\"plan\"},\"plan\":{\"contentDigest\":\"f8fad2252546e3e1661a3687cec45b45ea9dbb53c57673b7d42b1be155406cb1\",\"planId\":\"live-plan\",\"revision\":2},\"requestId\":\"fe7d7d2e-a6ee-4e1d-90af-92e91dd5426b\",\"status\":\"decided\"}\n```\n\n**`codecraft_end_workflow`**\n```json\n{\"closed\":true}\n```",
+      "truncated": false
+    },
+    {
+      "generation": "6649cb93-5dcb-4130-b673-1266c4eeae2b",
+      "text": "原生 Read 未被 Hook 拒绝，本次读取成功，返回如下：\n\n```\nSynthetic Cursor v5 online acceptance fixture. No production data.\n```",
+      "truncated": false
+    },
+    {
+      "generation": "9a8ffedb-ec12-4c4e-946f-cd3113886825",
+      "text": "Hook 拒绝原文：\n\n```\nRejected: Denied in CodeCraft\n```",
+      "truncated": false
+    }
+  ],
+  "limitations": [
+    "Only Cursor 3.21.18 Agent was exercised. Ask and Plan modes are untested.",
+    "Native Read completed without a collected preToolUse request in this run.",
+    "Hook timeouts are not approval passes.",
+    "No native Cursor approval synchronization is claimed."
+  ]
+}

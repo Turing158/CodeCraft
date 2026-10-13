@@ -33,6 +33,9 @@ artifacts
 !web/lan/workbuddy-snapshot.test.ts
 !src/trae-sessions.test.ts
 !web/lan/trae-api.test.ts
+!src/cursor-sessions.test.ts
+!src/cursor-interactions.test.ts
+!web/lan/cursor-api.test.ts
 
 
 # Rust and Tauri generated output
@@ -50,8 +53,11 @@ src-tauri/gen/schemas/
 *.sln
 *.sw?
 
-# Tauri generated icons (regenerate with `tauri icon`)
+# Tauri icons (regenerate with `npm run icons`; keep desktop bundle assets)
 src-tauri/icons/**
 !src-tauri/icons/ico.svg
+!src-tauri/icons/*.png
+!src-tauri/icons/*.ico
+!src-tauri/icons/*.icns
 !src-tauri/icons/icon/
 !src-tauri/icons/icon/*.svg

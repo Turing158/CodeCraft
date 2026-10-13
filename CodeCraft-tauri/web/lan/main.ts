@@ -1,3 +1,5 @@
+import { CursorSnapshotTracker, emptyCursorSnapshot } from "../../src/cursor-sessions";
+import { CursorView } from "../../src/cursor-view";
 import { TraeView } from "../../src/trae-view";
 import { readTraeSnapshot } from "../../src/trae-sessions";
 /**
@@ -146,6 +148,7 @@ let settingsPlacement: SettingsPlacement = loadSettingsPlacement(
   window.localStorage,
 );
 let selectedKey: string | undefined;
+let browsingSessionList = false;
 let selectedSources = new Set<string>();
 let visibleIntegrationCount = 0;
 let integrationsExpanded = false;
@@ -350,6 +353,7 @@ const scheduleReconnect = () => {
 
 const openStream = () => {
   closeStream();
+  if (api.isCursorPreview()) { dispatchConnection({ type: "streamOpen" }); return; }
   const source = new EventSource("/api/events");
   stream = source;
 
@@ -529,7 +533,7 @@ const updateSessionCardView = (view: SessionCardView, entry: ConsoleEntry) => {
   view.card.setAttribute("aria-current", String(entry.key === selectedKey));
   swapText(
     view.source,
-    entry.source === "trae" ? "Trae CN" : entry.source === "claude"
+    entry.source === "cursor" ? "Cursor" : entry.source === "trae" ? "Trae CN" : entry.source === "claude"
       ? "Claude"
       : entry.source === "codex"
         ? "Codex"
@@ -604,7 +608,7 @@ const renderActivities = (entry: ConsoleEntry) => {
       summary.textContent = activity.summary;
 
       item.append(tool, summary);
-      if (entry.source === "trae") {
+      if (entry.source === "trae" || activity.details) {
         const details = document.createElement("details");
         details.dataset.activityId = activity.id;
         details.open = expanded.has(activity.id);
@@ -612,7 +616,7 @@ const renderActivities = (entry: ConsoleEntry) => {
         label.textContent = "查看参数与结果";
         const body = document.createElement("pre");
         body.style.cssText = "white-space:pre-wrap;overflow-wrap:anywhere;max-height:240px;overflow:auto";
-        body.textContent = activity.summary;
+        body.textContent = activity.details ?? activity.summary;
         details.append(label, body);
         item.append(details);
       }
@@ -624,19 +628,20 @@ const renderActivities = (entry: ConsoleEntry) => {
 const renderOutputs = (entry: ConsoleEntry) => {
   outputEmpty.hidden = entry.outputs.length > 0;
   outputList.replaceChildren(
-    ...(entry.source === "trae" ? entry.outputs : entry.outputs.slice(-12)).map((output) => {
+    ...((entry.source === "trae" || entry.source === "cursor") ? entry.outputs : entry.outputs.slice(-12)).map((output) => {
       const item = document.createElement("li");
       item.className = "output markdown";
       item.innerHTML = renderMarkdown(output.text);
       if (output.role) {
         const meta = document.createElement("header");
-        meta.textContent = `${output.role === "user" ? "用户" : "Trae"}${output.capturedAt ? " · " + formatSessionTime(output.capturedAt) : ""}`;
+        meta.textContent = `${output.role === "user" ? "用户" : entry.source === "cursor" ? "Cursor" : "Trae"}${output.capturedAt ? " · " + formatSessionTime(output.capturedAt) : ""}`;
         item.prepend(meta);
       }
       return item;
     }),
   );
-  if (entry.detailNotice) {
+  outputList.title = entry.source === "cursor" ? entry.detailNotice ?? "" : "";
+  if (entry.detailNotice && entry.source !== "cursor") {
     const notice = document.createElement("li");
     notice.textContent = entry.detailNotice;
     outputList.prepend(notice);
@@ -769,9 +774,23 @@ const renderQuestionOptions = (entry: ConsoleEntry) => {
 };
 
 const renderReview = (entry: ConsoleEntry | undefined) => {
+  reviewActions.replaceChildren();
+  if (entry?.source === "cursor") {
+    const requests=latestCursor.requests.filter(r=>r.sessionKey===entry.sessionId&&r.actionable);
+    const current=requests.find(r=>r.requestId===selectedCursorLanRequest)??requests[0];
+    review.hidden=!current;
+    if(current){
+      selectedCursorLanRequest=current.requestId;
+      cursorView.show(review,current.requestId);
+    } else {
+      selectedCursorLanRequest=undefined;
+      cursorView.detach();
+    }
+    actionBar.replaceChildren();return;
+  }
+  cursorView.detach();
   const pending = entry?.pending ?? null;
   review.hidden = pending === null;
-  reviewActions.replaceChildren();
   if (!entry || !pending) {
     reviewQuestions.replaceChildren();
     questionRequestId = undefined;
@@ -1113,7 +1132,7 @@ const renderDetail = () => {
   detailStatus.dataset.status = entry.status;
   swapText(detailStatus, entry.statusLabel, motion);
   detailMeta.textContent = [
-    entry.source === "trae" ? "Trae CN" : entry.source === "claude"
+    entry.source === "cursor" ? "Cursor" : entry.source === "trae" ? "Trae CN" : entry.source === "claude"
       ? "Claude Code"
       : entry.source === "codex"
         ? "Codex"
@@ -1139,6 +1158,7 @@ const renderDetail = () => {
 
 const selectEntry = (key: string, nextView: ConsoleView) => {
   if (findEntry(snapshot, key)?.source === "workbuddy") return;
+  browsingSessionList = nextView === "list";
   const changed = key !== selectedKey;
   selectedKey = key;
   const previousView = view;
@@ -1160,8 +1180,18 @@ const selectEntry = (key: string, nextView: ConsoleView) => {
 };
 
 const traeView = new TraeView(api.submitTrae, async () => { applySnapshot(await api.fetchState()); });
+const cursorSnapshotTracker = new CursorSnapshotTracker();
+let latestCursor=emptyCursorSnapshot();
+let selectedCursorLanRequest:string|undefined;
+let latestRawSnapshot: unknown;
+const cursorView=new CursorView(api.submitCursor,async()=>{applySnapshot(await api.fetchState());},
+  (request,decision)=>applySnapshot({ ...latestRawSnapshot as Record<string, unknown>, cursor: cursorSnapshotTracker.recordDecision(request,decision) }));
 const applySnapshot = (raw: unknown) => {
-  snapshot = mergeSnapshot((raw ?? {}) as Record<string, never>);
+  latestRawSnapshot = raw;
+  const next = { ...(raw ?? {}) as Record<string, never>, cursor: cursorSnapshotTracker.accept((raw as { cursor?: unknown })?.cursor) };
+  snapshot = mergeSnapshot(next);
+  latestCursor=next.cursor;
+  cursorView.update(latestCursor,snapshot.allowApprovals);
   traeView.update(readTraeSnapshot((raw as { trae?: unknown })?.trae), snapshot.allowApprovals);
   const visible = filteredEntries();
   if (selectedKey && !visible.some((entry) => entry.key === selectedKey)) {
@@ -1175,6 +1205,7 @@ const applySnapshot = (raw: unknown) => {
   );
   if (
     pendingEntry?.pending &&
+    !browsingSessionList &&
     pendingEntry.pending.requestId !== autoRevealedRequestId &&
     (!selectedKey || view === "list")
   ) {
@@ -1242,6 +1273,8 @@ tokenPaste.addEventListener("click", () => {
 });
 
 detailBack.addEventListener("click", () => {
+  // Keep an explicit return to the list stable while new snapshots arrive.
+  browsingSessionList = true;
   view = "list";
   syncLayout();
   renderSessionList();
@@ -1361,6 +1394,7 @@ document.addEventListener("keydown", (event) => {
     return;
   }
   if (root.dataset.layout === "phone" && !detail.hidden) {
+    browsingSessionList = true;
     view = "list";
     syncLayout();
     renderSessionList();

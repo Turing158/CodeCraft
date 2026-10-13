@@ -10,7 +10,7 @@ A lightweight desktop workbench focused on AI coding sessions · Built for Windo
 
 <p>
   <img src="https://img.shields.io/badge/Platform-Windows-0078D4?style=flat-square" alt="Platform Windows" />
-  <img src="https://img.shields.io/badge/Version-0.1.1-4C8BF5?style=flat-square" alt="Version 0.1.1" />
+  <img src="https://img.shields.io/badge/Version-0.1.2-4C8BF5?style=flat-square" alt="Version 0.1.2" />
   <img src="https://img.shields.io/badge/Stack-Rust%20%2B%20Tauri%202-DEA584?style=flat-square" alt="Rust + Tauri 2" />
   <img src="https://img.shields.io/badge/Languages-简中%20%2F%20繁中%20%2F%20EN-2EA043?style=flat-square" alt="Multilingual" />
 </p>
@@ -65,7 +65,7 @@ CodeCraft doesn't write code itself — it watches the AI coding assistants belo
 
 All ten agents can run at the same time. The filter buttons at the top of the panel let you look at just one of them, or "All" together.
 
-> DeepSeek Harness is currently a Developer Preview. CodeCraft primarily targets `@deepseek-ai/dsh@0.1.1-rc.2` and also supports `0.1.2-alpha.2`; the local bridge rejects interactions when the runtime version is unknown or outside this compatibility list.
+> CodeCraft does not detect the DeepSeek Harness runtime version or restrict Hook installation, session synchronization, or interactions by version number.
 
 ## Getting started
 
@@ -190,3 +190,9 @@ Requires Node.js, Rust stable (`x86_64-pc-windows-msvc`), the Visual Studio C++ 
 **Stay on top of what your coding assistants are doing, in one quiet, compact interface.**
 
 </div>
+
+## Cursor on Windows
+
+Cursor now has read-only session observation, tool/subagent activity and completed replies in the desktop and LAN views. Install, repair, remove and choose the executable under desktop Settings → Hook. Changes keep unique `.bak` backups and replace only CodeCraft-owned entries. Earlier history is not imported; unconfirmed activity after restart remains interrupted or unknown.
+
+v5 adds public Hook tool approvals and independent MCP questions and plan reviews, with shared desktop/LAN decision state. Installing Cursor under Settings → Hook also installs or repairs its Hook, MCP registration and guidance rules for current local projects and previously enabled projects. MCP can then create project-bound workflows. Results are delivered at most once, with cancellation, plan revisions and read-only recovery after disconnects. Hook failures or timeouts allow the call under the configured failure policy; an allow decision cannot override Cursor's own permissions. Independent plan review does not block unrelated native tools. Synchronization with Cursor's native approval UI is outside this release. See [setup and verification coverage](CodeCraft-tauri/protocol/cursor/product-integration.md).

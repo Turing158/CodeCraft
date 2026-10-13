@@ -331,6 +331,7 @@ fn snapshot_value(app: &tauri::AppHandle) -> Value {
         "dsh": sessions.get("dsh").cloned().unwrap_or(Value::Null),
         "zcode": sessions.get("zcode").cloned().unwrap_or(Value::Null),
         "workbuddy": workbuddy,
+        "cursor": crate::cursor_get_snapshot(),
         "trae": crate::trae_get_snapshot(),
         "integrations": integrations,
     });
@@ -343,6 +344,7 @@ fn snapshot_value(app: &tauri::AppHandle) -> Value {
 fn snapshot_version_fingerprint(snapshot: &Value) -> u64 {
     let mut hash = 0xcbf29ce484222325_u64;
     for source in [
+        "cursor",
         "trae",
         "claude",
         "codex",
@@ -364,6 +366,9 @@ fn snapshot_version_fingerprint(snapshot: &Value) -> u64 {
                 hash = (hash ^ u64::from(byte)).wrapping_mul(0x100000001b3);
             }
         }
+    }
+    if let Some(epoch) = snapshot.get("cursor").and_then(|v| v.get("appEpoch")).and_then(Value::as_str) {
+        for byte in epoch.bytes() { hash = (hash ^ u64::from(byte)).wrapping_mul(0x100000001b3); }
     }
     for key in ["allowApprovals", "approvalMode", "integrations"] {
         if let Some(value) = snapshot.get(key) {
@@ -1386,6 +1391,7 @@ async fn security_headers(
 
 fn router(app: tauri::AppHandle) -> Router {
     Router::new()
+        .route("/api/cursor/{action}", post(post_cursor))
         .route("/api/trae/{*action}", post(post_trae))
         .route("/", get(serve_console))
         .route("/api/auth", post(post_auth))
@@ -1419,6 +1425,22 @@ fn router(app: tauri::AppHandle) -> Router {
         .layer(DefaultBodyLimit::max(MAX_BODY_BYTES))
         .layer(axum::middleware::from_fn(security_headers))
         .with_state(LanHttpState { app })
+}
+
+async fn post_cursor(State(http_state): State<LanHttpState>, ConnectInfo(client): ConnectInfo<SocketAddr>, axum::extract::Path(action): axum::extract::Path<String>, request: axum::extract::Request) -> Response {
+    use codecraft_cursor::{protocol, runtime::ApiError};
+    fn fail(error: ApiError) -> Response { (StatusCode::from_u16(error.status()).unwrap_or(StatusCode::INTERNAL_SERVER_ERROR), Json(error)).into_response() }
+    let state = http_state.app.state::<LanServerState>();
+    match check_access(&state, request.headers(), true) { Ok(Access::Granted) => (), _ => return fail(ApiError::new("FORBIDDEN")) }
+    if !matches!(action.as_str(), "permission" | "question" | "plan" | "cancel") { return fail(ApiError::new("INVALID_ROUTE")); }
+    state.touch_client();
+    let bytes = match axum::body::to_bytes(request.into_body(), protocol::MAX_MESSAGE_BYTES).await { Ok(b) => b, Err(_) => return fail(ApiError::new("PAYLOAD_TOO_LARGE")) };
+    let body = match protocol::strict_json(&bytes) { Ok(v) => v, Err(_) => return fail(ApiError::new("INVALID_JSON")) };
+    let route = action.clone();
+    match tauri::async_runtime::spawn_blocking(move || codecraft_cursor::dispatch(&route, body)).await {
+        Ok(Ok(result)) => { if state.config_snapshot().map(|c| c.audit_remote).unwrap_or(true) { append_remote_audit(&format!("cursor-{action}"), "", "accepted", client.ip()); } Json(result).into_response() },
+        Ok(Err(error)) => fail(error), Err(_) => fail(ApiError::new("BROKER_OFFLINE")),
+    }
 }
 
 async fn post_trae(State(http_state):State<LanHttpState>,ConnectInfo(client):ConnectInfo<SocketAddr>,axum::extract::Path(action):axum::extract::Path<String>,request:axum::extract::Request)->Response {
@@ -1547,6 +1569,15 @@ mod tests {
 
         assert_eq!(first, second);
         assert_ne!(first, third);
+    }
+
+    #[test]
+    fn cursor_changes_and_epoch_restarts_wake_lan_streams() {
+        let a = json!({"cursor":{"appEpoch":"first","version":1}});
+        let b = json!({"cursor":{"appEpoch":"first","version":2}});
+        let c = json!({"cursor":{"appEpoch":"second","version":1}});
+        assert_ne!(snapshot_version_fingerprint(&a), snapshot_version_fingerprint(&b));
+        assert_ne!(snapshot_version_fingerprint(&a), snapshot_version_fingerprint(&c));
     }
 
     #[test]

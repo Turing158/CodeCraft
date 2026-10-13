@@ -10,6 +10,7 @@
 >
   <head>
     <meta charset="UTF-8" />
+    <link rel="icon" type="image/svg+xml" href="/src-tauri/icons/ico.svg?no-inline" />
     <link rel="stylesheet" href="/src/styles.css" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta name="color-scheme" content="dark light" />
@@ -607,9 +608,50 @@
                   </ul>
                 </section>
                 <section
+                  id="cursor-session-card"
+                  class="session-source-card"
+                  aria-labelledby="cursor-session-card-title"
+                  hidden
+                >
+                  <header class="session-source-card__header">
+                    <div class="session-source-card__identity">
+                      <span
+                        class="session-source-card__mark session-source-card__mark--cursor"
+                        aria-hidden="true"
+                      >
+                        <img id="cursor-session-card-icon" alt="" />
+                      </span>
+                      <h2 id="cursor-session-card-title">Cursor</h2>
+                    </div>
+                    <div
+                      id="cursor-connection-status"
+                      class="session-source-card__status session-source-card__status--static"
+                      data-connected="false"
+                      title="等待 Cursor Hook 加载"
+                    >
+                      <span
+                        class="session-source-card__status-dot"
+                        aria-hidden="true"
+                      ></span>
+                      <span class="session-source-card__status-label"
+                        >等待加载</span
+                      >
+                    </div>
+                  </header>
+                  <ul
+                    id="cursor-session-list"
+                    class="session-list"
+                    aria-label="Cursor 会话列表"
+                    aria-live="polite"
+                  >
+                    <li class="session-list__empty">暂无活跃会话</li>
+                  </ul>
+                </section>
+                <section
                   id="trae-session-card"
                   class="session-source-card"
                   aria-labelledby="trae-session-card-title"
+                  hidden
                 >
                   <header class="session-source-card__header">
                     <div class="session-source-card__identity">
@@ -680,9 +722,9 @@
                 </div>
               </header>
 
-              <div id="trae-detail-context" class="trae-detail-context" hidden>
-                <p id="trae-detail-notice"></p>
-                <button id="trae-detail-review" type="button" hidden>查看待处理事项</button>
+              <div id="session-detail-context" class="session-detail-context" hidden>
+                <p id="session-detail-notice"></p>
+                <button id="session-detail-review" type="button" hidden>查看待处理事项</button>
               </div>
 
               <section class="detail-section" aria-labelledby="activity-title">
@@ -2242,17 +2284,17 @@
                             <output
                               id="interface-min-height-output"
                               for="interface-min-height"
-                              >300px</output
+                              >240px</output
                             >
                           </div>
                           <input
                             id="interface-min-height"
                             class="settings-range"
                             type="range"
-                            min="240"
+                            min="100"
                             max="1100"
                             step="10"
-                            value="300"
+                            value="240"
                             aria-describedby="interface-min-height-range"
                           />
                           <div
@@ -2260,7 +2302,7 @@
                             class="range-setting__range"
                             aria-hidden="true"
                           >
-                            <span>240px</span><span>1100px</span>
+                            <span>100px</span><span>1100px</span>
                           </div>
                         </div>
 
@@ -2270,7 +2312,7 @@
                             <output
                               id="interface-max-height-output"
                               for="interface-max-height"
-                              >780px</output
+                              >400px</output
                             >
                           </div>
                           <input
@@ -2280,7 +2322,7 @@
                             min="240"
                             max="1100"
                             step="10"
-                            value="780"
+                            value="400"
                             aria-describedby="interface-max-height-range"
                           />
                           <div
@@ -3501,7 +3543,7 @@
                       <div class="about-product__title-row">
                         <h2 id="about-product-title">CodeCraft</h2>
                         <span class="about-version"
-                          >v<span id="about-version">0.1.1</span></span
+                          >v<span id="about-version">0.1.2</span></span
                         >
                       </div>
                       <p>专注于 AI 编程会话的轻量桌面工作台。</p>
@@ -3663,7 +3705,7 @@
                     <dl class="about-details__list">
                       <div>
                         <dt>版本</dt>
-                        <dd>v<span id="about-detail-version">0.1.1</span></dd>
+                        <dd>v<span id="about-detail-version">0.1.2</span></dd>
                       </div>
                       <div>
                         <dt>平台</dt>

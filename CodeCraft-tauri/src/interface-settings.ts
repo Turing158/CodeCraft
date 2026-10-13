@@ -12,16 +12,17 @@ export interface InterfaceSettings {
 
 export const INTERFACE_SETTINGS_STORAGE_KEY = "codecraft.interface-settings";
 export const BASE_PANEL_WIDTH = 500;
-export const BASE_SETTINGS_MIN_HEIGHT = 300;
+export const BASE_SETTINGS_MIN_HEIGHT = 240;
 export const BASE_CONTENT_MAX_HEIGHT = 640;
-export const BASE_SETTINGS_MAX_HEIGHT = 780;
+export const BASE_SETTINGS_MAX_HEIGHT = 400;
 export const MIN_INTERFACE_SCALE = 0.75;
 export const MAX_INTERFACE_SCALE = 1.5;
 export const MIN_FONT_SCALE = 0.75;
 export const MAX_FONT_SCALE = 1.5;
 export const MIN_CUSTOM_WIDTH = 360;
 export const MAX_CUSTOM_WIDTH = 820;
-export const MIN_CUSTOM_HEIGHT = 240;
+export const MIN_CUSTOM_MIN_HEIGHT = 100;
+export const MIN_CUSTOM_MAX_HEIGHT = 240;
 export const MAX_CUSTOM_HEIGHT = 1100;
 export const MIN_CUSTOM_PADDING = 10;
 export const MAX_CUSTOM_PADDING = 32;
@@ -69,7 +70,7 @@ export const normalizeInterfaceSettings = (
       value.customMinHeight,
       DEFAULT_INTERFACE_SETTINGS.customMinHeight,
     ),
-    MIN_CUSTOM_HEIGHT,
+    MIN_CUSTOM_MIN_HEIGHT,
     MAX_CUSTOM_HEIGHT,
   );
   const requestedMaxHeight = clamp(
@@ -77,7 +78,7 @@ export const normalizeInterfaceSettings = (
       value.customMaxHeight,
       DEFAULT_INTERFACE_SETTINGS.customMaxHeight,
     ),
-    MIN_CUSTOM_HEIGHT,
+    MIN_CUSTOM_MAX_HEIGHT,
     MAX_CUSTOM_HEIGHT,
   );
 
@@ -120,4 +121,3 @@ export const interfaceScaleFor = (settings: InterfaceSettings) =>
 
 export const panelWidthFor = (settings: InterfaceSettings) =>
   settings.mode === "scale" ? BASE_PANEL_WIDTH : settings.customWidth;
-

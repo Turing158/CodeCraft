@@ -1,10 +1,20 @@
 import { describe, expect, it } from "vitest";
 import { traeReviews, traeQuestionRequest, traePlanRequest, TraeReviewQueue, canDecide, emptyTraeSnapshot, readTraeSnapshot, TraeDecisionIds, validateTraeAnswers, toTraeUnifiedSession, type QuestionInput, type TraeRequest } from "./trae-sessions";
 import { isGeminiSession, isOpenCodeSession, unifiedSessionSource } from "./unified-sessions";
-import { mergeSnapshot } from "../web/lan/snapshot";
+import { integrationVisible, mergeSnapshot } from "../web/lan/snapshot";
 const input: QuestionInput = { schemaVersion: 1, questions: [{ questionId: "q", prompt: "Choose", kind: "single", options: [{ optionId: "a", label: "Same", description: null }, { optionId: "b", label: "Same", description: null }], required: true, allowText: false, minSelections: 1, maxSelections: 1 }] };
 const request = (): TraeRequest => ({ target: { appEpoch: "epoch", sessionKey: "session", taskId: null, turnEpoch: 1, requestId: "request", requestVersion: 1 }, kind: "question", channel: "mcp", toolName: "codecraft_ask_user", toolUseId: "call", arguments: input as unknown as Record<string, unknown>, expiresAt: new Date(Date.now() + 60_000).toISOString(), state: "pending", plan: null, error: null });
 describe("Trae shared desktop/LAN contract", () => {
+  it("uninstall hides cached sessions and does not imply an unsupported Trae version", () => {
+    const previous = { ...emptyTraeSnapshot(), connected: true, requests: [request()] };
+    const removed = { ...previous, hook: { enabled: false, filesInstalled: false } };
+    expect(readTraeSnapshot(removed)).toMatchObject({ connected: false, sessions: [], requests: [] });
+    const fallback = mergeSnapshot({ trae: removed });
+    expect(fallback.integrations.filter(integrationVisible).some(i => i.source === "trae")).toBe(false);
+    const lan = mergeSnapshot({ trae: previous, integrations: [{ id: "trae", hookInstalled: false }] });
+    expect(lan.entries).toEqual([]);
+    expect(lan.integrations[0]).toMatchObject({ connected: false, hookInstalled: false, sessionCount: 0 });
+  });
   it("uses original IDs even when labels match", () => {
     expect(validateTraeAnswers(input, [{ questionId: "q", status: "answered", selectedOptionIds: ["b"], text: null }])).toBeNull();
     expect(validateTraeAnswers(input, [{ questionId: "q", status: "answered", selectedOptionIds: ["Same"], text: null }])).not.toBeNull();

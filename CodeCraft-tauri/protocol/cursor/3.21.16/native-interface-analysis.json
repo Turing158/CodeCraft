@@ -1,0 +1,237 @@
+{
+  "schemaVersion": 2,
+  "evidenceKind": "sourceAnalysis",
+  "cursorClientExecuted": false,
+  "cursorVersion": "3.21.16",
+  "platform": "windows",
+  "architecture": null,
+  "inspectedAt": "2026-09-22T02:17:02.014Z",
+  "metadataSha256": "f7103f4ccc04cd491121454a84025cdce151be2df264d878986490f27b2d4a94",
+  "offsetEncoding": "utf16CodeUnits",
+  "sourceFingerprint": "4c39d62b48ba069b9a78d11a39cb046cce2123c8d13f31f785b8744b136c7884",
+  "observations": [
+    {
+      "kind": "agentHost",
+      "relativePath": "extensions/cursor-agent-host/dist/main.js",
+      "status": "read",
+      "sha256": "28a304e5c466a347022d44a3d3f33760e15ac09aecdd2ee2053c914950db4535",
+      "findings": [
+        {
+          "id": "mcpCandidateName",
+          "pattern": "const h=`MCP:${t.toolName}`",
+          "needle": "const h=`MCP:${t.toolName}`",
+          "found": true,
+          "offset": 3789160,
+          "excerpt": "ollector)&&void 0!==i?i:[];let p=Object.fromEntries(Object.entries(t.args).map(([e,t])=>[e,null==t?void 0:t.toJson()]));const h=`MCP:${t.toolName}`;try{const r=yield this.hookExecutor.executeHookForStep(E._E.preToolUse,Object.assign(Object.assign({},l),{tool_name:h,tool_input:p,tool_use_id:u}));if(\"deny\"===(null==r?void 0:r.permission)){const t=r.user_message||\"MCP tool blocked by preToolUse hook\";try{(0,F.Bv)(d,(0,F.JJ)({hookEventName:E._E.preToolUse,additionalContext:r.additional_context}))}catch(t){if(!(t instanceof F.B1))throw t;Ge.warn(e,\"preToolUse deny additional_context exceeded max size; dropping carrier\",{toolName:h,actualLength:t.actualLength,maxLength:t.maxLength})}return yiel"
+        },
+        {
+          "id": "mcpServerIdentity",
+          "pattern": "mcp_server_name:t.providerIdentifier",
+          "needle": "mcp_server_name:t.providerIdentifier",
+          "found": true,
+          "offset": 3791486,
+          "excerpt": "!==(c=f.args)&&void 0!==c?c:[]].filter(Boolean).join(\" \")}}else g={command:t.providerIdentifier};const y=Object.assign({mcp_server_name:t.providerIdentifier},void 0!==A?{mcp_server_url:A}:{}),w=Object.assign(Object.assign(Object.assign(Object.assign({},l),{tool_name:t.toolName,tool_input:JSON.stringify(p)}),y),g),v=yield this.hookExecutor.executeHookForStep(E._E.beforeMCPExecution,w);if(\"deny\"===(null==v?void 0:v.permission)){const t=J(\"MCP tool execution\",v.user_message);return yield this.firePostToolUseFailureAsync(e,l,h,p,t,\"permission_denied\",0,u,!1,d),new Le.iz({result:{case:\"permissionDenied\",value:new Le.HQ({error:t,isReadonly:!1})}})}const _=O.performance.now();try{const n=yield this.inner"
+        },
+        {
+          "id": "requestApproval",
+          "pattern": "pendingDecisionProvider.requestApproval",
+          "needle": "pendingDecisionProvider.requestApproval",
+          "found": true,
+          "offset": 1420364,
+          "excerpt": "alue:new Dn.QG({path:o,clientVisibleError:e,isReadonly:t?.isReadonly??!1})}})});if(null!==e)return e}const a=await this.pendingDecisionProvider.requestApproval({type:qn.Delete,details:{path:o},toolCallId:t.toolCallId});if(!a.approved)return new Dn.Pi({result:{case:\"rejected\",value:new Dn.iq({path:o,reason:a.reason||\"\"})}});let c;try{c=await(0,n.stat)(o)}catch(e){return\"ENOENT\"===e.code?new Dn.Pi({result:{case:\"fileNotFound\",value:new Dn.n0({path:o})}}):new Dn.Pi({result:{case:\"error\",value:new Dn.GU({path:o,error:e.message})}})}if(!c.isFile()){const e=c.isDirectory()?\"directory\":\"other\";return new Dn.Pi({result:{case:\"notFile\",value:new Dn.LX({path:o,actualType:e})}})}const l=c.size;let u;if(l<=Nn)tr"
+        },
+        {
+          "id": "updatedInput",
+          "pattern": "updated_input",
+          "needle": "updated_input",
+          "found": true,
+          "offset": 3548720,
+          "excerpt": "on,userMessage:null==n?void 0:n.user_message,agentMessage:null==n?void 0:n.agent_message,updatedInput:(null==n?void 0:n.updated_input)?JSON.stringify(n.updated_input):void 0,additionalContext:null==n?void 0:n.additional_context})}})})}case\"postToolUse\":{const e=J.request.value,t=e.toolInput?e.toolInput.toJson():{},r=Object.assign(Object.assign({conversation_id:null!==(k=e.conversationId)&&void 0!==k?k:\"\",generation_id:null!==(B=e.generationId)&&void 0!==B?B:\"\",model:null!==(x=e.model)&&void 0!==x?x:\"\"},(0,Ie.U4)(e)),{tool_name:e.toolName,tool_input:t,tool_output:e.toolOutput,duration:Number(e.durationMs),tool_use_id:e.toolUseId,cwd:e.cwd}),n=yield this.hookExecutor.executeHo"
+        },
+        {
+          "id": "failureEvent",
+          "pattern": "firePostToolUseFailureAsync",
+          "needle": "firePostToolUseFailureAsync",
+          "found": true,
+          "offset": 3789744,
+          "excerpt": " exceeded max size; dropping carrier\",{toolName:h,actualLength:t.actualLength,maxLength:t.maxLength})}return yield this.firePostToolUseFailureAsync(e,l,h,p,t,\"permission_denied\",0,u,!1,d),new Le.iz({result:{case:\"permissionDenied\",value:new Le.HQ({error:J(\"MCP tool execution\",t),isReadonly:!1})}})}if(null==r?void 0:r.updated_input)try{for(const[e,n]of Object.entries(r.updated_input))void 0!==n&&(t.args[e]=$e.Value.fromJson(n));p=Object.fromEntries(Object.entries(t.args).map(([e,t])=>[e,null==t?void 0:t.toJson()]))}catch(t){Ge.warn(e,\"Failed to merge updated_input for MCP\",{error:t instanceof Error?t.message:String(t)})}(0,F.Bv)(d,(0,F.JJ)({hookEventName:E._E.preToolUse,additionalContext:n"
+        },
+        {
+          "id": "interactionResponse",
+          "pattern": "interactionRegistry.respond(",
+          "needle": "interactionRegistry.respond(",
+          "found": true,
+          "offset": 7338690,
+          "excerpt": "tion(e,t){return sc(this,void 0,void 0,function*(){this.ensureNotDisposing();return{status:this.getSession(t.sessionId).interactionRegistry.respond(t.interactionId,t.response)}})}watchSessionInteractions(e,t){return this.ensureNotDisposing(),this.getSession(t.sessionId).interactionRegistry.watch(e)}createSession(e,t,r){return sc(this,void 0,void 0,function*(){this.ensureNotDisposing(),this.reserveSessionId(t.sessionId);try{return yield this.createReservedSession(e,t,Object.assign(Object.assign({},void 0===(null==r?void 0:r.parent)?{}:{parent:r.parent}),{initialHistoryMode:null==r?void 0:r.initialHistoryMode}))}finally{this.creatingSessionIds.delete(t.sessionId)}})}forkSession(e,t){return s"
+        },
+        {
+          "id": "interactionWatch",
+          "pattern": "interactionRegistry.watch(",
+          "needle": "interactionRegistry.watch(",
+          "found": true,
+          "offset": 7338841,
+          "excerpt": "nteractionId,t.response)}})}watchSessionInteractions(e,t){return this.ensureNotDisposing(),this.getSession(t.sessionId).interactionRegistry.watch(e)}createSession(e,t,r){return sc(this,void 0,void 0,function*(){this.ensureNotDisposing(),this.reserveSessionId(t.sessionId);try{return yield this.createReservedSession(e,t,Object.assign(Object.assign({},void 0===(null==r?void 0:r.parent)?{}:{parent:r.parent}),{initialHistoryMode:null==r?void 0:r.initialHistoryMode}))}finally{this.creatingSessionIds.delete(t.sessionId)}})}forkSession(e,t){return sc(this,void 0,void 0,function*(){var r;this.ensureNotDisposing();const n=this.getSession(t.sessionId),s=crypto.randomUUID();this.reserveSessionId(s);"
+        },
+        {
+          "id": "interactionStatuses",
+          "pattern": "\"AgentHostInteractionResponseStatus\"",
+          "needle": "\"AgentHostInteractionResponseStatus\"",
+          "found": true,
+          "offset": 4670968,
+          "excerpt": "3,c,\"AgentHostSessionStatus\",[[0,\"UNSPECIFIED\"],[1,\"IDLE\"],[2,\"RUNNING\"],[3,\"AWAITING_INPUT\"]],1),p=(0,a.QT)(n.proto3,c,\"AgentHostInteractionResponseStatus\",[[0,\"UNSPECIFIED\"],[1,\"ACCEPTED\"],[2,\"ALREADY_RESOLVED\"],[3,\"NOT_FOUND\"]],1),h=(0,a.QT)(n.proto3,c,\"AgentHostBackgroundWorkKind\",[[0,\"UNSPECIFIED\"],[1,\"SHELL\"],[2,\"SUBAGENT\"]],1),m=(0,a.QT)(n.proto3,c,\"AgentHostBackgroundWorkState\",[[0,\"UNSPECIFIED\"],[1,\"RUNNING\"],[2,\"QUEUED\"]],1),f=(0,a.QT)(n.proto3,c,\"AgentHostShellLifecycleState\",[[0,\"UNSPECIFIED\"],[1,\"STARTING\"],[2,\"RUNNING\"],[3,\"EXITED\"],[4,\"ABORTED\"]],1),g=(0,a.QT)(n.proto3,c,\"AgentHostTurnOutcome\",[[0,\"UNSPECIFIED\"],[1,\"COMPLETED\"],[2,\"INTERRUPTED\"],[3,\"FAILED\"]],1),A=(0,a.QT)(n.proto3,"
+        },
+        {
+          "id": "interactionConsumption",
+          "pattern": "this.pending.delete(e),this.resolved.set(e,{case:\"responded\"",
+          "needle": "this.pending.delete(e),this.resolved.set(e,{case:\"responded\"",
+          "found": true,
+          "offset": 7450073,
+          "excerpt": "w xd(`Interaction response ${null!==(s=t.result.case)&&void 0!==s?s:\"<empty>\"} carries no answer`);const a=Ma(t);return this.pending.delete(e),this.resolved.set(e,{case:\"responded\",response:a}),this.events.appendInteractionResolved(o.turnId,e,{case:\"responded\",value:a}),this.emitState(),o.resolve(a),h.Ht.ACCEPTED}cancelTurn(e,t,r){const n=Rd(t);for(const[t,s]of[...this.pending])s.turnId===e&&(!0===(null==r?void 0:r.settleRejectBubbled)&&Pd(s.requestId)?this.settleRejectInteraction(t,n.message):this.rejectInteraction(t,\"cancelled\",n))}settleRejectByRequestId(e){const t=\"string\"==typeof e.reason&&e.reason.length>0?e.reason:\"Subagent force-backgrounded; cancelling pending bubbled interaction\";for(const[r,n]of[...this.pendin"
+        }
+      ]
+    },
+    {
+      "kind": "agentExec",
+      "relativePath": "extensions/cursor-agent-exec/dist/main.js",
+      "status": "read",
+      "sha256": "97603b6282b7c87105109f34df8b17dcb77352afe2319e737308d572d0e26177",
+      "findings": [
+        {
+          "id": "approvalForwarding",
+          "pattern": "async requestApproval(e){if(e.toolCallId)",
+          "needle": "async requestApproval(e){if(e.toolCallId)",
+          "found": true,
+          "offset": 8196523,
+          "excerpt": "(e))return;return await this.vscodeHookExecutor.executeHookForStep(e,t)}}class ro{constructor(e){this.approvalHandler=e}async requestApproval(e){if(e.toolCallId){const t={toolCallId:e.toolCallId,operation:{type:e.type,details:e.details}};return this.approvalHandler(t)}return{approved:!0}}async requestReadApproval(e){if(e.toolCallId){const t={toolCallId:e.toolCallId,operation:{type:e.type,details:e.details}};return this.approvalHandler(t)}return{approved:!0}}}const no=new WeakSet;function so(t){if(t instanceof e.R10)return t.getWakeupRevision()}class oo{constructor(e){this.elicitationHandler=e}createProvider(e,t,r){return new io(this.elicitationHandler,e,t,r)}}class io{constructor(e,t,r,n){this.elicitat"
+        }
+      ]
+    },
+    {
+      "kind": "extensionHost",
+      "relativePath": "out/vs/workbench/api/node/extensionHostProcess.js",
+      "status": "read",
+      "sha256": "b930b439738fe5afa66306183d80fbb5740e0ad28fc4b0a02096ca95627ed153",
+      "findings": [
+        {
+          "id": "builtinProposalGuard",
+          "pattern": "/return\\([^)]*\"cursorAgentHost\"[^)]*\\)&&![\\w$]+\\.isBuiltin/",
+          "needle": "return(n===\"control\"||n===\"cursor\"||n===\"cursorAgentHost\"||n===\"cursorNoDeps\"||n===\"cursorPseudoterminal\")&&!e.isBuiltin",
+          "found": true,
+          "offset": 614226,
+          "excerpt": "rDevelopment:!1,preRelease:!1}),K1e=de(\"extensionService\"),HB=class{constructor(e){this.dependency=e}};function Qa(e,n){return(n===\"control\"||n===\"cursor\"||n===\"cursorAgentHost\"||n===\"cursorNoDeps\"||n===\"cursorPseudoterminal\")&&!e.isBuiltin||!e.enabledApiProposals?!1:e.enabledApiProposals.includes(n)}function K(e,n){if(!Qa(e,n))throw new Error(`Extension '${e.identifier.value}' CANNOT use API proposal: ${n}.\nIts package.json#enabledApiProposals-property declares: ${e.enabledApiProposals?.join(\", \")??\"[]\"} but NOT ${n}.\n The missing proposal MUST be added and you must start in extension development mode or use the following command line switch: --enable-proposed-api ${e.identifier.value}. Note that the cursor, cursorAgentHost, cursorNoDeps, control, and cursorPseudoterminal propos"
+        },
+        {
+          "id": "builtinProposalDiagnostic",
+          "pattern": "proposals are only available for built-in extensions",
+          "needle": "proposals are only available for built-in extensions",
+          "found": true,
+          "offset": 614890,
+          "excerpt": "posed-api ${e.identifier.value}. Note that the cursor, cursorAgentHost, cursorNoDeps, control, and cursorPseudoterminal proposals are only available for built-in extensions`)}var Gp=(e,n)=>e===n,z1e={range:(e,n)=>e===n?!0:!e||!n?!1:e.equalsRange(n),busy:Gp,label:Gp,description:Gp,error:Gp,sortText:Gp,tags:(e,n)=>!(e.length!==n.length||e.some(a=>!n.includes(a)))},Y1e=Object.entries(z1e),j1e=(e,n)=>{let a;for(const[t,s]of Y1e)s(e[t],n[t])||(a?a[t]=n[t]:a={[t]:n[t]});return a},J1e=class extends le{constructor(e){super(),this.options=e,this.debounceSendDiff=this._register(new to(()=>this.flushDiff(),200)),this.diffOpEmitter=this._register(new O),this.tree=new Map,this.tags=new Map,this.diff=[],this.onDidGenerateDiff="
+        },
+        {
+          "id": "builtinIdentityGuard",
+          "pattern": "/if\\([\\w$]+\\([\\w$]+,\"cursorAgentHost\"\\),![\\w$]+\\.isBuiltin\\|\\|![\\w$]+\\.equals\\(/",
+          "needle": "if(K(e,\"cursorAgentHost\"),!e.isBuiltin||!On.equals(",
+          "found": true,
+          "offset": 4130565,
+          "excerpt": "ound\");return n}},eoe=new On(\"anysphere.cursor-agent-exec\"),xo=new On(\"anysphere.cursor-agent-host\");function qs(e,n,a){if(K(e,\"cursorAgentHost\"),!e.isBuiltin||!On.equals(e.identifier,n))throw new Error(`${a} is only available to ${n.value}`)}var D0a=new Set([\"setContext\"]);function U0a(e){return n=>VPe(n,{tags:{extension_id:e.identifier.value,extension_version:e.version}})}function L0a(e){const n=e.get(Ta),a=n.environment.clientLocalMode??!1,t=e.get(hm),s=e.get(j_),o=e.get(Ns),i=e.get(ar),l=e.get(SE),c=e.get(Ht),d=e.get(k_),u=e.get(We),p=e.get(qP),_=e.get(HP),g=e.get(Md),k=e.get(Xe),E=e.get(sS),f=e.get(rg),S=e.get(H7),y=e.get(nO),C=e.get(Ei),M=e.get(iO),A=e.get(W7),w=e.get(K7),L=e.get(AS),q=e.get(Dse),F=e.get(Y"
+        },
+        {
+          "id": "runtimeAccessGuard",
+          "pattern": "/acquireAgentHostRuntime\\(\\)\\{return [\\w$]+\\([\\w$]+,[\\w$]+,\"acquireAgentHostRuntime\"\\)/",
+          "needle": "acquireAgentHostRuntime(){return qs(N,xo,\"acquireAgentHostRuntime\")",
+          "found": true,
+          "offset": 4141666,
+          "excerpt": "ostProvider(v)},registerAgentHostRuntime(v){return qs(N,eoe,\"registerAgentHostRuntime\"),rs.registerAgentHostRuntime(v)},acquireAgentHostRuntime(){return qs(N,xo,\"acquireAgentHostRuntime\"),rs.acquireAgentHostRuntime()},getCursorAgentExecSecretStorage(){return qs(N,xo,\"getCursorAgentExecSecretStorage\"),ux??=new Y6({identifier:eoe},y),ux},listAgentHostSessionCatalog(v){return qs(N,xo,\"listAgentHostSessionCatalog\"),rs.listAgentHostSessionCatalog(v)},ensureAgentHostSessionLoaded(v){return qs(N,xo,\"ensureAgentHostSessionLoaded\"),rs.ensureAgentHostSessionLoaded(v)},setAgentHostSessionTitle(v,R){return qs(N,xo,\"setAgentHostSessionTitle\"),rs.setAgentHostSessionTitle(v,R)},projectAgentHostSessionTitle(v,R){return qs(N,xo,\"projectAgentHos"
+        },
+        {
+          "id": "approvalRpc",
+          "pattern": "this._proxy.$requestAgentExecApproval(",
+          "needle": "this._proxy.$requestAgentExecApproval(",
+          "found": true,
+          "offset": 3776232,
+          "excerpt": "st t=await dn(this._agentExecProviderOv),s=new O;this._agentExecPermissionsEmitters.set(n,s);const o=t.createSession(i=>this._proxy.$requestAgentExecApproval(n,i),(i,l,c,d)=>this._proxy.$requestAgentExecElicitation(n,i,l,c,d),async i=>{await this._proxy.$onAgentExecFileChange(n,i)},a,()=>this._proxy.$getAgentExecPermissions(n),s.event);this._agentExecSessions.set(n,o)}async $disposeAgentExecSession(n){const a=this._agentExecSessions.get(n);a&&(a.dispose(),this._agentExecSessions.delete(n)),this._agentExecPermissionsEmitters.deleteAndDispose(n)}async $notifyAgentExecPermissionsChanged(n,a){const t=this._agentExecPermissionsEmitters.get(n);t&&t.fire(a)}$invalidateTeamSettingsCache(){this.invalidateTea"
+        },
+        {
+          "id": "interactionRpc",
+          "pattern": "$respondToAgentHostInteraction(",
+          "needle": "$respondToAgentHostInteraction(",
+          "found": true,
+          "offset": 3808911,
+          "excerpt": " $cancelQueuedAgentHostTurn(e){const n=await dn(this._provider);return H.wrap(await n.cancelQueuedTurn(e.buffer))}async $respondToAgentHostInteraction(e){const n=await dn(this._provider);if(n.respondToInteraction===void 0)throw new Error(\"The registered agent-host provider does not support interaction responses\");return H.wrap(await n.respondToInteraction(e.buffer))}async $abortAgentHostBackgroundWork(e){const n=await dn(this._provider);return H.wrap(await n.abortBackgroundWork(e.buffer))}async $abortAllAgentHostBackgroundWork(e){const n=await dn(this._provider);return H.wrap(await n.abortAllBackgroundWork(e.buffer))}async $getAgentHostSessionBlobs(e){const n=await dn(this._provider);return H"
+        }
+      ]
+    },
+    {
+      "kind": "workbench",
+      "relativePath": "out/vs/workbench/workbench.desktop.main.js",
+      "status": "read",
+      "sha256": "4317a63511c5c0b266618ba19cc0956935b1dfcd47b926cdd317548d21f0af7d",
+      "findings": [
+        {
+          "id": "approvalHandler",
+          "pattern": "$requestAgentExecApproval(",
+          "needle": "$requestAgentExecApproval(",
+          "found": true,
+          "offset": 24042782,
+          "excerpt": "GetOrCreateCursorServerUrl(e,t,n=!0){return this.connectionTokenProviderService.getOrCreateCursorServerUrl(e,t,n)}async $requestAgentExecApproval(e,t){const n=this._agentExecHandlers.get(e);if(!n)throw new Error(`No approval handler found for session id ${e}`);return n.approvalHandler(t)}async $requestAgentExecElicitation(e,t,n,i,r){const s=this._agentExecHandlers.get(e);if(!s)throw new Error(`No elicitation handler found for session id ${e}`);return s.elicitationHandler(t,n,i,r)}async $onAgentExecFileChange(e,t){const n=this._agentExecHandlers.get(e);if(!n)throw new Error(`No file change handler found for session id ${e}`);await n.fileChangeHandler(t)}async $pushAgentExecProviderStreamC"
+        },
+        {
+          "id": "interactionMirror",
+          "pattern": "[AgentHostInteractionMirror] agent host rejected interaction response",
+          "needle": "[AgentHostInteractionMirror] agent host rejected interaction response",
+          "found": true,
+          "offset": 18498497,
+          "excerpt": "d,response:o}).toBinary()),c=LDn.fromBinary(a).status;c!==__t.ACCEPTED&&c!==__t.ALREADY_RESOLVED&&this.logService.warn(\"[AgentHostInteractionMirror] agent host rejected interaction response\",{sessionId:this.sessionId,interactionId:e.interactionId,status:c})})().catch(o=>{if(!i.signal.aborted){if(t.onSurfaceFailure===\"leavePending\"){s(o,\"could not deliver its answer\");return}this.logService.warn(\"[AgentHostInteractionMirror] responding to host interaction failed\",{sessionId:this.sessionId,interactionId:e.interactionId,error:o}),this.interruptTurn(e.turnId)}})}surfaceLeavesPending(){return this.surface?.onSurfaceFailure===\"leavePending\"}failCloseKnownInteractions(){for(const e of this.live.values())this.failCloseInteraction(e);for("
+        }
+      ]
+    },
+    {
+      "kind": "extensionApi",
+      "relativePath": "out/vscode-dts/vscode.d.ts",
+      "status": "read",
+      "sha256": "e0e5b7e6fb00a581c1d37fcc7dcf743992bad238736144453242de53e43c430b",
+      "findings": [
+        {
+          "id": "cursorNamespace",
+          "pattern": "namespace cursor",
+          "needle": "namespace cursor",
+          "found": false,
+          "offset": -1,
+          "excerpt": null
+        },
+        {
+          "id": "approvalIdDeclaration",
+          "pattern": "nativeApprovalId",
+          "needle": "nativeApprovalId",
+          "found": false,
+          "offset": -1,
+          "excerpt": null
+        },
+        {
+          "id": "approvalSubmitDeclaration",
+          "pattern": "submitApproval",
+          "needle": "submitApproval",
+          "found": false,
+          "offset": -1,
+          "excerpt": null
+        }
+      ]
+    }
+  ],
+  "conclusions": {
+    "mcpCandidateIdentity": "unqualifiedWrapperObserved",
+    "nativeApprovalRouting": "internalCallbackChainObserved",
+    "extensionProposalAccess": "builtinOnlyGuardObserved",
+    "runtimeAccess": "builtinExtensionIdentityGuardObserved",
+    "interactionRegistry": "internalRespondAndWatchObserved",
+    "nativeShared": "unverified",
+    "supported": false,
+    "limitations": [
+      "Source markers are investigation leads, never Cursor runtime or P0 pass evidence.",
+      "Missing markers do not prove an API is absent or publicly accessible; inspect changed bundles again.",
+      "Interaction registry status values do not prove tool approval coverage or a reachable external adapter.",
+      "No native request submission, acceptance, cancellation, concurrent arbitration or reconnection was executed."
+    ]
+  }
+}

@@ -51,6 +51,7 @@ export interface ClaudeActivity {
   id: string;
   tool: string;
   summary: string;
+  details?: string;
   status: ClaudeActivityStatus;
   startedAt: number;
   updatedAt: number;

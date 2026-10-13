@@ -10,6 +10,9 @@ const permissionArguments = {
 };
 const harness = `
 await startupSequencePromise;
+const traeHook = browserHookIntegrations.find(status => status.id === 'trae');
+traeHook.hookInstalled = true;
+renderHookIntegrations(browserHookIntegrations, false);
 controller.setCollapseDelay(60000);
 await controller.pointerEntered();
 const fake = emptyTraeSnapshot(); fake.connected = true; fake.appEpoch = 'synthetic-epoch';

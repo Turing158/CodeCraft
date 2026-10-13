@@ -1,0 +1,20 @@
+{
+  "schemaVersion": 1,
+  "evidenceKind": "runtimePreflight",
+  "cursorClientExecuted": true,
+  "probeInjected": false,
+  "observedDate": "2026-09-21",
+  "cursorVersion": "3.21.13",
+  "platform": "windows",
+  "architecture": "x64",
+  "launchScope": "isolated generated project",
+  "observations": {
+    "windowTitle": "project - Cursor",
+    "loginRequired": true,
+    "visibleMessage": "Cursor’s AI features require you to be logged in",
+    "hookOrToolEventsCaptured": 0,
+    "allObservedCursorProcessesAffinityMask": 3
+  },
+  "p0Passed": false,
+  "reason": "No authenticated Agent/Ask/Plan tool call could be started."
+}

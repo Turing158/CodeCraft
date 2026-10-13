@@ -15,6 +15,7 @@ use std::{
 
 use serde::{Deserialize, Serialize};
 use codecraft_trae as trae;
+use codecraft_cursor as cursor;
 use tauri::{
     menu::{CheckMenuItem, Menu, MenuItem},
     tray::TrayIconBuilder,
@@ -238,6 +239,17 @@ fn hook_configuration_lock() -> Result<std::sync::MutexGuard<'static, ()>, Strin
         .map_err(|error| error.to_string())
 }
 
+fn mutate_hook_configuration<T>(
+    update: impl FnOnce() -> Result<T, String>,
+) -> Result<T, String> {
+    let _lock = hook_configuration_lock()?;
+    let result = update();
+    // Invalidate before releasing the lock so a concurrent status read cannot
+    // retain the previous installation state, including after a partial failure.
+    invalidate_hook_status_cache();
+    result
+}
+
 #[derive(Default)]
 struct ClaudeIntegrationState {
     sessions: Mutex<claude_hook::ClaudeSessionStore>,
@@ -358,6 +370,7 @@ pub(crate) struct ClaudeSessionSnapshot {
 #[derive(Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub(crate) struct AllSessionSnapshots {
+    pub(crate) cursor: serde_json::Value,
     pub(crate) trae: serde_json::Value,
     pub(crate) claude: ClaudeSessionSnapshot,
     pub(crate) codex: codex::CodexSnapshot,
@@ -374,6 +387,7 @@ pub(crate) struct AllSessionSnapshots {
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
 struct ActiveSessionCounts {
+    cursor: usize,
     claude: usize,
     codex: usize,
     gemini: usize,
@@ -441,6 +455,7 @@ impl SessionSnapshotCache {
 #[derive(Clone, Copy, Debug, Deserialize, Serialize)]
 #[serde(rename_all = "camelCase")]
 enum HookAgentId {
+    Cursor,
     Trae,
     ClaudeCode,
     Codex,
@@ -457,6 +472,7 @@ enum HookAgentId {
 impl hook_config::HookInstallConfig {
     fn is_enabled(&self, agent: HookAgentId) -> bool {
         match agent {
+            HookAgentId::Cursor => cursor::product::status().is_ok_and(|s| s["enabled"] == true),
             HookAgentId::Trae => self.trae,
             HookAgentId::ClaudeCode => self.claude_code,
             HookAgentId::Codex => self.codex,
@@ -473,6 +489,7 @@ impl hook_config::HookInstallConfig {
 
     fn set_enabled(&mut self, agent: HookAgentId, enabled: bool) {
         match agent {
+            HookAgentId::Cursor => {}, // Uses the atomic Cursor installation manifest.
             HookAgentId::Trae => self.trae = enabled,
             HookAgentId::ClaudeCode => self.claude_code = enabled,
             HookAgentId::Codex => self.codex = enabled,
@@ -491,6 +508,7 @@ impl hook_config::HookInstallConfig {
 impl HookAgentId {
     fn command(self) -> &'static str {
         match self {
+            Self::Cursor => "cursor",
             Self::Trae => "trae-cn",
             Self::ClaudeCode => "claude",
             Self::Codex => "codex",
@@ -507,6 +525,7 @@ impl HookAgentId {
 
     fn display_name(self) -> &'static str {
         match self {
+            Self::Cursor => "Cursor",
             Self::Trae => "Trae CN",
             Self::ClaudeCode => "Claude Code",
             Self::Codex => "Codex",
@@ -574,6 +593,7 @@ fn agent_is_installed(
     agent: HookAgentId,
     zcode_state: &ZCodeIntegrationState,
 ) -> Result<bool, String> {
+    if matches!(agent, HookAgentId::Cursor) { return Ok(cursor::product::status().is_ok_and(|s| s["detected"] == true)); }
     if matches!(agent, HookAgentId::Trae) { return Ok(trae::hook::detect()["detected"] == true); }
     if matches!(agent, HookAgentId::WorkBuddy) {
         return Ok(workbuddy_hook::detect_environment().detected);
@@ -651,7 +671,6 @@ fn dsh_install_state_label(state: dsh_hook::DshHookInstallState) -> String {
         dsh_hook::DshHookInstallState::Installed => "installed",
         dsh_hook::DshHookInstallState::Modified => "modified",
         dsh_hook::DshHookInstallState::Conflict => "conflict",
-        dsh_hook::DshHookInstallState::Incompatible => "incompatible",
     }
     .to_string()
 }
@@ -900,15 +919,6 @@ fn hook_statuses_unlocked(
         },
         {
             let status = dsh_hook::status()?;
-            let running_versions = dsh_state
-                .store
-                .lock()
-                .map_err(|error| error.to_string())?
-                .snapshot()
-                .instances
-                .into_iter()
-                .map(|instance| instance.dsh_version)
-                .collect();
             let runtime_error = dsh_state
                 .hook_error
                 .lock()
@@ -924,7 +934,7 @@ fn hook_statuses_unlocked(
                 install_path: Some(status.install_path),
                 bundled_version: Some(status.bundled_version.to_string()),
                 installed_version: status.installed_version,
-                running_versions,
+                running_versions: Vec::new(),
                 error: status.error.or(runtime_error),
             }
         },
@@ -959,6 +969,12 @@ fn hook_statuses_unlocked(
         },
     ];
     statuses.push(workbuddy_integration_status(workbuddy_state, zcode_state)?);
+    let cursor_status = cursor::product::status().unwrap_or_else(|e| serde_json::json!({"error":e,"state":"error"}));
+    statuses.push(HookIntegrationStatus { id:HookAgentId::Cursor, name:"Cursor", agent_installed:cursor_status["detected"]==true,
+        hook_installed:cursor_status["filesInstalled"]==true, workbuddy:None,
+        install_state:cursor_status["state"].as_str().map(str::to_owned), install_path:cursor_status["installPath"].as_str().map(str::to_owned),
+        bundled_version:Some("0.1.0".into()), installed_version:cursor_status["cursorVersion"].as_str().map(str::to_owned),
+        running_versions:vec![], error:cursor_status["error"].as_str().map(str::to_owned) });
     let trae_status = trae::hook::status().unwrap_or_else(|e| serde_json::json!({"state":"error","error":e.to_string(),"environment":trae::hook::detect()}));
     statuses.push(HookIntegrationStatus { id:HookAgentId::Trae,name:"Trae CN",agent_installed:trae_status["environment"]["detected"]==true,hook_installed:trae_status["filesInstalled"]==true,workbuddy:None,install_state:trae_status["state"].as_str().map(str::to_string),install_path:trae_status["installPath"].as_str().map(str::to_string),bundled_version:Some("3.3.102".into()),installed_version:trae_status["environment"]["productVersion"].as_str().map(str::to_string),running_versions:vec![],error:trae_status["error"].as_str().map(str::to_string) });
     Ok(statuses)
@@ -2366,6 +2382,7 @@ pub(crate) fn all_sessions_snapshot(
     let zcode = zcode_snapshot(&app.state::<ZCodeIntegrationState>())?;
     let workbuddy = workbuddy_snapshot(app)?;
     Ok(AllSessionSnapshots {
+        cursor: cursor_get_snapshot(),
         trae: trae_get_snapshot(),
         claude,
         codex,
@@ -2385,6 +2402,7 @@ fn active_session_counts(
     app: tauri::AppHandle,
 ) -> Result<ActiveSessionCounts, String> {
     Ok(ActiveSessionCounts {
+        cursor: cursor_active_count(),
         claude: app
             .state::<ClaudeIntegrationState>()
             .sessions
@@ -3266,6 +3284,17 @@ async fn send_opencode_session_message(
 
 #[tauri::command]
 async fn install_agent_hook(agent: HookAgentId, app: tauri::AppHandle) -> Result<(), String> {
+    if matches!(agent, HookAgentId::Cursor) {
+        return tauri::async_runtime::spawn_blocking(|| {
+            mutate_hook_configuration(|| {
+                cursor::runtime::configure(true, None)
+                    .map(|_| ())
+                    .map_err(|error| error.error.message)
+            })
+        })
+        .await
+        .map_err(|error| error.to_string())?;
+    }
     if matches!(agent,HookAgentId::Trae) {trae::hook::install(&std::env::current_exe().map_err(|e|e.to_string())?,true).map_err(|e|e.to_string())?;save_hook_installation_state(agent,true)?;let _=trae::files::Client::connect(&trae::files::root()).and_then(|c|c.call(serde_json::json!({"kind":"refresh_capabilities"})));return Ok(());}
     tauri::async_runtime::spawn_blocking(move || {
         let _lock = hook_configuration_lock()?;
@@ -3284,6 +3313,7 @@ async fn install_agent_hook(agent: HookAgentId, app: tauri::AppHandle) -> Result
 
         let executable = std::env::current_exe().map_err(|error| error.to_string())?;
         match agent {
+            HookAgentId::Cursor => unreachable!("Cursor handled before shared installer"),
             HookAgentId::Trae => unreachable!("Trae handled before shared installer"),
             HookAgentId::ClaudeCode => {
                 claude_hook::install_claude_hooks(&executable)?;
@@ -3379,6 +3409,17 @@ async fn install_agent_hook(agent: HookAgentId, app: tauri::AppHandle) -> Result
 
 #[tauri::command]
 async fn uninstall_agent_hook(agent: HookAgentId, app: tauri::AppHandle) -> Result<(), String> {
+    if matches!(agent, HookAgentId::Cursor) {
+        return tauri::async_runtime::spawn_blocking(|| {
+            mutate_hook_configuration(|| {
+                cursor::runtime::configure(false, None)
+                    .map(|_| ())
+                    .map_err(|error| error.error.message)
+            })
+        })
+        .await
+        .map_err(|error| error.to_string())?;
+    }
     if matches!(agent,HookAgentId::Trae) {trae::hook::install(&std::env::current_exe().map_err(|e|e.to_string())?,false).map_err(|e|e.to_string())?;save_hook_installation_state(agent,false)?;let _=trae::files::Client::connect(&trae::files::root()).and_then(|c|c.call(serde_json::json!({"kind":"refresh_capabilities"})));return Ok(());}
     tauri::async_runtime::spawn_blocking(move || {
         let _lock = hook_configuration_lock()?;
@@ -3396,6 +3437,7 @@ async fn uninstall_agent_hook(agent: HookAgentId, app: tauri::AppHandle) -> Resu
         }
 
         match agent {
+            HookAgentId::Cursor => unreachable!("Cursor handled before shared installer"),
             HookAgentId::Trae => unreachable!("Trae handled before shared installer"),
             HookAgentId::ClaudeCode => {
                 claude_hook::uninstall_claude_hooks()?;
@@ -4123,7 +4165,10 @@ fn lan_address_qr_code(url: String) -> Result<String, String> {
         .build())
 }
 
+fn cursor_active_count() -> usize { cursor::snapshot()["sessions"].as_array().map(|s| s.iter().filter(|s| s["activity"] == "working").count()).unwrap_or(0) }
+
 fn active_session_count(app: &tauri::AppHandle) -> usize {
+    cursor_active_count() +
     app.state::<ClaudeIntegrationState>()
         .sessions
         .lock()
@@ -4315,7 +4360,7 @@ fn watch_tray_and_minimal_mode_sounds(app: tauri::AppHandle) {
                         snapshot.zcode.version,
                         &snapshot.zcode,
                     );
-                    snapshot
+                    cursor_active_count() + snapshot
                         .claude
                         .sessions
                         .iter()
@@ -4391,6 +4436,8 @@ pub fn run() {
         .manage(PanelShapeState::default())
         .manage(lan_server::LanServerState::default())
         .setup(|app| {
+            cursor::runtime::set_policy(|name,input| !approval_policy::requires_user_decision(name) && approval_policy::should_auto_approve(approval_policy::load_settings().mode,approval_policy::risk_for_tool(name,Some(input))));
+            if let Err(error) = cursor::start() { eprintln!("Cursor bridge: {error}"); }
             let trae_environment=trae::hook::detect();
             if let Err(error)=trae::store::start(if hook_config::load().trae { trae::protocol::Capabilities::bundled(trae_environment["productVersion"].as_str()) } else { trae::protocol::Capabilities { reason:"Trae integration is disabled".into(), ..Default::default() } }) { eprintln!("Trae bridge: {error}"); }
             if hook_config::load().trae {if let Ok(exe)=std::env::current_exe(){if let Err(error)=trae::hook::install(&exe,true){eprintln!("Trae Hook repair: {error}");}}}
@@ -4430,14 +4477,20 @@ pub fn run() {
                         hook_install_config.set_enabled(HookAgentId::DeepSeekHarness, true);
                         hook_config_changed = true;
                     }
-                    status.error
+                    if status.needs_sync {
+                        match dsh_hook::install() {
+                            Ok(installed) => installed.error,
+                            Err(error) => Some(error),
+                        }
+                    } else {
+                        status.error
+                    }
                 }
                 Ok(status)
                     if dsh_configured
                         && matches!(
                             status.state,
                             dsh_hook::DshHookInstallState::NotInstalled
-                                | dsh_hook::DshHookInstallState::Incompatible
                         ) =>
                 {
                     match dsh_hook::install() {
@@ -4818,6 +4871,7 @@ pub fn run() {
             }
         })
         .invoke_handler(tauri::generate_handler![
+            cursor_get_snapshot, cursor_respond,
             trae_get_snapshot, trae_configuration_preview, trae_set_installation, focus_trae_window, trae_respond_permission, trae_respond_question, trae_respond_plan, trae_cancel_request, trae_create_task, trae_task_action, trae_resolve_external_grant,
             set_panel_expanded,
             set_panel_horizontal_position,
@@ -4911,7 +4965,14 @@ pub fn run() {
 }
 
 #[tauri::command]
-fn trae_get_snapshot()->serde_json::Value {let mut snapshot=trae::store::snapshot();match trae::hook::status(){Ok(status)=>snapshot["hook"]=status,Err(error)=>snapshot["integrationError"]=serde_json::json!(error)}snapshot}
+fn cursor_get_snapshot() -> serde_json::Value { cursor::snapshot() }
+#[tauri::command]
+async fn cursor_respond(action: String, body: serde_json::Value) -> Result<serde_json::Value, cursor::runtime::ApiError> {
+    tauri::async_runtime::spawn_blocking(move || cursor::dispatch(&action, body))
+        .await.map_err(|_| cursor::runtime::ApiError::new("BROKER_UNAVAILABLE"))?
+}
+#[tauri::command]
+fn trae_get_snapshot()->serde_json::Value {trae::hook::snapshot()}
 #[tauri::command]
 fn trae_configuration_preview()->Result<serde_json::Value,trae::protocol::ApiError>{trae::hook::template()}
 #[tauri::command]
@@ -4932,6 +4993,45 @@ trae_command!(trae_resolve_external_grant,"grants/resolve");
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn cursor_hook_changes_clear_fresh_status_cache_on_success_and_failure() {
+        let cache = HOOK_STATUS_CACHE.get_or_init(|| Mutex::new(None));
+        for (previously_installed, update_result) in [
+            (false, Ok(())),
+            (true, Ok(())),
+            (false, Err("installation failed".to_string())),
+            (true, Err("uninstallation failed".to_string())),
+        ] {
+            let mut update_held_lock = false;
+            let result = mutate_hook_configuration(|| {
+                update_held_lock = matches!(
+                    HOOK_CONFIGURATION_LOCK.get().unwrap().try_lock(),
+                    Err(std::sync::TryLockError::WouldBlock)
+                );
+                *cache.lock().unwrap() = Some((
+                    Instant::now(),
+                    vec![HookIntegrationStatus {
+                        id: HookAgentId::Cursor,
+                        name: "Cursor",
+                        agent_installed: true,
+                        hook_installed: previously_installed,
+                        workbuddy: None,
+                        install_state: None,
+                        install_path: None,
+                        bundled_version: None,
+                        installed_version: None,
+                        running_versions: Vec::new(),
+                        error: None,
+                    }],
+                ));
+                update_result.clone()
+            });
+            assert_eq!(result, update_result);
+            assert!(update_held_lock);
+            assert!(cache.lock().unwrap().is_none());
+        }
+    }
 
     #[test]
     fn workbuddy_handoff_only_targets_workbuddy_processes() {

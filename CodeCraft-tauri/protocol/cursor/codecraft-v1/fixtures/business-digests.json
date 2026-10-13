@@ -1,0 +1,164 @@
+{
+  "schemaVersion": 1,
+  "evidenceKind": "synthetic",
+  "cursorClientExecuted": false,
+  "cases": [
+    {
+      "name": "plan-original",
+      "toolName": "codecraft_review_plan",
+      "arguments": {
+        "schemaVersion": 1,
+        "clientRequestId": "review-a",
+        "planId": "plan-a",
+        "baseRevision": 0,
+        "supersedesClientRequestId": null,
+        "title": "校验完整计划",
+        "overview": "保留 Unicode 和换行",
+        "markdown": "# 实施步骤\r\n先审阅，再执行。😀",
+        "todos": [
+          {
+            "id": "todo-a",
+            "description": "验证摘要",
+            "status": "pending",
+            "phaseId": "phase-a"
+          }
+        ],
+        "phases": [
+          {
+            "id": "phase-a",
+            "title": "验证",
+            "description": "完整内容参与摘要"
+          }
+        ]
+      },
+      "expected": {
+        "argumentsDigest": "46bbf9ebf4d6459f784d51bd26c40885d3d0a76c5f3508adf1dcbdddb6377fc1",
+        "planContentDigest": "182131b9a4c97054c247fe4af936c76f7ebcffd6e9b8889397f6d2c92a67c0b3"
+      }
+    },
+    {
+      "name": "plan-new-review",
+      "toolName": "codecraft_review_plan",
+      "arguments": {
+        "schemaVersion": 1,
+        "clientRequestId": "review-b",
+        "planId": "plan-a",
+        "baseRevision": 1,
+        "supersedesClientRequestId": "review-a",
+        "title": "校验完整计划",
+        "overview": "保留 Unicode 和换行",
+        "markdown": "# 实施步骤\r\n先审阅，再执行。😀",
+        "todos": [
+          {
+            "id": "todo-a",
+            "description": "验证摘要",
+            "status": "pending",
+            "phaseId": "phase-a"
+          }
+        ],
+        "phases": [
+          {
+            "id": "phase-a",
+            "title": "验证",
+            "description": "完整内容参与摘要"
+          }
+        ]
+      },
+      "expected": {
+        "argumentsDigest": "36da340eccf2a1334a0b88e0e1b9e0706dec90eea18164ff681c681fc63dc807",
+        "planContentDigest": "182131b9a4c97054c247fe4af936c76f7ebcffd6e9b8889397f6d2c92a67c0b3"
+      }
+    },
+    {
+      "name": "plan-newline",
+      "toolName": "codecraft_review_plan",
+      "arguments": {
+        "schemaVersion": 1,
+        "clientRequestId": "review-a",
+        "planId": "plan-a",
+        "baseRevision": 0,
+        "supersedesClientRequestId": null,
+        "title": "校验完整计划",
+        "overview": "保留 Unicode 和换行",
+        "markdown": "# 实施步骤\n先审阅，再执行。😀",
+        "todos": [
+          {
+            "id": "todo-a",
+            "description": "验证摘要",
+            "status": "pending",
+            "phaseId": "phase-a"
+          }
+        ],
+        "phases": [
+          {
+            "id": "phase-a",
+            "title": "验证",
+            "description": "完整内容参与摘要"
+          }
+        ]
+      },
+      "expected": {
+        "argumentsDigest": "da7e8585fa27bfb5542b69422c9b2a38af65a520e7f5e232ad8847c228fbd4fa",
+        "planContentDigest": "0ae91074d970c77f9f07c5d68dc9b59de075ddfd8f30b96f19aec7b3f2e9e710"
+      }
+    },
+    {
+      "name": "plan-ticket",
+      "toolName": "codecraft_review_plan",
+      "arguments": {
+        "schemaVersion": 1,
+        "clientRequestId": "review-a",
+        "planId": "plan-a",
+        "baseRevision": 0,
+        "supersedesClientRequestId": null,
+        "title": "校验完整计划",
+        "overview": "保留 Unicode 和换行",
+        "markdown": "# 实施步骤\r\n先审阅，再执行。😀",
+        "todos": [
+          {
+            "id": "todo-a",
+            "description": "验证摘要",
+            "status": "pending",
+            "phaseId": "phase-a"
+          }
+        ],
+        "phases": [
+          {
+            "id": "phase-a",
+            "title": "验证",
+            "description": "完整内容参与摘要"
+          }
+        ],
+        "bridgeTicket": "synthetic-ticket-not-an-authorization"
+      },
+      "expected": {
+        "argumentsDigest": "46bbf9ebf4d6459f784d51bd26c40885d3d0a76c5f3508adf1dcbdddb6377fc1",
+        "planContentDigest": "182131b9a4c97054c247fe4af936c76f7ebcffd6e9b8889397f6d2c92a67c0b3"
+      }
+    },
+    {
+      "name": "question-text",
+      "toolName": "codecraft_ask_user",
+      "arguments": {
+        "schemaVersion": 1,
+        "clientRequestId": "ask-a",
+        "questions": [
+          {
+            "questionId": "q-a",
+            "prompt": "请输入说明",
+            "options": [],
+            "multiSelect": false,
+            "allowFreeText": true,
+            "required": true,
+            "allowSkip": false,
+            "maxTextLength": 64
+          }
+        ]
+      },
+      "expected": {
+        "argumentsDigest": "3eabdfd419cfd0820150c932b847660bd02f4bbada8fcabb75e09fe714be995b",
+        "planContentDigest": null
+      }
+    }
+  ]
+}

@@ -1,0 +1,3520 @@
+{
+  "schemaVersion": 1,
+  "evidenceKind": "cursorRuntime",
+  "cursorClientExecuted": true,
+  "probeInjected": false,
+  "identity": {
+    "cursorVersion": "3.21.16",
+    "mode": "Agent",
+    "platform": "windows",
+    "architecture": "x64",
+    "clientFingerprint": "28a304e5c466a347022d44a3d3f33760e15ac09aecdd2ee2053c914950db4535",
+    "configFingerprint": "66243bafe5811ed8c9ec7c9798144e579d752333ef6a411dea8828e9b1c8ed14"
+  },
+  "checkIds": [
+    "P0-03"
+  ],
+  "checkResults": {
+    "P0-03": "failed"
+  },
+  "verifiedAt": "2026-09-21T12:17:19.920Z",
+  "probe": {
+    "version": "0.1.0",
+    "sha256": "fd999946ea50a08f8bdcf3ff6c9a33eba72947fd7b7094c954b5fe646a50bbd4"
+  },
+  "configuration": {
+    "sources": [
+      {
+        "source": "projectHooks",
+        "exists": true,
+        "sha256": "d2776ad8b05a027f12016bedaa160d029fe4b3ccecbc16be709f9af5695389c5"
+      },
+      {
+        "source": "projectMcp",
+        "exists": true,
+        "sha256": "d431585e03e8c3f44c576a3e6a2f8bdd3a87487ded1c397dae48552d9ffc64be"
+      },
+      {
+        "source": "userHooks",
+        "exists": false,
+        "sha256": null
+      },
+      {
+        "source": "userMcp",
+        "exists": false,
+        "sha256": null
+      }
+    ],
+    "enabledProjectServers": [
+      "codecraft_cursor_collision",
+      "codecraft_cursor_probe"
+    ],
+    "scope": "single isolated project",
+    "toolPolicyObserved": "Reads / Allow all (unchanged default)"
+  },
+  "review": {
+    "method": "Two observed Cursor IDE Agent turns against only generated local read-only MCP probes; payloads compared against capture records and Hook field names independently checked in Cursor hook logs.",
+    "prompts": [
+      "Call codecraft_probe_echo on codecraft_cursor_probe with schemaVersion 1, clientRequestId owned-a, payload message same; then codecraft_cursor_collision with clientRequestId collision-a. Omit bridgeTicket, read sample.txt, no terminal or file changes.",
+      "Call both servers once each with identical schemaVersion 1, clientRequestId identical-a, payload message same. Omit bridgeTicket, no other tools or file changes."
+    ],
+    "uiResults": [
+      "owned / collision; sample.txt read",
+      "owned / collision; Worked for 13s"
+    ],
+    "nativeApproval": "No per-call card was shown for these read-only probes under the existing Reads / Allow all policy. No policy was changed; nativeShared was not exercised.",
+    "fieldNamesFromClientLog": {
+      "preToolUse": [
+        "conversation_id",
+        "generation_id",
+        "model",
+        "tool_name",
+        "tool_input",
+        "tool_use_id",
+        "session_id",
+        "hook_event_name",
+        "cursor_version",
+        "workspace_roots",
+        "user_email",
+        "transcript_path"
+      ],
+      "beforeMCPExecution": [
+        "conversation_id",
+        "generation_id",
+        "model",
+        "tool_name",
+        "tool_input",
+        "mcp_server_name",
+        "command",
+        "session_id",
+        "hook_event_name",
+        "cursor_version",
+        "workspace_roots",
+        "user_email",
+        "transcript_path"
+      ]
+    },
+    "firstTurn": {
+      "preToolUse": [
+        19,
+        20
+      ],
+      "beforeMCPExecution": [
+        21,
+        24
+      ],
+      "toolsCall": [
+        22,
+        25
+      ],
+      "postToolUse": [
+        27,
+        28
+      ],
+      "read": [
+        29,
+        30
+      ],
+      "stop": 32
+    },
+    "identicalArgumentsTurn": {
+      "preToolUse": [
+        44,
+        48
+      ],
+      "beforeMCPExecution": [
+        45,
+        50
+      ],
+      "toolsCall": [
+        46,
+        51
+      ],
+      "postToolUse": [
+        49,
+        53
+      ],
+      "stop": 55
+    },
+    "findings": {
+      "unqualifiedPreToolName": "MCP:codecraft_probe_echo",
+      "preToolInputsEqualExceptToolUseId": true,
+      "beforeMcpHasToolUseId": false,
+      "parametersModified": false,
+      "ticketInjected": false,
+      "requestedMcpProtocol": "2025-11-25",
+      "workspacePathForm": "slash-drive",
+      "hookUtf8Bom": true
+    },
+    "limitations": [
+      "Only Agent on this build was executed.",
+      "Capture sequence records publication order, not a general client ordering guarantee.",
+      "Successful postToolUse IDs match preToolUse IDs; denial/cancellation/timeout mapping is not tested.",
+      "No reliable wait budget, input modification, native acceptance/query or atomic native decision was verified.",
+      "No general schema validation timing or third-party Hook merge guarantee follows from these samples."
+    ]
+  },
+  "captures": [
+    {
+      "captureSha256": "6b7ed68870ec9a8da603089760cab0fdeef17691f8637a31c9bfa78e9f384df0",
+      "cursorClientExecuted": null,
+      "details": {
+        "server": "collision"
+      },
+      "event": "initialize",
+      "eventId": "ebae7354-7145-436e-a2e3-96163329ca7a",
+      "evidenceKind": "probeCapture",
+      "input": {
+        "id": 0,
+        "jsonrpc": {
+          "alias": "alias:5e3914bf55ad6240abf3ad7b9e6e86b0cbe32bc31a8fc5fe2c5232014c542c8f",
+          "length": 3,
+          "type": "string"
+        },
+        "method": {
+          "alias": "alias:48ddc5e728feb3660f00c848bc81583a3c61c204008983058126d7de1228d94a",
+          "length": 10,
+          "type": "string"
+        },
+        "params": {
+          "capabilities": {
+            "alias:3c9d294da2efb1337a5b28162061055b31ed2ae37f883bc35df5a80494c6333f": {
+              "alias:79b08135573f6da2f4267803c1e0299beda54416dcf573f5da792b0f7941db5a": {}
+            },
+            "alias:b18cc5a768a226a56bc81091d277b65286adc709fbe20a2ae2be11ad4ccfeec5": {
+              "alias:86f0b223e53b202ce60dc30626f1613b605413e5a3018a3a58d108a0da61f6f2": false
+            },
+            "alias:f7d933e576b401d18d950f8f1b3a6978d0dca5ced91597ba6e4f14700e055b03": {
+              "alias:228939e8e9fc7318ecb26bbbf79de0a79eb76e5cf6e5c426a911ba22808ea94e": {
+                "alias:9f8629d7d4681983f0bd283a171741408ecb3ee0950bdf13aee6121325080a52": [
+                  {
+                    "alias": "alias:4d6d2101ae74aafee680c1a52d64614e9226538775af00ac8c7aaf1bad594652",
+                    "length": 25,
+                    "type": "string"
+                  }
+                ]
+              }
+            }
+          },
+          "clientInfo": {
+            "alias:e764002cbd1ed3dfdc1d2482452ca53d58831f26fb96786dba5cf04ece8c55f0": {
+              "alias": "alias:9e35d759e3d67edda37b8ec3f5c4f6d6b0f5eeced51f3a359fdaf72c47aa37e5",
+              "length": 5,
+              "type": "string"
+            },
+            "name": {
+              "alias": "alias:824cdb780023b862f9da83519a86a1fe322ff0f0f64063318c94210ff81ed44d",
+              "length": 13,
+              "type": "string"
+            }
+          },
+          "protocolVersion": {
+            "alias": "alias:0e64c0d0d0345954c2471a456d484966910ca08f23be1b4b6943d1f49f0c31c9",
+            "length": 10,
+            "type": "string"
+          }
+        }
+      },
+      "origin": "mcpStdin",
+      "probeInjected": false,
+      "probeSha256": "fd999946ea50a08f8bdcf3ff6c9a33eba72947fd7b7094c954b5fe646a50bbd4",
+      "receivedAtUnixMs": 1789991727173,
+      "runId": "1a97b3f4-03c6-44b9-a723-a8ec24afac2a",
+      "schemaVersion": 1,
+      "sequence": 1
+    },
+    {
+      "captureSha256": "460c318df81d94379d4c78552955d2097585ace635a99a1dfcaa53fbb0103f9a",
+      "cursorClientExecuted": null,
+      "details": {
+        "nativeAcceptance": "unconfirmed",
+        "server": "collision",
+        "transport": "written"
+      },
+      "event": "responseWritten",
+      "eventId": "8735d57a-1f0c-4037-8be4-bc4953fd13fd",
+      "evidenceKind": "probeCapture",
+      "input": {
+        "id": 0
+      },
+      "origin": "mcpStdout",
+      "probeInjected": false,
+      "probeSha256": "fd999946ea50a08f8bdcf3ff6c9a33eba72947fd7b7094c954b5fe646a50bbd4",
+      "receivedAtUnixMs": 1789991727236,
+      "runId": "1a97b3f4-03c6-44b9-a723-a8ec24afac2a",
+      "schemaVersion": 1,
+      "sequence": 2
+    },
+    {
+      "captureSha256": "ca5e46aadf152617a03ca1998131b616a0aa0ab7e419404a375d5980af0b64a4",
+      "cursorClientExecuted": null,
+      "details": {
+        "server": "collision"
+      },
+      "event": "notifications/initialized",
+      "eventId": "e9c607d6-1389-4750-b8ff-c59d158a4a3b",
+      "evidenceKind": "probeCapture",
+      "input": {
+        "jsonrpc": {
+          "alias": "alias:5e3914bf55ad6240abf3ad7b9e6e86b0cbe32bc31a8fc5fe2c5232014c542c8f",
+          "length": 3,
+          "type": "string"
+        },
+        "method": {
+          "alias": "alias:e53784280c2cae69ddf5be3a0327f2c6db820dcd68a7b3e1e515503d99b5b401",
+          "length": 25,
+          "type": "string"
+        }
+      },
+      "origin": "mcpStdin",
+      "probeInjected": false,
+      "probeSha256": "fd999946ea50a08f8bdcf3ff6c9a33eba72947fd7b7094c954b5fe646a50bbd4",
+      "receivedAtUnixMs": 1789991727275,
+      "runId": "1a97b3f4-03c6-44b9-a723-a8ec24afac2a",
+      "schemaVersion": 1,
+      "sequence": 3
+    },
+    {
+      "captureSha256": "48a8c3749f61da816199237bcbbc8e7f3f71d75575a4254136bae76b4a8fea3f",
+      "cursorClientExecuted": null,
+      "details": {
+        "server": "collision"
+      },
+      "event": "tools/list",
+      "eventId": "88e3f4a5-e196-400b-825b-04a777053f2b",
+      "evidenceKind": "probeCapture",
+      "input": {
+        "id": 1,
+        "jsonrpc": {
+          "alias": "alias:5e3914bf55ad6240abf3ad7b9e6e86b0cbe32bc31a8fc5fe2c5232014c542c8f",
+          "length": 3,
+          "type": "string"
+        },
+        "method": {
+          "alias": "alias:232142bf41265b35c4e9ea30ac63b3e7090b7f3115e78b180f91acea5f569bd7",
+          "length": 10,
+          "type": "string"
+        }
+      },
+      "origin": "mcpStdin",
+      "probeInjected": false,
+      "probeSha256": "fd999946ea50a08f8bdcf3ff6c9a33eba72947fd7b7094c954b5fe646a50bbd4",
+      "receivedAtUnixMs": 1789991727313,
+      "runId": "1a97b3f4-03c6-44b9-a723-a8ec24afac2a",
+      "schemaVersion": 1,
+      "sequence": 4
+    },
+    {
+      "captureSha256": "b1bc1fea405dcee57615b88816ab1a19823624696f7b9fbfc2fd195a555e50c9",
+      "cursorClientExecuted": null,
+      "details": {
+        "nativeAcceptance": "unconfirmed",
+        "server": "collision",
+        "transport": "written"
+      },
+      "event": "responseWritten",
+      "eventId": "47d3f900-1d7e-4155-8ae5-bbf74cd43b19",
+      "evidenceKind": "probeCapture",
+      "input": {
+        "id": 1
+      },
+      "origin": "mcpStdout",
+      "probeInjected": false,
+      "probeSha256": "fd999946ea50a08f8bdcf3ff6c9a33eba72947fd7b7094c954b5fe646a50bbd4",
+      "receivedAtUnixMs": 1789991727367,
+      "runId": "1a97b3f4-03c6-44b9-a723-a8ec24afac2a",
+      "schemaVersion": 1,
+      "sequence": 5
+    },
+    {
+      "captureSha256": "69dd0dc6ac41508910c843c803acd4c6752dc3710bbe2a5a0a9a309897cec322",
+      "cursorClientExecuted": null,
+      "details": {
+        "server": "collision"
+      },
+      "event": "initialize",
+      "eventId": "5559b780-0f66-44ab-8110-7367bfdb245c",
+      "evidenceKind": "probeCapture",
+      "input": {
+        "id": 0,
+        "jsonrpc": {
+          "alias": "alias:5e3914bf55ad6240abf3ad7b9e6e86b0cbe32bc31a8fc5fe2c5232014c542c8f",
+          "length": 3,
+          "type": "string"
+        },
+        "method": {
+          "alias": "alias:48ddc5e728feb3660f00c848bc81583a3c61c204008983058126d7de1228d94a",
+          "length": 10,
+          "type": "string"
+        },
+        "params": {
+          "capabilities": {
+            "alias:3c9d294da2efb1337a5b28162061055b31ed2ae37f883bc35df5a80494c6333f": {
+              "alias:79b08135573f6da2f4267803c1e0299beda54416dcf573f5da792b0f7941db5a": {}
+            },
+            "alias:b18cc5a768a226a56bc81091d277b65286adc709fbe20a2ae2be11ad4ccfeec5": {
+              "alias:86f0b223e53b202ce60dc30626f1613b605413e5a3018a3a58d108a0da61f6f2": false
+            },
+            "alias:f7d933e576b401d18d950f8f1b3a6978d0dca5ced91597ba6e4f14700e055b03": {
+              "alias:228939e8e9fc7318ecb26bbbf79de0a79eb76e5cf6e5c426a911ba22808ea94e": {
+                "alias:9f8629d7d4681983f0bd283a171741408ecb3ee0950bdf13aee6121325080a52": [
+                  {
+                    "alias": "alias:4d6d2101ae74aafee680c1a52d64614e9226538775af00ac8c7aaf1bad594652",
+                    "length": 25,
+                    "type": "string"
+                  }
+                ]
+              }
+            }
+          },
+          "clientInfo": {
+            "alias:e764002cbd1ed3dfdc1d2482452ca53d58831f26fb96786dba5cf04ece8c55f0": {
+              "alias": "alias:9e35d759e3d67edda37b8ec3f5c4f6d6b0f5eeced51f3a359fdaf72c47aa37e5",
+              "length": 5,
+              "type": "string"
+            },
+            "name": {
+              "alias": "alias:824cdb780023b862f9da83519a86a1fe322ff0f0f64063318c94210ff81ed44d",
+              "length": 13,
+              "type": "string"
+            }
+          },
+          "protocolVersion": {
+            "alias": "alias:0e64c0d0d0345954c2471a456d484966910ca08f23be1b4b6943d1f49f0c31c9",
+            "length": 10,
+            "type": "string"
+          }
+        }
+      },
+      "origin": "mcpStdin",
+      "probeInjected": false,
+      "probeSha256": "fd999946ea50a08f8bdcf3ff6c9a33eba72947fd7b7094c954b5fe646a50bbd4",
+      "receivedAtUnixMs": 1789991903106,
+      "runId": "1a97b3f4-03c6-44b9-a723-a8ec24afac2a",
+      "schemaVersion": 1,
+      "sequence": 6
+    },
+    {
+      "captureSha256": "90dbd0ee5a350a6da5bcfeaf72a6ddb041869138ce55ba1ebf963070d8f21e5d",
+      "cursorClientExecuted": null,
+      "details": {
+        "nativeAcceptance": "unconfirmed",
+        "server": "collision",
+        "transport": "written"
+      },
+      "event": "responseWritten",
+      "eventId": "a559a02d-018c-426b-a821-124c481a4786",
+      "evidenceKind": "probeCapture",
+      "input": {
+        "id": 0
+      },
+      "origin": "mcpStdout",
+      "probeInjected": false,
+      "probeSha256": "fd999946ea50a08f8bdcf3ff6c9a33eba72947fd7b7094c954b5fe646a50bbd4",
+      "receivedAtUnixMs": 1789991903149,
+      "runId": "1a97b3f4-03c6-44b9-a723-a8ec24afac2a",
+      "schemaVersion": 1,
+      "sequence": 7
+    },
+    {
+      "captureSha256": "0b5b3c6c1e35a5c797672424f74b7ffb99d92f25c70d8ccdbf324c28eaaafdcb",
+      "cursorClientExecuted": null,
+      "details": {
+        "server": "collision"
+      },
+      "event": "notifications/initialized",
+      "eventId": "79a224e5-2b7f-4fa3-bdc1-5c73422ea24f",
+      "evidenceKind": "probeCapture",
+      "input": {
+        "jsonrpc": {
+          "alias": "alias:5e3914bf55ad6240abf3ad7b9e6e86b0cbe32bc31a8fc5fe2c5232014c542c8f",
+          "length": 3,
+          "type": "string"
+        },
+        "method": {
+          "alias": "alias:e53784280c2cae69ddf5be3a0327f2c6db820dcd68a7b3e1e515503d99b5b401",
+          "length": 25,
+          "type": "string"
+        }
+      },
+      "origin": "mcpStdin",
+      "probeInjected": false,
+      "probeSha256": "fd999946ea50a08f8bdcf3ff6c9a33eba72947fd7b7094c954b5fe646a50bbd4",
+      "receivedAtUnixMs": 1789991903186,
+      "runId": "1a97b3f4-03c6-44b9-a723-a8ec24afac2a",
+      "schemaVersion": 1,
+      "sequence": 8
+    },
+    {
+      "captureSha256": "a5bd0fa8e657bfeeb70b478b37f411aeee0edf6c611fe2f489d81c65ac16d62e",
+      "cursorClientExecuted": null,
+      "details": {
+        "server": "owned"
+      },
+      "event": "initialize",
+      "eventId": "a8996ea9-2612-4b09-aba0-b9f119497e52",
+      "evidenceKind": "probeCapture",
+      "input": {
+        "id": 0,
+        "jsonrpc": {
+          "alias": "alias:5e3914bf55ad6240abf3ad7b9e6e86b0cbe32bc31a8fc5fe2c5232014c542c8f",
+          "length": 3,
+          "type": "string"
+        },
+        "method": {
+          "alias": "alias:48ddc5e728feb3660f00c848bc81583a3c61c204008983058126d7de1228d94a",
+          "length": 10,
+          "type": "string"
+        },
+        "params": {
+          "capabilities": {
+            "alias:3c9d294da2efb1337a5b28162061055b31ed2ae37f883bc35df5a80494c6333f": {
+              "alias:79b08135573f6da2f4267803c1e0299beda54416dcf573f5da792b0f7941db5a": {}
+            },
+            "alias:b18cc5a768a226a56bc81091d277b65286adc709fbe20a2ae2be11ad4ccfeec5": {
+              "alias:86f0b223e53b202ce60dc30626f1613b605413e5a3018a3a58d108a0da61f6f2": false
+            },
+            "alias:f7d933e576b401d18d950f8f1b3a6978d0dca5ced91597ba6e4f14700e055b03": {
+              "alias:228939e8e9fc7318ecb26bbbf79de0a79eb76e5cf6e5c426a911ba22808ea94e": {
+                "alias:9f8629d7d4681983f0bd283a171741408ecb3ee0950bdf13aee6121325080a52": [
+                  {
+                    "alias": "alias:4d6d2101ae74aafee680c1a52d64614e9226538775af00ac8c7aaf1bad594652",
+                    "length": 25,
+                    "type": "string"
+                  }
+                ]
+              }
+            }
+          },
+          "clientInfo": {
+            "alias:e764002cbd1ed3dfdc1d2482452ca53d58831f26fb96786dba5cf04ece8c55f0": {
+              "alias": "alias:9e35d759e3d67edda37b8ec3f5c4f6d6b0f5eeced51f3a359fdaf72c47aa37e5",
+              "length": 5,
+              "type": "string"
+            },
+            "name": {
+              "alias": "alias:824cdb780023b862f9da83519a86a1fe322ff0f0f64063318c94210ff81ed44d",
+              "length": 13,
+              "type": "string"
+            }
+          },
+          "protocolVersion": {
+            "alias": "alias:0e64c0d0d0345954c2471a456d484966910ca08f23be1b4b6943d1f49f0c31c9",
+            "length": 10,
+            "type": "string"
+          }
+        }
+      },
+      "origin": "mcpStdin",
+      "probeInjected": false,
+      "probeSha256": "fd999946ea50a08f8bdcf3ff6c9a33eba72947fd7b7094c954b5fe646a50bbd4",
+      "receivedAtUnixMs": 1789991994527,
+      "runId": "1a97b3f4-03c6-44b9-a723-a8ec24afac2a",
+      "schemaVersion": 1,
+      "sequence": 9
+    },
+    {
+      "captureSha256": "fbf27ba7d306e00cfb23edd01709ec9164c3df01bd0c103e61ba177999dcf157",
+      "cursorClientExecuted": null,
+      "details": {
+        "nativeAcceptance": "unconfirmed",
+        "server": "owned",
+        "transport": "written"
+      },
+      "event": "responseWritten",
+      "eventId": "bc543b74-e04e-4ffe-bd71-f3afb6235957",
+      "evidenceKind": "probeCapture",
+      "input": {
+        "id": 0
+      },
+      "origin": "mcpStdout",
+      "probeInjected": false,
+      "probeSha256": "fd999946ea50a08f8bdcf3ff6c9a33eba72947fd7b7094c954b5fe646a50bbd4",
+      "receivedAtUnixMs": 1789991994604,
+      "runId": "1a97b3f4-03c6-44b9-a723-a8ec24afac2a",
+      "schemaVersion": 1,
+      "sequence": 10
+    },
+    {
+      "captureSha256": "bea9cf70d4dba58cfd6c2a40b933759be39592417326f061ff5ffe00d5c77bd8",
+      "cursorClientExecuted": null,
+      "details": {
+        "server": "owned"
+      },
+      "event": "notifications/initialized",
+      "eventId": "5444387a-9b22-4f8e-8402-3f933b885628",
+      "evidenceKind": "probeCapture",
+      "input": {
+        "jsonrpc": {
+          "alias": "alias:5e3914bf55ad6240abf3ad7b9e6e86b0cbe32bc31a8fc5fe2c5232014c542c8f",
+          "length": 3,
+          "type": "string"
+        },
+        "method": {
+          "alias": "alias:e53784280c2cae69ddf5be3a0327f2c6db820dcd68a7b3e1e515503d99b5b401",
+          "length": 25,
+          "type": "string"
+        }
+      },
+      "origin": "mcpStdin",
+      "probeInjected": false,
+      "probeSha256": "fd999946ea50a08f8bdcf3ff6c9a33eba72947fd7b7094c954b5fe646a50bbd4",
+      "receivedAtUnixMs": 1789991994649,
+      "runId": "1a97b3f4-03c6-44b9-a723-a8ec24afac2a",
+      "schemaVersion": 1,
+      "sequence": 11
+    },
+    {
+      "captureSha256": "738afae43b229b3618e97658a7bfec7492a4d40438b7bb2fd5653b37f823a13c",
+      "cursorClientExecuted": null,
+      "details": {
+        "server": "owned"
+      },
+      "event": "tools/list",
+      "eventId": "eb6a843e-6352-452f-91f2-17bc543042aa",
+      "evidenceKind": "probeCapture",
+      "input": {
+        "id": 1,
+        "jsonrpc": {
+          "alias": "alias:5e3914bf55ad6240abf3ad7b9e6e86b0cbe32bc31a8fc5fe2c5232014c542c8f",
+          "length": 3,
+          "type": "string"
+        },
+        "method": {
+          "alias": "alias:232142bf41265b35c4e9ea30ac63b3e7090b7f3115e78b180f91acea5f569bd7",
+          "length": 10,
+          "type": "string"
+        }
+      },
+      "origin": "mcpStdin",
+      "probeInjected": false,
+      "probeSha256": "fd999946ea50a08f8bdcf3ff6c9a33eba72947fd7b7094c954b5fe646a50bbd4",
+      "receivedAtUnixMs": 1789991994691,
+      "runId": "1a97b3f4-03c6-44b9-a723-a8ec24afac2a",
+      "schemaVersion": 1,
+      "sequence": 12
+    },
+    {
+      "captureSha256": "356b2b26bafbbcd0350618e72f0e90656e004b042ff5d4f5e9745349152483f7",
+      "cursorClientExecuted": null,
+      "details": {
+        "nativeAcceptance": "unconfirmed",
+        "server": "owned",
+        "transport": "written"
+      },
+      "event": "responseWritten",
+      "eventId": "9ca9eaa5-87b2-49be-839a-6e516c11f076",
+      "evidenceKind": "probeCapture",
+      "input": {
+        "id": 1
+      },
+      "origin": "mcpStdout",
+      "probeInjected": false,
+      "probeSha256": "fd999946ea50a08f8bdcf3ff6c9a33eba72947fd7b7094c954b5fe646a50bbd4",
+      "receivedAtUnixMs": 1789991994746,
+      "runId": "1a97b3f4-03c6-44b9-a723-a8ec24afac2a",
+      "schemaVersion": 1,
+      "sequence": 13
+    },
+    {
+      "captureSha256": "0685940e24a73c03ae55120b121f2f6f5c76f54e13ee8219f4f3f08106887ab6",
+      "cursorClientExecuted": null,
+      "details": {
+        "server": "collision"
+      },
+      "event": "ping",
+      "eventId": "8d610105-38b1-47e8-91e8-45c6afe5a264",
+      "evidenceKind": "probeCapture",
+      "input": {
+        "id": 1,
+        "jsonrpc": {
+          "alias": "alias:5e3914bf55ad6240abf3ad7b9e6e86b0cbe32bc31a8fc5fe2c5232014c542c8f",
+          "length": 3,
+          "type": "string"
+        },
+        "method": {
+          "alias": "alias:77dbaec155d50b48803d5c06bf3beeebb358e45cddceb80fb82730b41ffeaa30",
+          "length": 4,
+          "type": "string"
+        }
+      },
+      "origin": "mcpStdin",
+      "probeInjected": false,
+      "probeSha256": "fd999946ea50a08f8bdcf3ff6c9a33eba72947fd7b7094c954b5fe646a50bbd4",
+      "receivedAtUnixMs": 1789992257701,
+      "runId": "1a97b3f4-03c6-44b9-a723-a8ec24afac2a",
+      "schemaVersion": 1,
+      "sequence": 14
+    },
+    {
+      "captureSha256": "dce9f891fed334a70e88d0fa92ef11e49baaba65df60011d1e780e4cac2bf372",
+      "cursorClientExecuted": null,
+      "details": {
+        "nativeAcceptance": "unconfirmed",
+        "server": "collision",
+        "transport": "written"
+      },
+      "event": "responseWritten",
+      "eventId": "82a703d4-2e14-4cea-8d23-b4a879f96408",
+      "evidenceKind": "probeCapture",
+      "input": {
+        "id": 1
+      },
+      "origin": "mcpStdout",
+      "probeInjected": false,
+      "probeSha256": "fd999946ea50a08f8bdcf3ff6c9a33eba72947fd7b7094c954b5fe646a50bbd4",
+      "receivedAtUnixMs": 1789992257751,
+      "runId": "1a97b3f4-03c6-44b9-a723-a8ec24afac2a",
+      "schemaVersion": 1,
+      "sequence": 15
+    },
+    {
+      "captureSha256": "00d75a690713efb7c45f683ca1ec85a5504d7110418f553c253cee8686aa0ece",
+      "cursorClientExecuted": null,
+      "details": {
+        "server": "owned"
+      },
+      "event": "ping",
+      "eventId": "dc053feb-d9d5-4380-86d0-876644f94eb3",
+      "evidenceKind": "probeCapture",
+      "input": {
+        "id": 2,
+        "jsonrpc": {
+          "alias": "alias:5e3914bf55ad6240abf3ad7b9e6e86b0cbe32bc31a8fc5fe2c5232014c542c8f",
+          "length": 3,
+          "type": "string"
+        },
+        "method": {
+          "alias": "alias:77dbaec155d50b48803d5c06bf3beeebb358e45cddceb80fb82730b41ffeaa30",
+          "length": 4,
+          "type": "string"
+        }
+      },
+      "origin": "mcpStdin",
+      "probeInjected": false,
+      "probeSha256": "fd999946ea50a08f8bdcf3ff6c9a33eba72947fd7b7094c954b5fe646a50bbd4",
+      "receivedAtUnixMs": 1789992351278,
+      "runId": "1a97b3f4-03c6-44b9-a723-a8ec24afac2a",
+      "schemaVersion": 1,
+      "sequence": 16
+    },
+    {
+      "captureSha256": "041053064b059fda6f81b0dfae3a00ec36ff20ca342ac6462341f711912ebc56",
+      "cursorClientExecuted": null,
+      "details": {
+        "nativeAcceptance": "unconfirmed",
+        "server": "owned",
+        "transport": "written"
+      },
+      "event": "responseWritten",
+      "eventId": "87cfb0a5-c0ca-4fcc-b8ea-d530e3706c7c",
+      "evidenceKind": "probeCapture",
+      "input": {
+        "id": 2
+      },
+      "origin": "mcpStdout",
+      "probeInjected": false,
+      "probeSha256": "fd999946ea50a08f8bdcf3ff6c9a33eba72947fd7b7094c954b5fe646a50bbd4",
+      "receivedAtUnixMs": 1789992351330,
+      "runId": "1a97b3f4-03c6-44b9-a723-a8ec24afac2a",
+      "schemaVersion": 1,
+      "sequence": 17
+    },
+    {
+      "captureSha256": "b8f3d63debca1c806f1d6c0d1b09ede12cb95ff13b8a1a02be54e1b51f24e309",
+      "cursorClientExecuted": null,
+      "details": {
+        "identityAssessment": "OBSERVE_ONLY",
+        "inputModified": false,
+        "permissionWaitCreated": false,
+        "utf8BomRemoved": true
+      },
+      "event": "beforeSubmitPrompt",
+      "eventId": "0ef8d61f-1c0c-4bbc-801c-f0aa379b985a",
+      "evidenceKind": "probeCapture",
+      "input": {
+        "alias:09ae909669714584aa751a8d3b05c24d964dd25be452ec3dda4eb302a8904e03": {
+          "alias": "alias:de01a904d48531648436a730b133d55bbffb061bd63887510da63f6d430b0950",
+          "length": 19,
+          "type": "string"
+        },
+        "alias:d0125d9486c644fc65eeb4f8ef66899b3262297e0c17daecbfea580bf66d1366": null,
+        "attachments": [],
+        "composer_mode": {
+          "alias": "alias:8dee4a8bcc57ade82a6774c95cffd4909186ae4b62318d816cabf5f37a17c841",
+          "length": 5,
+          "type": "string"
+        },
+        "conversation_id": {
+          "alias": "alias:68634c0c1d94287582e7bbee99750a66dc34e4861f7419947dda1dff7ec0947b",
+          "length": 36,
+          "type": "string"
+        },
+        "cursor_version": {
+          "alias": "alias:a254738f4c81e8e817c1fcd51dffeb4b863d6e5caad67f2985e37d503a4ed69b",
+          "length": 7,
+          "type": "string"
+        },
+        "generation_id": {
+          "alias": "alias:b11021c93c3da9cc1f5bd0932e27c1d963a1f242df2531ad56b5c5f4a94e5e08",
+          "length": 36,
+          "type": "string"
+        },
+        "hook_event_name": {
+          "alias": "alias:5c2ee0f9f5cf950dad8882b118e1f90ac59a53abbc7fbaead8d6e12a09396974",
+          "length": 18,
+          "type": "string"
+        },
+        "model": {
+          "alias": "alias:12232f7a4ead956df24b22f799c77a04deffa7f9eadd549dc7fcbf118265bf4b",
+          "length": 22,
+          "type": "string"
+        },
+        "model_id": {
+          "alias": "alias:f274e3e65dd074685f5378a0067551e081a89ac4deb422c80d34e7b5bf398413",
+          "length": 8,
+          "type": "string"
+        },
+        "model_params": [
+          {
+            "alias:c742557ef11e9775f7128c7e003222cb572860421d4a2defa09aaf7425e32dea": {
+              "alias": "alias:ff612be0102347dce8cabba54ea7d97d4f464bc08a2ac3197c90d835e1da40c6",
+              "length": 6,
+              "type": "string"
+            },
+            "id": {
+              "alias": "alias:dea7203411a6460e65fc89ed55c13e4f2f204c3ee0a9db4aa3f1ac959c633984",
+              "length": 6,
+              "type": "string"
+            }
+          },
+          {
+            "alias:c742557ef11e9775f7128c7e003222cb572860421d4a2defa09aaf7425e32dea": {
+              "alias": "alias:60740ba6ec7e38259f5c53fbc011a7f21ce74febaa268361af3ae575852b6f89",
+              "length": 5,
+              "type": "string"
+            },
+            "id": {
+              "alias": "alias:82f14f921242a61ee0cd92ae4566d5a8e1bf5c1e4a6de071d4232c553bf6a045",
+              "length": 4,
+              "type": "string"
+            }
+          }
+        ],
+        "prompt": {
+          "alias": "alias:22edf8133064092404c2b449f551244622ab38b9abdaf9515d58615e07315b7b",
+          "length": 485,
+          "type": "string"
+        },
+        "session_id": {
+          "alias": "alias:68634c0c1d94287582e7bbee99750a66dc34e4861f7419947dda1dff7ec0947b",
+          "length": 36,
+          "type": "string"
+        },
+        "workspace_roots": [
+          {
+            "alias": "alias:a08d2d2af074e79c79a7b9d79a681b0efee49e4a6ffcf20b59723e3f4581b9e0",
+            "length": 121,
+            "type": "string"
+          }
+        ]
+      },
+      "origin": "hookStdin",
+      "probeInjected": false,
+      "probeSha256": "fd999946ea50a08f8bdcf3ff6c9a33eba72947fd7b7094c954b5fe646a50bbd4",
+      "receivedAtUnixMs": 1789992411138,
+      "runId": "1a97b3f4-03c6-44b9-a723-a8ec24afac2a",
+      "schemaVersion": 1,
+      "sequence": 18
+    },
+    {
+      "captureSha256": "7212b41fbc208efa34bf57e8304457bfe72275576b53e696750f247f5bd2b928",
+      "cursorClientExecuted": null,
+      "details": {
+        "identityAssessment": "UNQUALIFIED_MCP_IDENTITY",
+        "inputModified": false,
+        "permissionWaitCreated": false,
+        "utf8BomRemoved": true
+      },
+      "event": "preToolUse",
+      "eventId": "c09846be-a1f5-4df1-8bf8-4cf763bffd81",
+      "evidenceKind": "probeCapture",
+      "input": {
+        "alias:09ae909669714584aa751a8d3b05c24d964dd25be452ec3dda4eb302a8904e03": {
+          "alias": "alias:de01a904d48531648436a730b133d55bbffb061bd63887510da63f6d430b0950",
+          "length": 19,
+          "type": "string"
+        },
+        "alias:d0125d9486c644fc65eeb4f8ef66899b3262297e0c17daecbfea580bf66d1366": null,
+        "conversation_id": {
+          "alias": "alias:68634c0c1d94287582e7bbee99750a66dc34e4861f7419947dda1dff7ec0947b",
+          "length": 36,
+          "type": "string"
+        },
+        "cursor_version": {
+          "alias": "alias:a254738f4c81e8e817c1fcd51dffeb4b863d6e5caad67f2985e37d503a4ed69b",
+          "length": 7,
+          "type": "string"
+        },
+        "generation_id": {
+          "alias": "alias:b11021c93c3da9cc1f5bd0932e27c1d963a1f242df2531ad56b5c5f4a94e5e08",
+          "length": 36,
+          "type": "string"
+        },
+        "hook_event_name": {
+          "alias": "alias:95e871a155a7d781e5b87017c1e548e587e48900e7d8d73675efbcbc6d6dece2",
+          "length": 10,
+          "type": "string"
+        },
+        "model": {
+          "alias": "alias:f274e3e65dd074685f5378a0067551e081a89ac4deb422c80d34e7b5bf398413",
+          "length": 8,
+          "type": "string"
+        },
+        "session_id": {
+          "alias": "alias:68634c0c1d94287582e7bbee99750a66dc34e4861f7419947dda1dff7ec0947b",
+          "length": 36,
+          "type": "string"
+        },
+        "tool_input": {
+          "clientRequestId": {
+            "alias": "alias:4b10f2575a7afc22041dc18e8a17ae878dc04cb5db1fa1f40e7d536c617d56f5",
+            "length": 7,
+            "type": "string"
+          },
+          "payload": {
+            "message": {
+              "alias": "alias:a3074316210cea4d68e64e020db1354b9b93fd0b22c2d6f174a0e737d66dbcad",
+              "length": 4,
+              "type": "string"
+            }
+          },
+          "schemaVersion": 1
+        },
+        "tool_name": {
+          "alias": "alias:6f077f784390021bde8b2157202737efc462ee1e0514bea076cffd8d1f63f260",
+          "length": 24,
+          "type": "string"
+        },
+        "tool_use_id": {
+          "alias": "alias:138f20f50fd7373d023d631327722286e7a5c6c03f8b7ab880bb27a3a88188b3",
+          "length": 36,
+          "type": "string"
+        },
+        "workspace_roots": [
+          {
+            "alias": "alias:a08d2d2af074e79c79a7b9d79a681b0efee49e4a6ffcf20b59723e3f4581b9e0",
+            "length": 121,
+            "type": "string"
+          }
+        ]
+      },
+      "origin": "hookStdin",
+      "parsedToolInput": {
+        "clientRequestId": {
+          "alias": "alias:4b10f2575a7afc22041dc18e8a17ae878dc04cb5db1fa1f40e7d536c617d56f5",
+          "length": 7,
+          "type": "string"
+        },
+        "payload": {
+          "message": {
+            "alias": "alias:a3074316210cea4d68e64e020db1354b9b93fd0b22c2d6f174a0e737d66dbcad",
+            "length": 4,
+            "type": "string"
+          }
+        },
+        "schemaVersion": 1
+      },
+      "probeInjected": false,
+      "probeSha256": "fd999946ea50a08f8bdcf3ff6c9a33eba72947fd7b7094c954b5fe646a50bbd4",
+      "receivedAtUnixMs": 1789992431598,
+      "runId": "1a97b3f4-03c6-44b9-a723-a8ec24afac2a",
+      "schemaVersion": 1,
+      "sequence": 19,
+      "toolName": "MCP:codecraft_probe_echo"
+    },
+    {
+      "captureSha256": "d50db10abc527ec160303da1a30d766c67059a1744c6c8ef416094721a873afc",
+      "cursorClientExecuted": null,
+      "details": {
+        "identityAssessment": "UNQUALIFIED_MCP_IDENTITY",
+        "inputModified": false,
+        "permissionWaitCreated": false,
+        "utf8BomRemoved": true
+      },
+      "event": "preToolUse",
+      "eventId": "56ba6fe5-fbf5-4054-8aff-8fc660f0717e",
+      "evidenceKind": "probeCapture",
+      "input": {
+        "alias:09ae909669714584aa751a8d3b05c24d964dd25be452ec3dda4eb302a8904e03": {
+          "alias": "alias:de01a904d48531648436a730b133d55bbffb061bd63887510da63f6d430b0950",
+          "length": 19,
+          "type": "string"
+        },
+        "alias:d0125d9486c644fc65eeb4f8ef66899b3262297e0c17daecbfea580bf66d1366": null,
+        "conversation_id": {
+          "alias": "alias:68634c0c1d94287582e7bbee99750a66dc34e4861f7419947dda1dff7ec0947b",
+          "length": 36,
+          "type": "string"
+        },
+        "cursor_version": {
+          "alias": "alias:a254738f4c81e8e817c1fcd51dffeb4b863d6e5caad67f2985e37d503a4ed69b",
+          "length": 7,
+          "type": "string"
+        },
+        "generation_id": {
+          "alias": "alias:b11021c93c3da9cc1f5bd0932e27c1d963a1f242df2531ad56b5c5f4a94e5e08",
+          "length": 36,
+          "type": "string"
+        },
+        "hook_event_name": {
+          "alias": "alias:95e871a155a7d781e5b87017c1e548e587e48900e7d8d73675efbcbc6d6dece2",
+          "length": 10,
+          "type": "string"
+        },
+        "model": {
+          "alias": "alias:f274e3e65dd074685f5378a0067551e081a89ac4deb422c80d34e7b5bf398413",
+          "length": 8,
+          "type": "string"
+        },
+        "session_id": {
+          "alias": "alias:68634c0c1d94287582e7bbee99750a66dc34e4861f7419947dda1dff7ec0947b",
+          "length": 36,
+          "type": "string"
+        },
+        "tool_input": {
+          "clientRequestId": {
+            "alias": "alias:373349c1f7410eb68e217588ca54cbff9201fedcda0fb41ad513880e8f85e58e",
+            "length": 11,
+            "type": "string"
+          },
+          "payload": {
+            "message": {
+              "alias": "alias:a3074316210cea4d68e64e020db1354b9b93fd0b22c2d6f174a0e737d66dbcad",
+              "length": 4,
+              "type": "string"
+            }
+          },
+          "schemaVersion": 1
+        },
+        "tool_name": {
+          "alias": "alias:6f077f784390021bde8b2157202737efc462ee1e0514bea076cffd8d1f63f260",
+          "length": 24,
+          "type": "string"
+        },
+        "tool_use_id": {
+          "alias": "alias:15682c8ea18f55524ab3be5c242d34dc70616fd972c733705b836a02454e7238",
+          "length": 36,
+          "type": "string"
+        },
+        "workspace_roots": [
+          {
+            "alias": "alias:a08d2d2af074e79c79a7b9d79a681b0efee49e4a6ffcf20b59723e3f4581b9e0",
+            "length": 121,
+            "type": "string"
+          }
+        ]
+      },
+      "origin": "hookStdin",
+      "parsedToolInput": {
+        "clientRequestId": {
+          "alias": "alias:373349c1f7410eb68e217588ca54cbff9201fedcda0fb41ad513880e8f85e58e",
+          "length": 11,
+          "type": "string"
+        },
+        "payload": {
+          "message": {
+            "alias": "alias:a3074316210cea4d68e64e020db1354b9b93fd0b22c2d6f174a0e737d66dbcad",
+            "length": 4,
+            "type": "string"
+          }
+        },
+        "schemaVersion": 1
+      },
+      "probeInjected": false,
+      "probeSha256": "fd999946ea50a08f8bdcf3ff6c9a33eba72947fd7b7094c954b5fe646a50bbd4",
+      "receivedAtUnixMs": 1789992432498,
+      "runId": "1a97b3f4-03c6-44b9-a723-a8ec24afac2a",
+      "schemaVersion": 1,
+      "sequence": 20,
+      "toolName": "MCP:codecraft_probe_echo"
+    },
+    {
+      "captureSha256": "0d233a8f75968b0c7ab0000791913e1d7065c3e068699dfa9f1a2223812bff1d",
+      "cursorClientExecuted": null,
+      "details": {
+        "identityAssessment": "OBSERVE_ONLY",
+        "inputModified": false,
+        "permissionWaitCreated": false,
+        "utf8BomRemoved": true
+      },
+      "event": "beforeMCPExecution",
+      "eventId": "cb1ed743-a500-4510-b65c-8d00836e37b9",
+      "evidenceKind": "probeCapture",
+      "input": {
+        "alias:09ae909669714584aa751a8d3b05c24d964dd25be452ec3dda4eb302a8904e03": {
+          "alias": "alias:de01a904d48531648436a730b133d55bbffb061bd63887510da63f6d430b0950",
+          "length": 19,
+          "type": "string"
+        },
+        "alias:d0125d9486c644fc65eeb4f8ef66899b3262297e0c17daecbfea580bf66d1366": null,
+        "command": {
+          "alias": "alias:864cf3eed36a52ffe1a058e5a3ed6d70b1d2d55d9522864e5d08d54fb7dcfb16",
+          "length": 290,
+          "type": "string"
+        },
+        "conversation_id": {
+          "alias": "alias:68634c0c1d94287582e7bbee99750a66dc34e4861f7419947dda1dff7ec0947b",
+          "length": 36,
+          "type": "string"
+        },
+        "cursor_version": {
+          "alias": "alias:a254738f4c81e8e817c1fcd51dffeb4b863d6e5caad67f2985e37d503a4ed69b",
+          "length": 7,
+          "type": "string"
+        },
+        "generation_id": {
+          "alias": "alias:b11021c93c3da9cc1f5bd0932e27c1d963a1f242df2531ad56b5c5f4a94e5e08",
+          "length": 36,
+          "type": "string"
+        },
+        "hook_event_name": {
+          "alias": "alias:2c2e52c364b291e754667e7ba576eacd79607318338ea126fb7a4e42b5d91814",
+          "length": 18,
+          "type": "string"
+        },
+        "mcp_server_name": {
+          "alias": "alias:c2135d76970f1dcbe7638914bd6057bf9f939d4c325fcb60b2225518268071c6",
+          "length": 22,
+          "type": "string"
+        },
+        "model": {
+          "alias": "alias:f274e3e65dd074685f5378a0067551e081a89ac4deb422c80d34e7b5bf398413",
+          "length": 8,
+          "type": "string"
+        },
+        "session_id": {
+          "alias": "alias:68634c0c1d94287582e7bbee99750a66dc34e4861f7419947dda1dff7ec0947b",
+          "length": 36,
+          "type": "string"
+        },
+        "tool_input": {
+          "alias": "alias:247a834b35f3ca19257fcedc5620a837fe8833138726454f06b89a5efeb62b31",
+          "length": 76,
+          "type": "string"
+        },
+        "tool_name": {
+          "alias": "alias:acd21dc8c9431b655cc191fc431b689cb3d342e4d3dae23061f28a0755167300",
+          "length": 20,
+          "type": "string"
+        },
+        "workspace_roots": [
+          {
+            "alias": "alias:a08d2d2af074e79c79a7b9d79a681b0efee49e4a6ffcf20b59723e3f4581b9e0",
+            "length": 121,
+            "type": "string"
+          }
+        ]
+      },
+      "origin": "hookStdin",
+      "parsedToolInput": {
+        "clientRequestId": {
+          "alias": "alias:4b10f2575a7afc22041dc18e8a17ae878dc04cb5db1fa1f40e7d536c617d56f5",
+          "length": 7,
+          "type": "string"
+        },
+        "payload": {
+          "message": {
+            "alias": "alias:a3074316210cea4d68e64e020db1354b9b93fd0b22c2d6f174a0e737d66dbcad",
+            "length": 4,
+            "type": "string"
+          }
+        },
+        "schemaVersion": 1
+      },
+      "probeInjected": false,
+      "probeServerName": "codecraft_cursor_probe",
+      "probeSha256": "fd999946ea50a08f8bdcf3ff6c9a33eba72947fd7b7094c954b5fe646a50bbd4",
+      "receivedAtUnixMs": 1789992433297,
+      "runId": "1a97b3f4-03c6-44b9-a723-a8ec24afac2a",
+      "schemaVersion": 1,
+      "sequence": 21,
+      "toolName": "codecraft_probe_echo"
+    },
+    {
+      "captureSha256": "c0f9981e7c25abe895debcea73eb83a6e0c9645e849c957f3559bd452d6a1831",
+      "cursorClientExecuted": null,
+      "details": {
+        "server": "owned"
+      },
+      "event": "tools/call",
+      "eventId": "f9cc9bdb-b56b-4cd2-8a9a-3eb374ff1bc3",
+      "evidenceKind": "probeCapture",
+      "input": {
+        "id": 3,
+        "jsonrpc": {
+          "alias": "alias:5e3914bf55ad6240abf3ad7b9e6e86b0cbe32bc31a8fc5fe2c5232014c542c8f",
+          "length": 3,
+          "type": "string"
+        },
+        "method": {
+          "alias": "alias:4746c7a73b1bbe011d370138d7b700b7d48e1e2a6f0edcd2f0a383968434c8ea",
+          "length": 10,
+          "type": "string"
+        },
+        "params": {
+          "alias:20434f64bece8b4b72b52389b83bf711249201d8235a55d1ea6a4852bbd2eb9a": {
+            "alias:0738656a14f1f2691a3338720b93e40fada250e1d65c38e34037aae10636f49d": 3
+          },
+          "arguments": {
+            "clientRequestId": {
+              "alias": "alias:4b10f2575a7afc22041dc18e8a17ae878dc04cb5db1fa1f40e7d536c617d56f5",
+              "length": 7,
+              "type": "string"
+            },
+            "payload": {
+              "message": {
+                "alias": "alias:a3074316210cea4d68e64e020db1354b9b93fd0b22c2d6f174a0e737d66dbcad",
+                "length": 4,
+                "type": "string"
+              }
+            },
+            "schemaVersion": 1
+          },
+          "name": {
+            "alias": "alias:acd21dc8c9431b655cc191fc431b689cb3d342e4d3dae23061f28a0755167300",
+            "length": 20,
+            "type": "string"
+          }
+        }
+      },
+      "origin": "mcpStdin",
+      "probeInjected": false,
+      "probeSha256": "fd999946ea50a08f8bdcf3ff6c9a33eba72947fd7b7094c954b5fe646a50bbd4",
+      "receivedAtUnixMs": 1789992433572,
+      "runId": "1a97b3f4-03c6-44b9-a723-a8ec24afac2a",
+      "schemaVersion": 1,
+      "sequence": 22
+    },
+    {
+      "captureSha256": "51d97158885e27fb4640d6053250bbe46fd7da139a81e3d56213ff45ea0ca3bc",
+      "cursorClientExecuted": null,
+      "details": {
+        "nativeAcceptance": "unconfirmed",
+        "server": "owned",
+        "transport": "written"
+      },
+      "event": "responseWritten",
+      "eventId": "f6ba8e1a-ecab-413e-9d3c-3bc8d44781bc",
+      "evidenceKind": "probeCapture",
+      "input": {
+        "id": 3
+      },
+      "origin": "mcpStdout",
+      "probeInjected": false,
+      "probeSha256": "fd999946ea50a08f8bdcf3ff6c9a33eba72947fd7b7094c954b5fe646a50bbd4",
+      "receivedAtUnixMs": 1789992433688,
+      "runId": "1a97b3f4-03c6-44b9-a723-a8ec24afac2a",
+      "schemaVersion": 1,
+      "sequence": 23
+    },
+    {
+      "captureSha256": "3d7cfec9c62d46b2df3ff5959788168e3989b2ac0fa609d0224f38478a139854",
+      "cursorClientExecuted": null,
+      "details": {
+        "identityAssessment": "OBSERVE_ONLY",
+        "inputModified": false,
+        "permissionWaitCreated": false,
+        "utf8BomRemoved": true
+      },
+      "event": "beforeMCPExecution",
+      "eventId": "c2a950ed-8299-4de7-a1ab-5207535c11a4",
+      "evidenceKind": "probeCapture",
+      "input": {
+        "alias:09ae909669714584aa751a8d3b05c24d964dd25be452ec3dda4eb302a8904e03": {
+          "alias": "alias:de01a904d48531648436a730b133d55bbffb061bd63887510da63f6d430b0950",
+          "length": 19,
+          "type": "string"
+        },
+        "alias:d0125d9486c644fc65eeb4f8ef66899b3262297e0c17daecbfea580bf66d1366": null,
+        "command": {
+          "alias": "alias:418da9b58f302edf6c49bdfaa3dd01f5464c8041d2aa095d2e313dc217c91840",
+          "length": 294,
+          "type": "string"
+        },
+        "conversation_id": {
+          "alias": "alias:68634c0c1d94287582e7bbee99750a66dc34e4861f7419947dda1dff7ec0947b",
+          "length": 36,
+          "type": "string"
+        },
+        "cursor_version": {
+          "alias": "alias:a254738f4c81e8e817c1fcd51dffeb4b863d6e5caad67f2985e37d503a4ed69b",
+          "length": 7,
+          "type": "string"
+        },
+        "generation_id": {
+          "alias": "alias:b11021c93c3da9cc1f5bd0932e27c1d963a1f242df2531ad56b5c5f4a94e5e08",
+          "length": 36,
+          "type": "string"
+        },
+        "hook_event_name": {
+          "alias": "alias:2c2e52c364b291e754667e7ba576eacd79607318338ea126fb7a4e42b5d91814",
+          "length": 18,
+          "type": "string"
+        },
+        "mcp_server_name": {
+          "alias": "alias:7f0a3f93b17a33c03b98f729542561d8ef1b1be84e7a50f1d59a72c3c6b22fe1",
+          "length": 26,
+          "type": "string"
+        },
+        "model": {
+          "alias": "alias:f274e3e65dd074685f5378a0067551e081a89ac4deb422c80d34e7b5bf398413",
+          "length": 8,
+          "type": "string"
+        },
+        "session_id": {
+          "alias": "alias:68634c0c1d94287582e7bbee99750a66dc34e4861f7419947dda1dff7ec0947b",
+          "length": 36,
+          "type": "string"
+        },
+        "tool_input": {
+          "alias": "alias:ff1c2d935d06dc5480ad7075b84f0bcd75c37acc9c555b5e057f18c1006365e1",
+          "length": 80,
+          "type": "string"
+        },
+        "tool_name": {
+          "alias": "alias:acd21dc8c9431b655cc191fc431b689cb3d342e4d3dae23061f28a0755167300",
+          "length": 20,
+          "type": "string"
+        },
+        "workspace_roots": [
+          {
+            "alias": "alias:a08d2d2af074e79c79a7b9d79a681b0efee49e4a6ffcf20b59723e3f4581b9e0",
+            "length": 121,
+            "type": "string"
+          }
+        ]
+      },
+      "origin": "hookStdin",
+      "parsedToolInput": {
+        "clientRequestId": {
+          "alias": "alias:373349c1f7410eb68e217588ca54cbff9201fedcda0fb41ad513880e8f85e58e",
+          "length": 11,
+          "type": "string"
+        },
+        "payload": {
+          "message": {
+            "alias": "alias:a3074316210cea4d68e64e020db1354b9b93fd0b22c2d6f174a0e737d66dbcad",
+            "length": 4,
+            "type": "string"
+          }
+        },
+        "schemaVersion": 1
+      },
+      "probeInjected": false,
+      "probeServerName": "codecraft_cursor_collision",
+      "probeSha256": "fd999946ea50a08f8bdcf3ff6c9a33eba72947fd7b7094c954b5fe646a50bbd4",
+      "receivedAtUnixMs": 1789992434054,
+      "runId": "1a97b3f4-03c6-44b9-a723-a8ec24afac2a",
+      "schemaVersion": 1,
+      "sequence": 24,
+      "toolName": "codecraft_probe_echo"
+    },
+    {
+      "captureSha256": "f1c5a59e69ecc56d10cc3d3423fad77e76542ab7ffe9261c49ff021a25440da1",
+      "cursorClientExecuted": null,
+      "details": {
+        "server": "collision"
+      },
+      "event": "tools/call",
+      "eventId": "50047c36-9194-4f6d-966e-d637a662e52e",
+      "evidenceKind": "probeCapture",
+      "input": {
+        "id": 2,
+        "jsonrpc": {
+          "alias": "alias:5e3914bf55ad6240abf3ad7b9e6e86b0cbe32bc31a8fc5fe2c5232014c542c8f",
+          "length": 3,
+          "type": "string"
+        },
+        "method": {
+          "alias": "alias:4746c7a73b1bbe011d370138d7b700b7d48e1e2a6f0edcd2f0a383968434c8ea",
+          "length": 10,
+          "type": "string"
+        },
+        "params": {
+          "alias:20434f64bece8b4b72b52389b83bf711249201d8235a55d1ea6a4852bbd2eb9a": {
+            "alias:0738656a14f1f2691a3338720b93e40fada250e1d65c38e34037aae10636f49d": 2
+          },
+          "arguments": {
+            "clientRequestId": {
+              "alias": "alias:373349c1f7410eb68e217588ca54cbff9201fedcda0fb41ad513880e8f85e58e",
+              "length": 11,
+              "type": "string"
+            },
+            "payload": {
+              "message": {
+                "alias": "alias:a3074316210cea4d68e64e020db1354b9b93fd0b22c2d6f174a0e737d66dbcad",
+                "length": 4,
+                "type": "string"
+              }
+            },
+            "schemaVersion": 1
+          },
+          "name": {
+            "alias": "alias:acd21dc8c9431b655cc191fc431b689cb3d342e4d3dae23061f28a0755167300",
+            "length": 20,
+            "type": "string"
+          }
+        }
+      },
+      "origin": "mcpStdin",
+      "probeInjected": false,
+      "probeSha256": "fd999946ea50a08f8bdcf3ff6c9a33eba72947fd7b7094c954b5fe646a50bbd4",
+      "receivedAtUnixMs": 1789992434388,
+      "runId": "1a97b3f4-03c6-44b9-a723-a8ec24afac2a",
+      "schemaVersion": 1,
+      "sequence": 25
+    },
+    {
+      "captureSha256": "0e61b1301cf633bbcd384bcec88d82fe4714c51de56ec9c50efdf7c188e7e518",
+      "cursorClientExecuted": null,
+      "details": {
+        "nativeAcceptance": "unconfirmed",
+        "server": "collision",
+        "transport": "written"
+      },
+      "event": "responseWritten",
+      "eventId": "c7576841-1f43-4990-8553-8110bc1f7990",
+      "evidenceKind": "probeCapture",
+      "input": {
+        "id": 2
+      },
+      "origin": "mcpStdout",
+      "probeInjected": false,
+      "probeSha256": "fd999946ea50a08f8bdcf3ff6c9a33eba72947fd7b7094c954b5fe646a50bbd4",
+      "receivedAtUnixMs": 1789992434480,
+      "runId": "1a97b3f4-03c6-44b9-a723-a8ec24afac2a",
+      "schemaVersion": 1,
+      "sequence": 26
+    },
+    {
+      "captureSha256": "2d78aa48fb427aa876844a8b66c965c1323b7be47251a3f35ec0791639deceb0",
+      "cursorClientExecuted": null,
+      "details": {
+        "identityAssessment": "OBSERVE_ONLY",
+        "inputModified": false,
+        "permissionWaitCreated": false,
+        "utf8BomRemoved": true
+      },
+      "event": "postToolUse",
+      "eventId": "f5edc080-03ea-4e0d-8c24-53ebd0821451",
+      "evidenceKind": "probeCapture",
+      "input": {
+        "alias:09ae909669714584aa751a8d3b05c24d964dd25be452ec3dda4eb302a8904e03": {
+          "alias": "alias:de01a904d48531648436a730b133d55bbffb061bd63887510da63f6d430b0950",
+          "length": 19,
+          "type": "string"
+        },
+        "alias:d0125d9486c644fc65eeb4f8ef66899b3262297e0c17daecbfea580bf66d1366": null,
+        "conversation_id": {
+          "alias": "alias:68634c0c1d94287582e7bbee99750a66dc34e4861f7419947dda1dff7ec0947b",
+          "length": 36,
+          "type": "string"
+        },
+        "cursor_version": {
+          "alias": "alias:a254738f4c81e8e817c1fcd51dffeb4b863d6e5caad67f2985e37d503a4ed69b",
+          "length": 7,
+          "type": "string"
+        },
+        "duration": 197.479,
+        "generation_id": {
+          "alias": "alias:b11021c93c3da9cc1f5bd0932e27c1d963a1f242df2531ad56b5c5f4a94e5e08",
+          "length": 36,
+          "type": "string"
+        },
+        "hook_event_name": {
+          "alias": "alias:767e213963c5f6bcffade6fbe223a5afae0ade0ad9f74f63bdd440624adff0ca",
+          "length": 11,
+          "type": "string"
+        },
+        "model": {
+          "alias": "alias:f274e3e65dd074685f5378a0067551e081a89ac4deb422c80d34e7b5bf398413",
+          "length": 8,
+          "type": "string"
+        },
+        "session_id": {
+          "alias": "alias:68634c0c1d94287582e7bbee99750a66dc34e4861f7419947dda1dff7ec0947b",
+          "length": 36,
+          "type": "string"
+        },
+        "tool_input": {
+          "clientRequestId": {
+            "alias": "alias:4b10f2575a7afc22041dc18e8a17ae878dc04cb5db1fa1f40e7d536c617d56f5",
+            "length": 7,
+            "type": "string"
+          },
+          "payload": {
+            "message": {
+              "alias": "alias:a3074316210cea4d68e64e020db1354b9b93fd0b22c2d6f174a0e737d66dbcad",
+              "length": 4,
+              "type": "string"
+            }
+          },
+          "schemaVersion": 1
+        },
+        "tool_name": {
+          "alias": "alias:6f077f784390021bde8b2157202737efc462ee1e0514bea076cffd8d1f63f260",
+          "length": 24,
+          "type": "string"
+        },
+        "tool_output": {
+          "alias": "alias:57500d46988dc767cb3692c86d4c92679c23b7048e19d817107a0b603e6836ca",
+          "length": 235,
+          "type": "string"
+        },
+        "tool_use_id": {
+          "alias": "alias:138f20f50fd7373d023d631327722286e7a5c6c03f8b7ab880bb27a3a88188b3",
+          "length": 36,
+          "type": "string"
+        },
+        "workspace_roots": [
+          {
+            "alias": "alias:a08d2d2af074e79c79a7b9d79a681b0efee49e4a6ffcf20b59723e3f4581b9e0",
+            "length": 121,
+            "type": "string"
+          }
+        ]
+      },
+      "origin": "hookStdin",
+      "parsedToolInput": {
+        "clientRequestId": {
+          "alias": "alias:4b10f2575a7afc22041dc18e8a17ae878dc04cb5db1fa1f40e7d536c617d56f5",
+          "length": 7,
+          "type": "string"
+        },
+        "payload": {
+          "message": {
+            "alias": "alias:a3074316210cea4d68e64e020db1354b9b93fd0b22c2d6f174a0e737d66dbcad",
+            "length": 4,
+            "type": "string"
+          }
+        },
+        "schemaVersion": 1
+      },
+      "probeInjected": false,
+      "probeSha256": "fd999946ea50a08f8bdcf3ff6c9a33eba72947fd7b7094c954b5fe646a50bbd4",
+      "receivedAtUnixMs": 1789992435186,
+      "runId": "1a97b3f4-03c6-44b9-a723-a8ec24afac2a",
+      "schemaVersion": 1,
+      "sequence": 27,
+      "toolName": "MCP:codecraft_probe_echo"
+    },
+    {
+      "captureSha256": "b6797dd13ed5565264a81fcb3b6eadd6e830e8d49d923bb2bd4362635323a28f",
+      "cursorClientExecuted": null,
+      "details": {
+        "identityAssessment": "OBSERVE_ONLY",
+        "inputModified": false,
+        "permissionWaitCreated": false,
+        "utf8BomRemoved": true
+      },
+      "event": "postToolUse",
+      "eventId": "a5618369-f470-4c74-b82c-5a70b5b7647e",
+      "evidenceKind": "probeCapture",
+      "input": {
+        "alias:09ae909669714584aa751a8d3b05c24d964dd25be452ec3dda4eb302a8904e03": {
+          "alias": "alias:de01a904d48531648436a730b133d55bbffb061bd63887510da63f6d430b0950",
+          "length": 19,
+          "type": "string"
+        },
+        "alias:d0125d9486c644fc65eeb4f8ef66899b3262297e0c17daecbfea580bf66d1366": null,
+        "conversation_id": {
+          "alias": "alias:68634c0c1d94287582e7bbee99750a66dc34e4861f7419947dda1dff7ec0947b",
+          "length": 36,
+          "type": "string"
+        },
+        "cursor_version": {
+          "alias": "alias:a254738f4c81e8e817c1fcd51dffeb4b863d6e5caad67f2985e37d503a4ed69b",
+          "length": 7,
+          "type": "string"
+        },
+        "duration": 53.686,
+        "generation_id": {
+          "alias": "alias:b11021c93c3da9cc1f5bd0932e27c1d963a1f242df2531ad56b5c5f4a94e5e08",
+          "length": 36,
+          "type": "string"
+        },
+        "hook_event_name": {
+          "alias": "alias:767e213963c5f6bcffade6fbe223a5afae0ade0ad9f74f63bdd440624adff0ca",
+          "length": 11,
+          "type": "string"
+        },
+        "model": {
+          "alias": "alias:f274e3e65dd074685f5378a0067551e081a89ac4deb422c80d34e7b5bf398413",
+          "length": 8,
+          "type": "string"
+        },
+        "session_id": {
+          "alias": "alias:68634c0c1d94287582e7bbee99750a66dc34e4861f7419947dda1dff7ec0947b",
+          "length": 36,
+          "type": "string"
+        },
+        "tool_input": {
+          "clientRequestId": {
+            "alias": "alias:373349c1f7410eb68e217588ca54cbff9201fedcda0fb41ad513880e8f85e58e",
+            "length": 11,
+            "type": "string"
+          },
+          "payload": {
+            "message": {
+              "alias": "alias:a3074316210cea4d68e64e020db1354b9b93fd0b22c2d6f174a0e737d66dbcad",
+              "length": 4,
+              "type": "string"
+            }
+          },
+          "schemaVersion": 1
+        },
+        "tool_name": {
+          "alias": "alias:6f077f784390021bde8b2157202737efc462ee1e0514bea076cffd8d1f63f260",
+          "length": 24,
+          "type": "string"
+        },
+        "tool_output": {
+          "alias": "alias:24d542411fa30f899f0ce0ecaf055a07e258071ce866f2ef15fdee73aacd4601",
+          "length": 239,
+          "type": "string"
+        },
+        "tool_use_id": {
+          "alias": "alias:15682c8ea18f55524ab3be5c242d34dc70616fd972c733705b836a02454e7238",
+          "length": 36,
+          "type": "string"
+        },
+        "workspace_roots": [
+          {
+            "alias": "alias:a08d2d2af074e79c79a7b9d79a681b0efee49e4a6ffcf20b59723e3f4581b9e0",
+            "length": 121,
+            "type": "string"
+          }
+        ]
+      },
+      "origin": "hookStdin",
+      "parsedToolInput": {
+        "clientRequestId": {
+          "alias": "alias:373349c1f7410eb68e217588ca54cbff9201fedcda0fb41ad513880e8f85e58e",
+          "length": 11,
+          "type": "string"
+        },
+        "payload": {
+          "message": {
+            "alias": "alias:a3074316210cea4d68e64e020db1354b9b93fd0b22c2d6f174a0e737d66dbcad",
+            "length": 4,
+            "type": "string"
+          }
+        },
+        "schemaVersion": 1
+      },
+      "probeInjected": false,
+      "probeSha256": "fd999946ea50a08f8bdcf3ff6c9a33eba72947fd7b7094c954b5fe646a50bbd4",
+      "receivedAtUnixMs": 1789992436135,
+      "runId": "1a97b3f4-03c6-44b9-a723-a8ec24afac2a",
+      "schemaVersion": 1,
+      "sequence": 28,
+      "toolName": "MCP:codecraft_probe_echo"
+    },
+    {
+      "captureSha256": "71ff12b1c0a2978faf0ab2b8dbf798ddd83c8968ed73017994314054689f9a16",
+      "cursorClientExecuted": null,
+      "details": {
+        "identityAssessment": "OBSERVE_ONLY",
+        "inputModified": false,
+        "permissionWaitCreated": false,
+        "utf8BomRemoved": true
+      },
+      "event": "preToolUse",
+      "eventId": "162a50ae-d763-4824-bea7-fa215c92ef6d",
+      "evidenceKind": "probeCapture",
+      "input": {
+        "alias:09ae909669714584aa751a8d3b05c24d964dd25be452ec3dda4eb302a8904e03": {
+          "alias": "alias:de01a904d48531648436a730b133d55bbffb061bd63887510da63f6d430b0950",
+          "length": 19,
+          "type": "string"
+        },
+        "alias:d0125d9486c644fc65eeb4f8ef66899b3262297e0c17daecbfea580bf66d1366": null,
+        "conversation_id": {
+          "alias": "alias:68634c0c1d94287582e7bbee99750a66dc34e4861f7419947dda1dff7ec0947b",
+          "length": 36,
+          "type": "string"
+        },
+        "cursor_version": {
+          "alias": "alias:a254738f4c81e8e817c1fcd51dffeb4b863d6e5caad67f2985e37d503a4ed69b",
+          "length": 7,
+          "type": "string"
+        },
+        "generation_id": {
+          "alias": "alias:b11021c93c3da9cc1f5bd0932e27c1d963a1f242df2531ad56b5c5f4a94e5e08",
+          "length": 36,
+          "type": "string"
+        },
+        "hook_event_name": {
+          "alias": "alias:95e871a155a7d781e5b87017c1e548e587e48900e7d8d73675efbcbc6d6dece2",
+          "length": 10,
+          "type": "string"
+        },
+        "model": {
+          "alias": "alias:f274e3e65dd074685f5378a0067551e081a89ac4deb422c80d34e7b5bf398413",
+          "length": 8,
+          "type": "string"
+        },
+        "session_id": {
+          "alias": "alias:68634c0c1d94287582e7bbee99750a66dc34e4861f7419947dda1dff7ec0947b",
+          "length": 36,
+          "type": "string"
+        },
+        "tool_input": {
+          "alias:9ad496f4b0f213a09ae593be7f49897c75f75b051e45e4eb0cc42a43a1936e9e": {
+            "alias": "alias:635c7f45b65a4b8c9782054fd0ee9d178220412502c3bf613ec7ac8896ecefe3",
+            "length": 131,
+            "type": "string"
+          }
+        },
+        "tool_name": {
+          "alias": "alias:736637668d0d9fdb8e4ae88697f3f64b2083d28c729ef341bd0f795cc37413fb",
+          "length": 4,
+          "type": "string"
+        },
+        "tool_use_id": {
+          "alias": "alias:edcb168416eb7cafdeda8f251c62ac4a9b20be21c578467ffab92a2fabb47d26",
+          "length": 85,
+          "type": "string"
+        },
+        "workspace_roots": [
+          {
+            "alias": "alias:a08d2d2af074e79c79a7b9d79a681b0efee49e4a6ffcf20b59723e3f4581b9e0",
+            "length": 121,
+            "type": "string"
+          }
+        ]
+      },
+      "origin": "hookStdin",
+      "parsedToolInput": {
+        "alias:9ad496f4b0f213a09ae593be7f49897c75f75b051e45e4eb0cc42a43a1936e9e": {
+          "alias": "alias:635c7f45b65a4b8c9782054fd0ee9d178220412502c3bf613ec7ac8896ecefe3",
+          "length": 131,
+          "type": "string"
+        }
+      },
+      "probeInjected": false,
+      "probeSha256": "fd999946ea50a08f8bdcf3ff6c9a33eba72947fd7b7094c954b5fe646a50bbd4",
+      "receivedAtUnixMs": 1789992442341,
+      "runId": "1a97b3f4-03c6-44b9-a723-a8ec24afac2a",
+      "schemaVersion": 1,
+      "sequence": 29,
+      "toolName": "Read"
+    },
+    {
+      "captureSha256": "f221838aaa43b9afbc2216687102f79801878ba3cdd50081313b4fa4f896a8df",
+      "cursorClientExecuted": null,
+      "details": {
+        "identityAssessment": "OBSERVE_ONLY",
+        "inputModified": false,
+        "permissionWaitCreated": false,
+        "utf8BomRemoved": true
+      },
+      "event": "postToolUse",
+      "eventId": "679f3a80-3ec3-420a-abff-ad809d0c98d5",
+      "evidenceKind": "probeCapture",
+      "input": {
+        "alias:09ae909669714584aa751a8d3b05c24d964dd25be452ec3dda4eb302a8904e03": {
+          "alias": "alias:de01a904d48531648436a730b133d55bbffb061bd63887510da63f6d430b0950",
+          "length": 19,
+          "type": "string"
+        },
+        "alias:d0125d9486c644fc65eeb4f8ef66899b3262297e0c17daecbfea580bf66d1366": null,
+        "conversation_id": {
+          "alias": "alias:68634c0c1d94287582e7bbee99750a66dc34e4861f7419947dda1dff7ec0947b",
+          "length": 36,
+          "type": "string"
+        },
+        "cursor_version": {
+          "alias": "alias:a254738f4c81e8e817c1fcd51dffeb4b863d6e5caad67f2985e37d503a4ed69b",
+          "length": 7,
+          "type": "string"
+        },
+        "duration": 1502.711,
+        "generation_id": {
+          "alias": "alias:b11021c93c3da9cc1f5bd0932e27c1d963a1f242df2531ad56b5c5f4a94e5e08",
+          "length": 36,
+          "type": "string"
+        },
+        "hook_event_name": {
+          "alias": "alias:767e213963c5f6bcffade6fbe223a5afae0ade0ad9f74f63bdd440624adff0ca",
+          "length": 11,
+          "type": "string"
+        },
+        "model": {
+          "alias": "alias:f274e3e65dd074685f5378a0067551e081a89ac4deb422c80d34e7b5bf398413",
+          "length": 8,
+          "type": "string"
+        },
+        "session_id": {
+          "alias": "alias:68634c0c1d94287582e7bbee99750a66dc34e4861f7419947dda1dff7ec0947b",
+          "length": 36,
+          "type": "string"
+        },
+        "tool_input": {
+          "alias:9ad496f4b0f213a09ae593be7f49897c75f75b051e45e4eb0cc42a43a1936e9e": {
+            "alias": "alias:635c7f45b65a4b8c9782054fd0ee9d178220412502c3bf613ec7ac8896ecefe3",
+            "length": 131,
+            "type": "string"
+          }
+        },
+        "tool_name": {
+          "alias": "alias:736637668d0d9fdb8e4ae88697f3f64b2083d28c729ef341bd0f795cc37413fb",
+          "length": 4,
+          "type": "string"
+        },
+        "tool_output": {
+          "alias": "alias:37ea7beb699ce766f9bfef54b7c03c06f7517bd394f65a3875debe83afad322c",
+          "length": 177,
+          "type": "string"
+        },
+        "tool_use_id": {
+          "alias": "alias:edcb168416eb7cafdeda8f251c62ac4a9b20be21c578467ffab92a2fabb47d26",
+          "length": 85,
+          "type": "string"
+        },
+        "workspace_roots": [
+          {
+            "alias": "alias:a08d2d2af074e79c79a7b9d79a681b0efee49e4a6ffcf20b59723e3f4581b9e0",
+            "length": 121,
+            "type": "string"
+          }
+        ]
+      },
+      "origin": "hookStdin",
+      "parsedToolInput": {
+        "alias:9ad496f4b0f213a09ae593be7f49897c75f75b051e45e4eb0cc42a43a1936e9e": {
+          "alias": "alias:635c7f45b65a4b8c9782054fd0ee9d178220412502c3bf613ec7ac8896ecefe3",
+          "length": 131,
+          "type": "string"
+        }
+      },
+      "probeInjected": false,
+      "probeSha256": "fd999946ea50a08f8bdcf3ff6c9a33eba72947fd7b7094c954b5fe646a50bbd4",
+      "receivedAtUnixMs": 1789992444858,
+      "runId": "1a97b3f4-03c6-44b9-a723-a8ec24afac2a",
+      "schemaVersion": 1,
+      "sequence": 30,
+      "toolName": "Read"
+    },
+    {
+      "captureSha256": "9a9344966667aeabe926b5f19aaafefcfc510405668ecaaa66636835e7bea9e0",
+      "cursorClientExecuted": null,
+      "details": {
+        "identityAssessment": "OBSERVE_ONLY",
+        "inputModified": false,
+        "permissionWaitCreated": false,
+        "utf8BomRemoved": true
+      },
+      "event": "afterAgentResponse",
+      "eventId": "5b092a7e-254f-4a5d-b7a8-8c85969a129f",
+      "evidenceKind": "probeCapture",
+      "input": {
+        "alias:043a5df768fcef73fc80463ef6ce0bef286a750ac527090e2e9f5ecc27dd149c": 52812,
+        "alias:09ae909669714584aa751a8d3b05c24d964dd25be452ec3dda4eb302a8904e03": {
+          "alias": "alias:de01a904d48531648436a730b133d55bbffb061bd63887510da63f6d430b0950",
+          "length": 19,
+          "type": "string"
+        },
+        "alias:1478e1969e1e6617efa6a50f3ff03638500632a2b514c64eff1285be25c66168": 0,
+        "alias:2d5ee63207d1f245a1752ebcfa3b0a7308a4af4a1fef2ec7395bd21d933d7e2c": 43648,
+        "alias:d0125d9486c644fc65eeb4f8ef66899b3262297e0c17daecbfea580bf66d1366": {
+          "alias": "alias:12e515bbe4a0d4ad242efc54140f9484ca4f6424b7e44a7ceae35bd6b1103dd9",
+          "length": 254,
+          "type": "string"
+        },
+        "alias:d44b7ac747bab0f00f2339d0684241bc702ff14a36c648b072333e5a250c4d6c": 976,
+        "conversation_id": {
+          "alias": "alias:68634c0c1d94287582e7bbee99750a66dc34e4861f7419947dda1dff7ec0947b",
+          "length": 36,
+          "type": "string"
+        },
+        "cursor_version": {
+          "alias": "alias:a254738f4c81e8e817c1fcd51dffeb4b863d6e5caad67f2985e37d503a4ed69b",
+          "length": 7,
+          "type": "string"
+        },
+        "generation_id": {
+          "alias": "alias:b11021c93c3da9cc1f5bd0932e27c1d963a1f242df2531ad56b5c5f4a94e5e08",
+          "length": 36,
+          "type": "string"
+        },
+        "hook_event_name": {
+          "alias": "alias:c9c16829a193fd31f3d8c3f3034ceacf8e3750498fff8b4880fbb7db19978c30",
+          "length": 18,
+          "type": "string"
+        },
+        "model": {
+          "alias": "alias:12232f7a4ead956df24b22f799c77a04deffa7f9eadd549dc7fcbf118265bf4b",
+          "length": 22,
+          "type": "string"
+        },
+        "model_id": {
+          "alias": "alias:f274e3e65dd074685f5378a0067551e081a89ac4deb422c80d34e7b5bf398413",
+          "length": 8,
+          "type": "string"
+        },
+        "model_params": [
+          {
+            "alias:c742557ef11e9775f7128c7e003222cb572860421d4a2defa09aaf7425e32dea": {
+              "alias": "alias:ff612be0102347dce8cabba54ea7d97d4f464bc08a2ac3197c90d835e1da40c6",
+              "length": 6,
+              "type": "string"
+            },
+            "id": {
+              "alias": "alias:dea7203411a6460e65fc89ed55c13e4f2f204c3ee0a9db4aa3f1ac959c633984",
+              "length": 6,
+              "type": "string"
+            }
+          },
+          {
+            "alias:c742557ef11e9775f7128c7e003222cb572860421d4a2defa09aaf7425e32dea": {
+              "alias": "alias:60740ba6ec7e38259f5c53fbc011a7f21ce74febaa268361af3ae575852b6f89",
+              "length": 5,
+              "type": "string"
+            },
+            "id": {
+              "alias": "alias:82f14f921242a61ee0cd92ae4566d5a8e1bf5c1e4a6de071d4232c553bf6a045",
+              "length": 4,
+              "type": "string"
+            }
+          }
+        ],
+        "session_id": {
+          "alias": "alias:68634c0c1d94287582e7bbee99750a66dc34e4861f7419947dda1dff7ec0947b",
+          "length": 36,
+          "type": "string"
+        },
+        "text": {
+          "alias": "alias:08a6dd2bc5624e5ec8b7df7e5d4891817cc9a6cac3dfd2b02e965a017cf3bc3b",
+          "length": 214,
+          "type": "string"
+        },
+        "workspace_roots": [
+          {
+            "alias": "alias:a08d2d2af074e79c79a7b9d79a681b0efee49e4a6ffcf20b59723e3f4581b9e0",
+            "length": 121,
+            "type": "string"
+          }
+        ]
+      },
+      "origin": "hookStdin",
+      "probeInjected": false,
+      "probeSha256": "fd999946ea50a08f8bdcf3ff6c9a33eba72947fd7b7094c954b5fe646a50bbd4",
+      "receivedAtUnixMs": 1789992451304,
+      "runId": "1a97b3f4-03c6-44b9-a723-a8ec24afac2a",
+      "schemaVersion": 1,
+      "sequence": 31
+    },
+    {
+      "captureSha256": "f08d1b19e8fc61a58b6248f308c159bea4629c8cc52fbfc668eec23847f77dde",
+      "cursorClientExecuted": null,
+      "details": {
+        "identityAssessment": "OBSERVE_ONLY",
+        "inputModified": false,
+        "permissionWaitCreated": false,
+        "utf8BomRemoved": true
+      },
+      "event": "stop",
+      "eventId": "77d6b74e-e2bb-4b13-a03e-1db076bbd813",
+      "evidenceKind": "probeCapture",
+      "input": {
+        "alias:043a5df768fcef73fc80463ef6ce0bef286a750ac527090e2e9f5ecc27dd149c": 52812,
+        "alias:09ae909669714584aa751a8d3b05c24d964dd25be452ec3dda4eb302a8904e03": {
+          "alias": "alias:de01a904d48531648436a730b133d55bbffb061bd63887510da63f6d430b0950",
+          "length": 19,
+          "type": "string"
+        },
+        "alias:1478e1969e1e6617efa6a50f3ff03638500632a2b514c64eff1285be25c66168": 0,
+        "alias:2d5ee63207d1f245a1752ebcfa3b0a7308a4af4a1fef2ec7395bd21d933d7e2c": 43648,
+        "alias:8007e82342e734a4f9c0184ae98dabd7a8b5e65454a4e16567f98b2fd8a505f0": 0,
+        "alias:d0125d9486c644fc65eeb4f8ef66899b3262297e0c17daecbfea580bf66d1366": {
+          "alias": "alias:12e515bbe4a0d4ad242efc54140f9484ca4f6424b7e44a7ceae35bd6b1103dd9",
+          "length": 254,
+          "type": "string"
+        },
+        "alias:d44b7ac747bab0f00f2339d0684241bc702ff14a36c648b072333e5a250c4d6c": 976,
+        "conversation_id": {
+          "alias": "alias:68634c0c1d94287582e7bbee99750a66dc34e4861f7419947dda1dff7ec0947b",
+          "length": 36,
+          "type": "string"
+        },
+        "cursor_version": {
+          "alias": "alias:a254738f4c81e8e817c1fcd51dffeb4b863d6e5caad67f2985e37d503a4ed69b",
+          "length": 7,
+          "type": "string"
+        },
+        "generation_id": {
+          "alias": "alias:b11021c93c3da9cc1f5bd0932e27c1d963a1f242df2531ad56b5c5f4a94e5e08",
+          "length": 36,
+          "type": "string"
+        },
+        "hook_event_name": {
+          "alias": "alias:de8ea3a49706201c3455a8ce5d5441b2806b728fbb8767303111e5257e45b3f3",
+          "length": 4,
+          "type": "string"
+        },
+        "model": {
+          "alias": "alias:12232f7a4ead956df24b22f799c77a04deffa7f9eadd549dc7fcbf118265bf4b",
+          "length": 22,
+          "type": "string"
+        },
+        "model_id": {
+          "alias": "alias:f274e3e65dd074685f5378a0067551e081a89ac4deb422c80d34e7b5bf398413",
+          "length": 8,
+          "type": "string"
+        },
+        "model_params": [
+          {
+            "alias:c742557ef11e9775f7128c7e003222cb572860421d4a2defa09aaf7425e32dea": {
+              "alias": "alias:ff612be0102347dce8cabba54ea7d97d4f464bc08a2ac3197c90d835e1da40c6",
+              "length": 6,
+              "type": "string"
+            },
+            "id": {
+              "alias": "alias:dea7203411a6460e65fc89ed55c13e4f2f204c3ee0a9db4aa3f1ac959c633984",
+              "length": 6,
+              "type": "string"
+            }
+          },
+          {
+            "alias:c742557ef11e9775f7128c7e003222cb572860421d4a2defa09aaf7425e32dea": {
+              "alias": "alias:60740ba6ec7e38259f5c53fbc011a7f21ce74febaa268361af3ae575852b6f89",
+              "length": 5,
+              "type": "string"
+            },
+            "id": {
+              "alias": "alias:82f14f921242a61ee0cd92ae4566d5a8e1bf5c1e4a6de071d4232c553bf6a045",
+              "length": 4,
+              "type": "string"
+            }
+          }
+        ],
+        "session_id": {
+          "alias": "alias:68634c0c1d94287582e7bbee99750a66dc34e4861f7419947dda1dff7ec0947b",
+          "length": 36,
+          "type": "string"
+        },
+        "status": {
+          "alias": "alias:6fb4688a781cd991baddfa7c0428d286b52897bb3c932f1a559256c9193349fb",
+          "length": 9,
+          "type": "string"
+        },
+        "workspace_roots": [
+          {
+            "alias": "alias:a08d2d2af074e79c79a7b9d79a681b0efee49e4a6ffcf20b59723e3f4581b9e0",
+            "length": 121,
+            "type": "string"
+          }
+        ]
+      },
+      "origin": "hookStdin",
+      "probeInjected": false,
+      "probeSha256": "fd999946ea50a08f8bdcf3ff6c9a33eba72947fd7b7094c954b5fe646a50bbd4",
+      "receivedAtUnixMs": 1789992452595,
+      "runId": "1a97b3f4-03c6-44b9-a723-a8ec24afac2a",
+      "schemaVersion": 1,
+      "sequence": 32
+    },
+    {
+      "captureSha256": "111cfd530219dedae3372830cbca3de0c9d7685dd38546fa26b46deed0a51b7c",
+      "cursorClientExecuted": null,
+      "details": {
+        "server": "collision"
+      },
+      "event": "initialize",
+      "eventId": "930554d2-e5f9-4e6c-b61b-7919c8e32c30",
+      "evidenceKind": "probeCapture",
+      "input": {
+        "id": 0,
+        "jsonrpc": {
+          "alias": "alias:5e3914bf55ad6240abf3ad7b9e6e86b0cbe32bc31a8fc5fe2c5232014c542c8f",
+          "length": 3,
+          "type": "string"
+        },
+        "method": {
+          "alias": "alias:48ddc5e728feb3660f00c848bc81583a3c61c204008983058126d7de1228d94a",
+          "length": 10,
+          "type": "string"
+        },
+        "params": {
+          "capabilities": {
+            "alias:3c9d294da2efb1337a5b28162061055b31ed2ae37f883bc35df5a80494c6333f": {
+              "alias:79b08135573f6da2f4267803c1e0299beda54416dcf573f5da792b0f7941db5a": {}
+            },
+            "alias:b18cc5a768a226a56bc81091d277b65286adc709fbe20a2ae2be11ad4ccfeec5": {
+              "alias:86f0b223e53b202ce60dc30626f1613b605413e5a3018a3a58d108a0da61f6f2": false
+            },
+            "alias:f7d933e576b401d18d950f8f1b3a6978d0dca5ced91597ba6e4f14700e055b03": {
+              "alias:228939e8e9fc7318ecb26bbbf79de0a79eb76e5cf6e5c426a911ba22808ea94e": {
+                "alias:9f8629d7d4681983f0bd283a171741408ecb3ee0950bdf13aee6121325080a52": [
+                  {
+                    "alias": "alias:4d6d2101ae74aafee680c1a52d64614e9226538775af00ac8c7aaf1bad594652",
+                    "length": 25,
+                    "type": "string"
+                  }
+                ]
+              }
+            }
+          },
+          "clientInfo": {
+            "alias:e764002cbd1ed3dfdc1d2482452ca53d58831f26fb96786dba5cf04ece8c55f0": {
+              "alias": "alias:9e35d759e3d67edda37b8ec3f5c4f6d6b0f5eeced51f3a359fdaf72c47aa37e5",
+              "length": 5,
+              "type": "string"
+            },
+            "name": {
+              "alias": "alias:824cdb780023b862f9da83519a86a1fe322ff0f0f64063318c94210ff81ed44d",
+              "length": 13,
+              "type": "string"
+            }
+          },
+          "protocolVersion": {
+            "alias": "alias:0e64c0d0d0345954c2471a456d484966910ca08f23be1b4b6943d1f49f0c31c9",
+            "length": 10,
+            "type": "string"
+          }
+        }
+      },
+      "origin": "mcpStdin",
+      "probeInjected": false,
+      "probeSha256": "fd999946ea50a08f8bdcf3ff6c9a33eba72947fd7b7094c954b5fe646a50bbd4",
+      "receivedAtUnixMs": 1789992502748,
+      "runId": "1a97b3f4-03c6-44b9-a723-a8ec24afac2a",
+      "schemaVersion": 1,
+      "sequence": 33
+    },
+    {
+      "captureSha256": "631aca1a3112105a16ba544d8816ed4b30fb3ed2be26a38b9ce3f654214b44e9",
+      "cursorClientExecuted": null,
+      "details": {
+        "nativeAcceptance": "unconfirmed",
+        "server": "collision",
+        "transport": "written"
+      },
+      "event": "responseWritten",
+      "eventId": "e0b592ed-50b3-4cf0-b19f-f4b942f2e112",
+      "evidenceKind": "probeCapture",
+      "input": {
+        "id": 0
+      },
+      "origin": "mcpStdout",
+      "probeInjected": false,
+      "probeSha256": "fd999946ea50a08f8bdcf3ff6c9a33eba72947fd7b7094c954b5fe646a50bbd4",
+      "receivedAtUnixMs": 1789992502799,
+      "runId": "1a97b3f4-03c6-44b9-a723-a8ec24afac2a",
+      "schemaVersion": 1,
+      "sequence": 34
+    },
+    {
+      "captureSha256": "5a83982fb8f5cea39c568ac496e2be18b0d0881933927e1635557d87861440f7",
+      "cursorClientExecuted": null,
+      "details": {
+        "server": "collision"
+      },
+      "event": "notifications/initialized",
+      "eventId": "62bde7b1-db6a-44e8-a2d0-6b00c796d43b",
+      "evidenceKind": "probeCapture",
+      "input": {
+        "jsonrpc": {
+          "alias": "alias:5e3914bf55ad6240abf3ad7b9e6e86b0cbe32bc31a8fc5fe2c5232014c542c8f",
+          "length": 3,
+          "type": "string"
+        },
+        "method": {
+          "alias": "alias:e53784280c2cae69ddf5be3a0327f2c6db820dcd68a7b3e1e515503d99b5b401",
+          "length": 25,
+          "type": "string"
+        }
+      },
+      "origin": "mcpStdin",
+      "probeInjected": false,
+      "probeSha256": "fd999946ea50a08f8bdcf3ff6c9a33eba72947fd7b7094c954b5fe646a50bbd4",
+      "receivedAtUnixMs": 1789992502839,
+      "runId": "1a97b3f4-03c6-44b9-a723-a8ec24afac2a",
+      "schemaVersion": 1,
+      "sequence": 35
+    },
+    {
+      "captureSha256": "a71df2b344f5f0949099566177d3a31d63f1b295801f18dab61820f0c349c997",
+      "cursorClientExecuted": null,
+      "details": {
+        "server": "owned"
+      },
+      "event": "initialize",
+      "eventId": "60f3cf88-a2ec-4bda-8c9a-afb5adb4db4b",
+      "evidenceKind": "probeCapture",
+      "input": {
+        "id": 0,
+        "jsonrpc": {
+          "alias": "alias:5e3914bf55ad6240abf3ad7b9e6e86b0cbe32bc31a8fc5fe2c5232014c542c8f",
+          "length": 3,
+          "type": "string"
+        },
+        "method": {
+          "alias": "alias:48ddc5e728feb3660f00c848bc81583a3c61c204008983058126d7de1228d94a",
+          "length": 10,
+          "type": "string"
+        },
+        "params": {
+          "capabilities": {
+            "alias:3c9d294da2efb1337a5b28162061055b31ed2ae37f883bc35df5a80494c6333f": {
+              "alias:79b08135573f6da2f4267803c1e0299beda54416dcf573f5da792b0f7941db5a": {}
+            },
+            "alias:b18cc5a768a226a56bc81091d277b65286adc709fbe20a2ae2be11ad4ccfeec5": {
+              "alias:86f0b223e53b202ce60dc30626f1613b605413e5a3018a3a58d108a0da61f6f2": false
+            },
+            "alias:f7d933e576b401d18d950f8f1b3a6978d0dca5ced91597ba6e4f14700e055b03": {
+              "alias:228939e8e9fc7318ecb26bbbf79de0a79eb76e5cf6e5c426a911ba22808ea94e": {
+                "alias:9f8629d7d4681983f0bd283a171741408ecb3ee0950bdf13aee6121325080a52": [
+                  {
+                    "alias": "alias:4d6d2101ae74aafee680c1a52d64614e9226538775af00ac8c7aaf1bad594652",
+                    "length": 25,
+                    "type": "string"
+                  }
+                ]
+              }
+            }
+          },
+          "clientInfo": {
+            "alias:e764002cbd1ed3dfdc1d2482452ca53d58831f26fb96786dba5cf04ece8c55f0": {
+              "alias": "alias:9e35d759e3d67edda37b8ec3f5c4f6d6b0f5eeced51f3a359fdaf72c47aa37e5",
+              "length": 5,
+              "type": "string"
+            },
+            "name": {
+              "alias": "alias:824cdb780023b862f9da83519a86a1fe322ff0f0f64063318c94210ff81ed44d",
+              "length": 13,
+              "type": "string"
+            }
+          },
+          "protocolVersion": {
+            "alias": "alias:0e64c0d0d0345954c2471a456d484966910ca08f23be1b4b6943d1f49f0c31c9",
+            "length": 10,
+            "type": "string"
+          }
+        }
+      },
+      "origin": "mcpStdin",
+      "probeInjected": false,
+      "probeSha256": "fd999946ea50a08f8bdcf3ff6c9a33eba72947fd7b7094c954b5fe646a50bbd4",
+      "receivedAtUnixMs": 1789992502892,
+      "runId": "1a97b3f4-03c6-44b9-a723-a8ec24afac2a",
+      "schemaVersion": 1,
+      "sequence": 36
+    },
+    {
+      "captureSha256": "107e80c2b13303ddfec90b0213d10b21a7159e14c64ed0f70f90c1f2e422c534",
+      "cursorClientExecuted": null,
+      "details": {
+        "nativeAcceptance": "unconfirmed",
+        "server": "owned",
+        "transport": "written"
+      },
+      "event": "responseWritten",
+      "eventId": "b7cd9061-fe92-4c7f-823a-f3a7aa53c65e",
+      "evidenceKind": "probeCapture",
+      "input": {
+        "id": 0
+      },
+      "origin": "mcpStdout",
+      "probeInjected": false,
+      "probeSha256": "fd999946ea50a08f8bdcf3ff6c9a33eba72947fd7b7094c954b5fe646a50bbd4",
+      "receivedAtUnixMs": 1789992502936,
+      "runId": "1a97b3f4-03c6-44b9-a723-a8ec24afac2a",
+      "schemaVersion": 1,
+      "sequence": 37
+    },
+    {
+      "captureSha256": "c842cbaf7446c96ad61fe19533ab81584acdd9ff79d05c3d4fe8924720237dd1",
+      "cursorClientExecuted": null,
+      "details": {
+        "server": "owned"
+      },
+      "event": "notifications/initialized",
+      "eventId": "c3deb3df-1804-490a-a8f4-67a085a59c76",
+      "evidenceKind": "probeCapture",
+      "input": {
+        "jsonrpc": {
+          "alias": "alias:5e3914bf55ad6240abf3ad7b9e6e86b0cbe32bc31a8fc5fe2c5232014c542c8f",
+          "length": 3,
+          "type": "string"
+        },
+        "method": {
+          "alias": "alias:e53784280c2cae69ddf5be3a0327f2c6db820dcd68a7b3e1e515503d99b5b401",
+          "length": 25,
+          "type": "string"
+        }
+      },
+      "origin": "mcpStdin",
+      "probeInjected": false,
+      "probeSha256": "fd999946ea50a08f8bdcf3ff6c9a33eba72947fd7b7094c954b5fe646a50bbd4",
+      "receivedAtUnixMs": 1789992502978,
+      "runId": "1a97b3f4-03c6-44b9-a723-a8ec24afac2a",
+      "schemaVersion": 1,
+      "sequence": 38
+    },
+    {
+      "captureSha256": "b3244221a1e44d6a52f40fcba26c0b80118d6775c2a8ddffdd50e73ac5e78e91",
+      "cursorClientExecuted": null,
+      "details": {
+        "server": "owned"
+      },
+      "event": "ping",
+      "eventId": "915e92c3-2763-402b-af65-7c56a4b05494",
+      "evidenceKind": "probeCapture",
+      "input": {
+        "id": 1,
+        "jsonrpc": {
+          "alias": "alias:5e3914bf55ad6240abf3ad7b9e6e86b0cbe32bc31a8fc5fe2c5232014c542c8f",
+          "length": 3,
+          "type": "string"
+        },
+        "method": {
+          "alias": "alias:77dbaec155d50b48803d5c06bf3beeebb358e45cddceb80fb82730b41ffeaa30",
+          "length": 4,
+          "type": "string"
+        }
+      },
+      "origin": "mcpStdin",
+      "probeInjected": false,
+      "probeSha256": "fd999946ea50a08f8bdcf3ff6c9a33eba72947fd7b7094c954b5fe646a50bbd4",
+      "receivedAtUnixMs": 1789992835621,
+      "runId": "1a97b3f4-03c6-44b9-a723-a8ec24afac2a",
+      "schemaVersion": 1,
+      "sequence": 39
+    },
+    {
+      "captureSha256": "d05bca72261230bde36706bc47a1a9b1858d0b55db009f2f1fb88c4923640c26",
+      "cursorClientExecuted": null,
+      "details": {
+        "nativeAcceptance": "unconfirmed",
+        "server": "owned",
+        "transport": "written"
+      },
+      "event": "responseWritten",
+      "eventId": "981183a9-f365-4e72-8e15-c51e5eec5997",
+      "evidenceKind": "probeCapture",
+      "input": {
+        "id": 1
+      },
+      "origin": "mcpStdout",
+      "probeInjected": false,
+      "probeSha256": "fd999946ea50a08f8bdcf3ff6c9a33eba72947fd7b7094c954b5fe646a50bbd4",
+      "receivedAtUnixMs": 1789992835661,
+      "runId": "1a97b3f4-03c6-44b9-a723-a8ec24afac2a",
+      "schemaVersion": 1,
+      "sequence": 40
+    },
+    {
+      "captureSha256": "586720fe41f708e0df89fc1dd05fe8e21f9e041dfdf05f2c4bc470bac9e86bbb",
+      "cursorClientExecuted": null,
+      "details": {
+        "server": "collision"
+      },
+      "event": "ping",
+      "eventId": "88a20003-7007-4e47-b971-970ad63a0138",
+      "evidenceKind": "probeCapture",
+      "input": {
+        "id": 1,
+        "jsonrpc": {
+          "alias": "alias:5e3914bf55ad6240abf3ad7b9e6e86b0cbe32bc31a8fc5fe2c5232014c542c8f",
+          "length": 3,
+          "type": "string"
+        },
+        "method": {
+          "alias": "alias:77dbaec155d50b48803d5c06bf3beeebb358e45cddceb80fb82730b41ffeaa30",
+          "length": 4,
+          "type": "string"
+        }
+      },
+      "origin": "mcpStdin",
+      "probeInjected": false,
+      "probeSha256": "fd999946ea50a08f8bdcf3ff6c9a33eba72947fd7b7094c954b5fe646a50bbd4",
+      "receivedAtUnixMs": 1789992855830,
+      "runId": "1a97b3f4-03c6-44b9-a723-a8ec24afac2a",
+      "schemaVersion": 1,
+      "sequence": 41
+    },
+    {
+      "captureSha256": "e8afe73447b945c61afb91f9369ceb724157a8b2689055d7fef45322bf68fc01",
+      "cursorClientExecuted": null,
+      "details": {
+        "nativeAcceptance": "unconfirmed",
+        "server": "collision",
+        "transport": "written"
+      },
+      "event": "responseWritten",
+      "eventId": "bed5524b-1d4b-4ccf-aaab-4c7558cac5d7",
+      "evidenceKind": "probeCapture",
+      "input": {
+        "id": 1
+      },
+      "origin": "mcpStdout",
+      "probeInjected": false,
+      "probeSha256": "fd999946ea50a08f8bdcf3ff6c9a33eba72947fd7b7094c954b5fe646a50bbd4",
+      "receivedAtUnixMs": 1789992855868,
+      "runId": "1a97b3f4-03c6-44b9-a723-a8ec24afac2a",
+      "schemaVersion": 1,
+      "sequence": 42
+    },
+    {
+      "captureSha256": "c47db4aa1451727d5015e00561c605c69c1dc0345cb8efd25c7a73de1497172f",
+      "cursorClientExecuted": null,
+      "details": {
+        "identityAssessment": "OBSERVE_ONLY",
+        "inputModified": false,
+        "permissionWaitCreated": false,
+        "utf8BomRemoved": true
+      },
+      "event": "beforeSubmitPrompt",
+      "eventId": "22b1a430-c622-4a3a-8d5d-024dce41de69",
+      "evidenceKind": "probeCapture",
+      "input": {
+        "alias:09ae909669714584aa751a8d3b05c24d964dd25be452ec3dda4eb302a8904e03": {
+          "alias": "alias:de01a904d48531648436a730b133d55bbffb061bd63887510da63f6d430b0950",
+          "length": 19,
+          "type": "string"
+        },
+        "alias:d0125d9486c644fc65eeb4f8ef66899b3262297e0c17daecbfea580bf66d1366": {
+          "alias": "alias:12e515bbe4a0d4ad242efc54140f9484ca4f6424b7e44a7ceae35bd6b1103dd9",
+          "length": 254,
+          "type": "string"
+        },
+        "attachments": [],
+        "composer_mode": {
+          "alias": "alias:8dee4a8bcc57ade82a6774c95cffd4909186ae4b62318d816cabf5f37a17c841",
+          "length": 5,
+          "type": "string"
+        },
+        "conversation_id": {
+          "alias": "alias:68634c0c1d94287582e7bbee99750a66dc34e4861f7419947dda1dff7ec0947b",
+          "length": 36,
+          "type": "string"
+        },
+        "cursor_version": {
+          "alias": "alias:a254738f4c81e8e817c1fcd51dffeb4b863d6e5caad67f2985e37d503a4ed69b",
+          "length": 7,
+          "type": "string"
+        },
+        "generation_id": {
+          "alias": "alias:2aa07ebe2f2faa5634057faa6cbb9c07d84e1bd2ae1e7d538d335d34117ba6ec",
+          "length": 36,
+          "type": "string"
+        },
+        "hook_event_name": {
+          "alias": "alias:5c2ee0f9f5cf950dad8882b118e1f90ac59a53abbc7fbaead8d6e12a09396974",
+          "length": 18,
+          "type": "string"
+        },
+        "model": {
+          "alias": "alias:12232f7a4ead956df24b22f799c77a04deffa7f9eadd549dc7fcbf118265bf4b",
+          "length": 22,
+          "type": "string"
+        },
+        "model_id": {
+          "alias": "alias:f274e3e65dd074685f5378a0067551e081a89ac4deb422c80d34e7b5bf398413",
+          "length": 8,
+          "type": "string"
+        },
+        "model_params": [
+          {
+            "alias:c742557ef11e9775f7128c7e003222cb572860421d4a2defa09aaf7425e32dea": {
+              "alias": "alias:ff612be0102347dce8cabba54ea7d97d4f464bc08a2ac3197c90d835e1da40c6",
+              "length": 6,
+              "type": "string"
+            },
+            "id": {
+              "alias": "alias:dea7203411a6460e65fc89ed55c13e4f2f204c3ee0a9db4aa3f1ac959c633984",
+              "length": 6,
+              "type": "string"
+            }
+          },
+          {
+            "alias:c742557ef11e9775f7128c7e003222cb572860421d4a2defa09aaf7425e32dea": {
+              "alias": "alias:60740ba6ec7e38259f5c53fbc011a7f21ce74febaa268361af3ae575852b6f89",
+              "length": 5,
+              "type": "string"
+            },
+            "id": {
+              "alias": "alias:82f14f921242a61ee0cd92ae4566d5a8e1bf5c1e4a6de071d4232c553bf6a045",
+              "length": 4,
+              "type": "string"
+            }
+          }
+        ],
+        "prompt": {
+          "alias": "alias:df9d22719a39dc2db80b4dac05297f2a156f97a9a44ed97342911152a83c12b8",
+          "length": 337,
+          "type": "string"
+        },
+        "session_id": {
+          "alias": "alias:68634c0c1d94287582e7bbee99750a66dc34e4861f7419947dda1dff7ec0947b",
+          "length": 36,
+          "type": "string"
+        },
+        "workspace_roots": [
+          {
+            "alias": "alias:a08d2d2af074e79c79a7b9d79a681b0efee49e4a6ffcf20b59723e3f4581b9e0",
+            "length": 121,
+            "type": "string"
+          }
+        ]
+      },
+      "origin": "hookStdin",
+      "probeInjected": false,
+      "probeSha256": "fd999946ea50a08f8bdcf3ff6c9a33eba72947fd7b7094c954b5fe646a50bbd4",
+      "receivedAtUnixMs": 1789993017876,
+      "runId": "1a97b3f4-03c6-44b9-a723-a8ec24afac2a",
+      "schemaVersion": 1,
+      "sequence": 43
+    },
+    {
+      "captureSha256": "9ff6442daf041e9c6803f84c91a00a4c82e98cc456a1e230271a8bae1eaf1d3c",
+      "cursorClientExecuted": null,
+      "details": {
+        "identityAssessment": "UNQUALIFIED_MCP_IDENTITY",
+        "inputModified": false,
+        "permissionWaitCreated": false,
+        "utf8BomRemoved": true
+      },
+      "event": "preToolUse",
+      "eventId": "2ef4751b-0294-4cb0-ae6b-6a6b3e6ca417",
+      "evidenceKind": "probeCapture",
+      "input": {
+        "alias:09ae909669714584aa751a8d3b05c24d964dd25be452ec3dda4eb302a8904e03": {
+          "alias": "alias:de01a904d48531648436a730b133d55bbffb061bd63887510da63f6d430b0950",
+          "length": 19,
+          "type": "string"
+        },
+        "alias:d0125d9486c644fc65eeb4f8ef66899b3262297e0c17daecbfea580bf66d1366": {
+          "alias": "alias:12e515bbe4a0d4ad242efc54140f9484ca4f6424b7e44a7ceae35bd6b1103dd9",
+          "length": 254,
+          "type": "string"
+        },
+        "conversation_id": {
+          "alias": "alias:68634c0c1d94287582e7bbee99750a66dc34e4861f7419947dda1dff7ec0947b",
+          "length": 36,
+          "type": "string"
+        },
+        "cursor_version": {
+          "alias": "alias:a254738f4c81e8e817c1fcd51dffeb4b863d6e5caad67f2985e37d503a4ed69b",
+          "length": 7,
+          "type": "string"
+        },
+        "generation_id": {
+          "alias": "alias:2aa07ebe2f2faa5634057faa6cbb9c07d84e1bd2ae1e7d538d335d34117ba6ec",
+          "length": 36,
+          "type": "string"
+        },
+        "hook_event_name": {
+          "alias": "alias:95e871a155a7d781e5b87017c1e548e587e48900e7d8d73675efbcbc6d6dece2",
+          "length": 10,
+          "type": "string"
+        },
+        "model": {
+          "alias": "alias:f274e3e65dd074685f5378a0067551e081a89ac4deb422c80d34e7b5bf398413",
+          "length": 8,
+          "type": "string"
+        },
+        "session_id": {
+          "alias": "alias:68634c0c1d94287582e7bbee99750a66dc34e4861f7419947dda1dff7ec0947b",
+          "length": 36,
+          "type": "string"
+        },
+        "tool_input": {
+          "clientRequestId": {
+            "alias": "alias:8b45574a40ace0fc6e51b124314e000a3031b7579e0465ea9dad4bc76dd2b067",
+            "length": 11,
+            "type": "string"
+          },
+          "payload": {
+            "message": {
+              "alias": "alias:a3074316210cea4d68e64e020db1354b9b93fd0b22c2d6f174a0e737d66dbcad",
+              "length": 4,
+              "type": "string"
+            }
+          },
+          "schemaVersion": 1
+        },
+        "tool_name": {
+          "alias": "alias:6f077f784390021bde8b2157202737efc462ee1e0514bea076cffd8d1f63f260",
+          "length": 24,
+          "type": "string"
+        },
+        "tool_use_id": {
+          "alias": "alias:fbe35d4f450cb5d670cc314f8dd01f4659219298eb945c1c2881c6aee18e6dcf",
+          "length": 36,
+          "type": "string"
+        },
+        "workspace_roots": [
+          {
+            "alias": "alias:a08d2d2af074e79c79a7b9d79a681b0efee49e4a6ffcf20b59723e3f4581b9e0",
+            "length": 121,
+            "type": "string"
+          }
+        ]
+      },
+      "origin": "hookStdin",
+      "parsedToolInput": {
+        "clientRequestId": {
+          "alias": "alias:8b45574a40ace0fc6e51b124314e000a3031b7579e0465ea9dad4bc76dd2b067",
+          "length": 11,
+          "type": "string"
+        },
+        "payload": {
+          "message": {
+            "alias": "alias:a3074316210cea4d68e64e020db1354b9b93fd0b22c2d6f174a0e737d66dbcad",
+            "length": 4,
+            "type": "string"
+          }
+        },
+        "schemaVersion": 1
+      },
+      "probeInjected": false,
+      "probeSha256": "fd999946ea50a08f8bdcf3ff6c9a33eba72947fd7b7094c954b5fe646a50bbd4",
+      "receivedAtUnixMs": 1789993029864,
+      "runId": "1a97b3f4-03c6-44b9-a723-a8ec24afac2a",
+      "schemaVersion": 1,
+      "sequence": 44,
+      "toolName": "MCP:codecraft_probe_echo"
+    },
+    {
+      "captureSha256": "8bcb3648ee4224cf371fbac730944f619ac665762e2dce983901e66fe5368c59",
+      "cursorClientExecuted": null,
+      "details": {
+        "identityAssessment": "OBSERVE_ONLY",
+        "inputModified": false,
+        "permissionWaitCreated": false,
+        "utf8BomRemoved": true
+      },
+      "event": "beforeMCPExecution",
+      "eventId": "f7e73cc2-c751-4a5a-a63d-41305e5a708b",
+      "evidenceKind": "probeCapture",
+      "input": {
+        "alias:09ae909669714584aa751a8d3b05c24d964dd25be452ec3dda4eb302a8904e03": {
+          "alias": "alias:de01a904d48531648436a730b133d55bbffb061bd63887510da63f6d430b0950",
+          "length": 19,
+          "type": "string"
+        },
+        "alias:d0125d9486c644fc65eeb4f8ef66899b3262297e0c17daecbfea580bf66d1366": {
+          "alias": "alias:12e515bbe4a0d4ad242efc54140f9484ca4f6424b7e44a7ceae35bd6b1103dd9",
+          "length": 254,
+          "type": "string"
+        },
+        "command": {
+          "alias": "alias:864cf3eed36a52ffe1a058e5a3ed6d70b1d2d55d9522864e5d08d54fb7dcfb16",
+          "length": 290,
+          "type": "string"
+        },
+        "conversation_id": {
+          "alias": "alias:68634c0c1d94287582e7bbee99750a66dc34e4861f7419947dda1dff7ec0947b",
+          "length": 36,
+          "type": "string"
+        },
+        "cursor_version": {
+          "alias": "alias:a254738f4c81e8e817c1fcd51dffeb4b863d6e5caad67f2985e37d503a4ed69b",
+          "length": 7,
+          "type": "string"
+        },
+        "generation_id": {
+          "alias": "alias:2aa07ebe2f2faa5634057faa6cbb9c07d84e1bd2ae1e7d538d335d34117ba6ec",
+          "length": 36,
+          "type": "string"
+        },
+        "hook_event_name": {
+          "alias": "alias:2c2e52c364b291e754667e7ba576eacd79607318338ea126fb7a4e42b5d91814",
+          "length": 18,
+          "type": "string"
+        },
+        "mcp_server_name": {
+          "alias": "alias:c2135d76970f1dcbe7638914bd6057bf9f939d4c325fcb60b2225518268071c6",
+          "length": 22,
+          "type": "string"
+        },
+        "model": {
+          "alias": "alias:f274e3e65dd074685f5378a0067551e081a89ac4deb422c80d34e7b5bf398413",
+          "length": 8,
+          "type": "string"
+        },
+        "session_id": {
+          "alias": "alias:68634c0c1d94287582e7bbee99750a66dc34e4861f7419947dda1dff7ec0947b",
+          "length": 36,
+          "type": "string"
+        },
+        "tool_input": {
+          "alias": "alias:be99be7bcb99365512f8f167e53d1f04dd02d12e5bc0be566eaa3e3d36f69864",
+          "length": 80,
+          "type": "string"
+        },
+        "tool_name": {
+          "alias": "alias:acd21dc8c9431b655cc191fc431b689cb3d342e4d3dae23061f28a0755167300",
+          "length": 20,
+          "type": "string"
+        },
+        "workspace_roots": [
+          {
+            "alias": "alias:a08d2d2af074e79c79a7b9d79a681b0efee49e4a6ffcf20b59723e3f4581b9e0",
+            "length": 121,
+            "type": "string"
+          }
+        ]
+      },
+      "origin": "hookStdin",
+      "parsedToolInput": {
+        "clientRequestId": {
+          "alias": "alias:8b45574a40ace0fc6e51b124314e000a3031b7579e0465ea9dad4bc76dd2b067",
+          "length": 11,
+          "type": "string"
+        },
+        "payload": {
+          "message": {
+            "alias": "alias:a3074316210cea4d68e64e020db1354b9b93fd0b22c2d6f174a0e737d66dbcad",
+            "length": 4,
+            "type": "string"
+          }
+        },
+        "schemaVersion": 1
+      },
+      "probeInjected": false,
+      "probeServerName": "codecraft_cursor_probe",
+      "probeSha256": "fd999946ea50a08f8bdcf3ff6c9a33eba72947fd7b7094c954b5fe646a50bbd4",
+      "receivedAtUnixMs": 1789993031732,
+      "runId": "1a97b3f4-03c6-44b9-a723-a8ec24afac2a",
+      "schemaVersion": 1,
+      "sequence": 45,
+      "toolName": "codecraft_probe_echo"
+    },
+    {
+      "captureSha256": "608c7d704c9668b27154f47e3a55bd1330bdc6d044b91d0f7a04ccb40e0de9a4",
+      "cursorClientExecuted": null,
+      "details": {
+        "server": "owned"
+      },
+      "event": "tools/call",
+      "eventId": "826c2318-263b-4c09-af38-2030750daf72",
+      "evidenceKind": "probeCapture",
+      "input": {
+        "id": 2,
+        "jsonrpc": {
+          "alias": "alias:5e3914bf55ad6240abf3ad7b9e6e86b0cbe32bc31a8fc5fe2c5232014c542c8f",
+          "length": 3,
+          "type": "string"
+        },
+        "method": {
+          "alias": "alias:4746c7a73b1bbe011d370138d7b700b7d48e1e2a6f0edcd2f0a383968434c8ea",
+          "length": 10,
+          "type": "string"
+        },
+        "params": {
+          "alias:20434f64bece8b4b72b52389b83bf711249201d8235a55d1ea6a4852bbd2eb9a": {
+            "alias:0738656a14f1f2691a3338720b93e40fada250e1d65c38e34037aae10636f49d": 2
+          },
+          "arguments": {
+            "clientRequestId": {
+              "alias": "alias:8b45574a40ace0fc6e51b124314e000a3031b7579e0465ea9dad4bc76dd2b067",
+              "length": 11,
+              "type": "string"
+            },
+            "payload": {
+              "message": {
+                "alias": "alias:a3074316210cea4d68e64e020db1354b9b93fd0b22c2d6f174a0e737d66dbcad",
+                "length": 4,
+                "type": "string"
+              }
+            },
+            "schemaVersion": 1
+          },
+          "name": {
+            "alias": "alias:acd21dc8c9431b655cc191fc431b689cb3d342e4d3dae23061f28a0755167300",
+            "length": 20,
+            "type": "string"
+          }
+        }
+      },
+      "origin": "mcpStdin",
+      "probeInjected": false,
+      "probeSha256": "fd999946ea50a08f8bdcf3ff6c9a33eba72947fd7b7094c954b5fe646a50bbd4",
+      "receivedAtUnixMs": 1789993031884,
+      "runId": "1a97b3f4-03c6-44b9-a723-a8ec24afac2a",
+      "schemaVersion": 1,
+      "sequence": 46
+    },
+    {
+      "captureSha256": "06ee7fbc92d7c0170491cbfd7000d6140c9e156d1db06774ab9642f3a91246bd",
+      "cursorClientExecuted": null,
+      "details": {
+        "nativeAcceptance": "unconfirmed",
+        "server": "owned",
+        "transport": "written"
+      },
+      "event": "responseWritten",
+      "eventId": "73d50b8b-c32f-47d2-a148-ce675cfbc715",
+      "evidenceKind": "probeCapture",
+      "input": {
+        "id": 2
+      },
+      "origin": "mcpStdout",
+      "probeInjected": false,
+      "probeSha256": "fd999946ea50a08f8bdcf3ff6c9a33eba72947fd7b7094c954b5fe646a50bbd4",
+      "receivedAtUnixMs": 1789993031940,
+      "runId": "1a97b3f4-03c6-44b9-a723-a8ec24afac2a",
+      "schemaVersion": 1,
+      "sequence": 47
+    },
+    {
+      "captureSha256": "ebef09a16ea540b9a00a70456c919ff825d0fa057e8543e62607f75f940bb0a4",
+      "cursorClientExecuted": null,
+      "details": {
+        "identityAssessment": "UNQUALIFIED_MCP_IDENTITY",
+        "inputModified": false,
+        "permissionWaitCreated": false,
+        "utf8BomRemoved": true
+      },
+      "event": "preToolUse",
+      "eventId": "6a7e05c0-3771-4c94-bf70-c7207c0b63ee",
+      "evidenceKind": "probeCapture",
+      "input": {
+        "alias:09ae909669714584aa751a8d3b05c24d964dd25be452ec3dda4eb302a8904e03": {
+          "alias": "alias:de01a904d48531648436a730b133d55bbffb061bd63887510da63f6d430b0950",
+          "length": 19,
+          "type": "string"
+        },
+        "alias:d0125d9486c644fc65eeb4f8ef66899b3262297e0c17daecbfea580bf66d1366": {
+          "alias": "alias:12e515bbe4a0d4ad242efc54140f9484ca4f6424b7e44a7ceae35bd6b1103dd9",
+          "length": 254,
+          "type": "string"
+        },
+        "conversation_id": {
+          "alias": "alias:68634c0c1d94287582e7bbee99750a66dc34e4861f7419947dda1dff7ec0947b",
+          "length": 36,
+          "type": "string"
+        },
+        "cursor_version": {
+          "alias": "alias:a254738f4c81e8e817c1fcd51dffeb4b863d6e5caad67f2985e37d503a4ed69b",
+          "length": 7,
+          "type": "string"
+        },
+        "generation_id": {
+          "alias": "alias:2aa07ebe2f2faa5634057faa6cbb9c07d84e1bd2ae1e7d538d335d34117ba6ec",
+          "length": 36,
+          "type": "string"
+        },
+        "hook_event_name": {
+          "alias": "alias:95e871a155a7d781e5b87017c1e548e587e48900e7d8d73675efbcbc6d6dece2",
+          "length": 10,
+          "type": "string"
+        },
+        "model": {
+          "alias": "alias:f274e3e65dd074685f5378a0067551e081a89ac4deb422c80d34e7b5bf398413",
+          "length": 8,
+          "type": "string"
+        },
+        "session_id": {
+          "alias": "alias:68634c0c1d94287582e7bbee99750a66dc34e4861f7419947dda1dff7ec0947b",
+          "length": 36,
+          "type": "string"
+        },
+        "tool_input": {
+          "clientRequestId": {
+            "alias": "alias:8b45574a40ace0fc6e51b124314e000a3031b7579e0465ea9dad4bc76dd2b067",
+            "length": 11,
+            "type": "string"
+          },
+          "payload": {
+            "message": {
+              "alias": "alias:a3074316210cea4d68e64e020db1354b9b93fd0b22c2d6f174a0e737d66dbcad",
+              "length": 4,
+              "type": "string"
+            }
+          },
+          "schemaVersion": 1
+        },
+        "tool_name": {
+          "alias": "alias:6f077f784390021bde8b2157202737efc462ee1e0514bea076cffd8d1f63f260",
+          "length": 24,
+          "type": "string"
+        },
+        "tool_use_id": {
+          "alias": "alias:fca01db3129af8f37267e0631201360752c1994b275fd6314fdad4da219470ff",
+          "length": 36,
+          "type": "string"
+        },
+        "workspace_roots": [
+          {
+            "alias": "alias:a08d2d2af074e79c79a7b9d79a681b0efee49e4a6ffcf20b59723e3f4581b9e0",
+            "length": 121,
+            "type": "string"
+          }
+        ]
+      },
+      "origin": "hookStdin",
+      "parsedToolInput": {
+        "clientRequestId": {
+          "alias": "alias:8b45574a40ace0fc6e51b124314e000a3031b7579e0465ea9dad4bc76dd2b067",
+          "length": 11,
+          "type": "string"
+        },
+        "payload": {
+          "message": {
+            "alias": "alias:a3074316210cea4d68e64e020db1354b9b93fd0b22c2d6f174a0e737d66dbcad",
+            "length": 4,
+            "type": "string"
+          }
+        },
+        "schemaVersion": 1
+      },
+      "probeInjected": false,
+      "probeSha256": "fd999946ea50a08f8bdcf3ff6c9a33eba72947fd7b7094c954b5fe646a50bbd4",
+      "receivedAtUnixMs": 1789993032093,
+      "runId": "1a97b3f4-03c6-44b9-a723-a8ec24afac2a",
+      "schemaVersion": 1,
+      "sequence": 48,
+      "toolName": "MCP:codecraft_probe_echo"
+    },
+    {
+      "captureSha256": "8237c7be7f22043bf29a3e45cad75ace5e6d38834bce04335d351ef0a12b75e2",
+      "cursorClientExecuted": null,
+      "details": {
+        "identityAssessment": "OBSERVE_ONLY",
+        "inputModified": false,
+        "permissionWaitCreated": false,
+        "utf8BomRemoved": true
+      },
+      "event": "postToolUse",
+      "eventId": "385f461d-44c9-4153-9221-b90766eca508",
+      "evidenceKind": "probeCapture",
+      "input": {
+        "alias:09ae909669714584aa751a8d3b05c24d964dd25be452ec3dda4eb302a8904e03": {
+          "alias": "alias:de01a904d48531648436a730b133d55bbffb061bd63887510da63f6d430b0950",
+          "length": 19,
+          "type": "string"
+        },
+        "alias:d0125d9486c644fc65eeb4f8ef66899b3262297e0c17daecbfea580bf66d1366": {
+          "alias": "alias:12e515bbe4a0d4ad242efc54140f9484ca4f6424b7e44a7ceae35bd6b1103dd9",
+          "length": 254,
+          "type": "string"
+        },
+        "conversation_id": {
+          "alias": "alias:68634c0c1d94287582e7bbee99750a66dc34e4861f7419947dda1dff7ec0947b",
+          "length": 36,
+          "type": "string"
+        },
+        "cursor_version": {
+          "alias": "alias:a254738f4c81e8e817c1fcd51dffeb4b863d6e5caad67f2985e37d503a4ed69b",
+          "length": 7,
+          "type": "string"
+        },
+        "duration": 102.054,
+        "generation_id": {
+          "alias": "alias:2aa07ebe2f2faa5634057faa6cbb9c07d84e1bd2ae1e7d538d335d34117ba6ec",
+          "length": 36,
+          "type": "string"
+        },
+        "hook_event_name": {
+          "alias": "alias:767e213963c5f6bcffade6fbe223a5afae0ade0ad9f74f63bdd440624adff0ca",
+          "length": 11,
+          "type": "string"
+        },
+        "model": {
+          "alias": "alias:f274e3e65dd074685f5378a0067551e081a89ac4deb422c80d34e7b5bf398413",
+          "length": 8,
+          "type": "string"
+        },
+        "session_id": {
+          "alias": "alias:68634c0c1d94287582e7bbee99750a66dc34e4861f7419947dda1dff7ec0947b",
+          "length": 36,
+          "type": "string"
+        },
+        "tool_input": {
+          "clientRequestId": {
+            "alias": "alias:8b45574a40ace0fc6e51b124314e000a3031b7579e0465ea9dad4bc76dd2b067",
+            "length": 11,
+            "type": "string"
+          },
+          "payload": {
+            "message": {
+              "alias": "alias:a3074316210cea4d68e64e020db1354b9b93fd0b22c2d6f174a0e737d66dbcad",
+              "length": 4,
+              "type": "string"
+            }
+          },
+          "schemaVersion": 1
+        },
+        "tool_name": {
+          "alias": "alias:6f077f784390021bde8b2157202737efc462ee1e0514bea076cffd8d1f63f260",
+          "length": 24,
+          "type": "string"
+        },
+        "tool_output": {
+          "alias": "alias:fcdbfdc4b8da3a1b52cc881100eaa2d4bcaf3a0ae2b09a5c814203e1a1aaa189",
+          "length": 235,
+          "type": "string"
+        },
+        "tool_use_id": {
+          "alias": "alias:fbe35d4f450cb5d670cc314f8dd01f4659219298eb945c1c2881c6aee18e6dcf",
+          "length": 36,
+          "type": "string"
+        },
+        "workspace_roots": [
+          {
+            "alias": "alias:a08d2d2af074e79c79a7b9d79a681b0efee49e4a6ffcf20b59723e3f4581b9e0",
+            "length": 121,
+            "type": "string"
+          }
+        ]
+      },
+      "origin": "hookStdin",
+      "parsedToolInput": {
+        "clientRequestId": {
+          "alias": "alias:8b45574a40ace0fc6e51b124314e000a3031b7579e0465ea9dad4bc76dd2b067",
+          "length": 11,
+          "type": "string"
+        },
+        "payload": {
+          "message": {
+            "alias": "alias:a3074316210cea4d68e64e020db1354b9b93fd0b22c2d6f174a0e737d66dbcad",
+            "length": 4,
+            "type": "string"
+          }
+        },
+        "schemaVersion": 1
+      },
+      "probeInjected": false,
+      "probeSha256": "fd999946ea50a08f8bdcf3ff6c9a33eba72947fd7b7094c954b5fe646a50bbd4",
+      "receivedAtUnixMs": 1789993033514,
+      "runId": "1a97b3f4-03c6-44b9-a723-a8ec24afac2a",
+      "schemaVersion": 1,
+      "sequence": 49,
+      "toolName": "MCP:codecraft_probe_echo"
+    },
+    {
+      "captureSha256": "79ea08be6abe638af5ffeef4737cf78755923f928817eb17337709f47139baf0",
+      "cursorClientExecuted": null,
+      "details": {
+        "identityAssessment": "OBSERVE_ONLY",
+        "inputModified": false,
+        "permissionWaitCreated": false,
+        "utf8BomRemoved": true
+      },
+      "event": "beforeMCPExecution",
+      "eventId": "2034ed83-22ca-448b-9738-7c6db6efa5d2",
+      "evidenceKind": "probeCapture",
+      "input": {
+        "alias:09ae909669714584aa751a8d3b05c24d964dd25be452ec3dda4eb302a8904e03": {
+          "alias": "alias:de01a904d48531648436a730b133d55bbffb061bd63887510da63f6d430b0950",
+          "length": 19,
+          "type": "string"
+        },
+        "alias:d0125d9486c644fc65eeb4f8ef66899b3262297e0c17daecbfea580bf66d1366": {
+          "alias": "alias:12e515bbe4a0d4ad242efc54140f9484ca4f6424b7e44a7ceae35bd6b1103dd9",
+          "length": 254,
+          "type": "string"
+        },
+        "command": {
+          "alias": "alias:418da9b58f302edf6c49bdfaa3dd01f5464c8041d2aa095d2e313dc217c91840",
+          "length": 294,
+          "type": "string"
+        },
+        "conversation_id": {
+          "alias": "alias:68634c0c1d94287582e7bbee99750a66dc34e4861f7419947dda1dff7ec0947b",
+          "length": 36,
+          "type": "string"
+        },
+        "cursor_version": {
+          "alias": "alias:a254738f4c81e8e817c1fcd51dffeb4b863d6e5caad67f2985e37d503a4ed69b",
+          "length": 7,
+          "type": "string"
+        },
+        "generation_id": {
+          "alias": "alias:2aa07ebe2f2faa5634057faa6cbb9c07d84e1bd2ae1e7d538d335d34117ba6ec",
+          "length": 36,
+          "type": "string"
+        },
+        "hook_event_name": {
+          "alias": "alias:2c2e52c364b291e754667e7ba576eacd79607318338ea126fb7a4e42b5d91814",
+          "length": 18,
+          "type": "string"
+        },
+        "mcp_server_name": {
+          "alias": "alias:7f0a3f93b17a33c03b98f729542561d8ef1b1be84e7a50f1d59a72c3c6b22fe1",
+          "length": 26,
+          "type": "string"
+        },
+        "model": {
+          "alias": "alias:f274e3e65dd074685f5378a0067551e081a89ac4deb422c80d34e7b5bf398413",
+          "length": 8,
+          "type": "string"
+        },
+        "session_id": {
+          "alias": "alias:68634c0c1d94287582e7bbee99750a66dc34e4861f7419947dda1dff7ec0947b",
+          "length": 36,
+          "type": "string"
+        },
+        "tool_input": {
+          "alias": "alias:be99be7bcb99365512f8f167e53d1f04dd02d12e5bc0be566eaa3e3d36f69864",
+          "length": 80,
+          "type": "string"
+        },
+        "tool_name": {
+          "alias": "alias:acd21dc8c9431b655cc191fc431b689cb3d342e4d3dae23061f28a0755167300",
+          "length": 20,
+          "type": "string"
+        },
+        "workspace_roots": [
+          {
+            "alias": "alias:a08d2d2af074e79c79a7b9d79a681b0efee49e4a6ffcf20b59723e3f4581b9e0",
+            "length": 121,
+            "type": "string"
+          }
+        ]
+      },
+      "origin": "hookStdin",
+      "parsedToolInput": {
+        "clientRequestId": {
+          "alias": "alias:8b45574a40ace0fc6e51b124314e000a3031b7579e0465ea9dad4bc76dd2b067",
+          "length": 11,
+          "type": "string"
+        },
+        "payload": {
+          "message": {
+            "alias": "alias:a3074316210cea4d68e64e020db1354b9b93fd0b22c2d6f174a0e737d66dbcad",
+            "length": 4,
+            "type": "string"
+          }
+        },
+        "schemaVersion": 1
+      },
+      "probeInjected": false,
+      "probeServerName": "codecraft_cursor_collision",
+      "probeSha256": "fd999946ea50a08f8bdcf3ff6c9a33eba72947fd7b7094c954b5fe646a50bbd4",
+      "receivedAtUnixMs": 1789993033861,
+      "runId": "1a97b3f4-03c6-44b9-a723-a8ec24afac2a",
+      "schemaVersion": 1,
+      "sequence": 50,
+      "toolName": "codecraft_probe_echo"
+    },
+    {
+      "captureSha256": "2d42011291643c61bbebb5f8ee436a069f8cfb20bc6cb86f43fc43ce399f6a5f",
+      "cursorClientExecuted": null,
+      "details": {
+        "server": "collision"
+      },
+      "event": "tools/call",
+      "eventId": "b02b3c06-00e2-48ed-a8a2-6fec7c303329",
+      "evidenceKind": "probeCapture",
+      "input": {
+        "id": 2,
+        "jsonrpc": {
+          "alias": "alias:5e3914bf55ad6240abf3ad7b9e6e86b0cbe32bc31a8fc5fe2c5232014c542c8f",
+          "length": 3,
+          "type": "string"
+        },
+        "method": {
+          "alias": "alias:4746c7a73b1bbe011d370138d7b700b7d48e1e2a6f0edcd2f0a383968434c8ea",
+          "length": 10,
+          "type": "string"
+        },
+        "params": {
+          "alias:20434f64bece8b4b72b52389b83bf711249201d8235a55d1ea6a4852bbd2eb9a": {
+            "alias:0738656a14f1f2691a3338720b93e40fada250e1d65c38e34037aae10636f49d": 2
+          },
+          "arguments": {
+            "clientRequestId": {
+              "alias": "alias:8b45574a40ace0fc6e51b124314e000a3031b7579e0465ea9dad4bc76dd2b067",
+              "length": 11,
+              "type": "string"
+            },
+            "payload": {
+              "message": {
+                "alias": "alias:a3074316210cea4d68e64e020db1354b9b93fd0b22c2d6f174a0e737d66dbcad",
+                "length": 4,
+                "type": "string"
+              }
+            },
+            "schemaVersion": 1
+          },
+          "name": {
+            "alias": "alias:acd21dc8c9431b655cc191fc431b689cb3d342e4d3dae23061f28a0755167300",
+            "length": 20,
+            "type": "string"
+          }
+        }
+      },
+      "origin": "mcpStdin",
+      "probeInjected": false,
+      "probeSha256": "fd999946ea50a08f8bdcf3ff6c9a33eba72947fd7b7094c954b5fe646a50bbd4",
+      "receivedAtUnixMs": 1789993033988,
+      "runId": "1a97b3f4-03c6-44b9-a723-a8ec24afac2a",
+      "schemaVersion": 1,
+      "sequence": 51
+    },
+    {
+      "captureSha256": "98b3536979d4c72822f533ca1082dd748ad354ce6e06f2d475d325141e610054",
+      "cursorClientExecuted": null,
+      "details": {
+        "nativeAcceptance": "unconfirmed",
+        "server": "collision",
+        "transport": "written"
+      },
+      "event": "responseWritten",
+      "eventId": "71bead51-ac28-49c3-a4fa-6401c8316fc8",
+      "evidenceKind": "probeCapture",
+      "input": {
+        "id": 2
+      },
+      "origin": "mcpStdout",
+      "probeInjected": false,
+      "probeSha256": "fd999946ea50a08f8bdcf3ff6c9a33eba72947fd7b7094c954b5fe646a50bbd4",
+      "receivedAtUnixMs": 1789993034042,
+      "runId": "1a97b3f4-03c6-44b9-a723-a8ec24afac2a",
+      "schemaVersion": 1,
+      "sequence": 52
+    },
+    {
+      "captureSha256": "170599b999551a6086371bf1faba07a19f882a8521b1a3ff2e884f9f9336437f",
+      "cursorClientExecuted": null,
+      "details": {
+        "identityAssessment": "OBSERVE_ONLY",
+        "inputModified": false,
+        "permissionWaitCreated": false,
+        "utf8BomRemoved": true
+      },
+      "event": "postToolUse",
+      "eventId": "adf68e90-262a-444d-a17e-2f9cb9f137f0",
+      "evidenceKind": "probeCapture",
+      "input": {
+        "alias:09ae909669714584aa751a8d3b05c24d964dd25be452ec3dda4eb302a8904e03": {
+          "alias": "alias:de01a904d48531648436a730b133d55bbffb061bd63887510da63f6d430b0950",
+          "length": 19,
+          "type": "string"
+        },
+        "alias:d0125d9486c644fc65eeb4f8ef66899b3262297e0c17daecbfea580bf66d1366": {
+          "alias": "alias:12e515bbe4a0d4ad242efc54140f9484ca4f6424b7e44a7ceae35bd6b1103dd9",
+          "length": 254,
+          "type": "string"
+        },
+        "conversation_id": {
+          "alias": "alias:68634c0c1d94287582e7bbee99750a66dc34e4861f7419947dda1dff7ec0947b",
+          "length": 36,
+          "type": "string"
+        },
+        "cursor_version": {
+          "alias": "alias:a254738f4c81e8e817c1fcd51dffeb4b863d6e5caad67f2985e37d503a4ed69b",
+          "length": 7,
+          "type": "string"
+        },
+        "duration": 83.336,
+        "generation_id": {
+          "alias": "alias:2aa07ebe2f2faa5634057faa6cbb9c07d84e1bd2ae1e7d538d335d34117ba6ec",
+          "length": 36,
+          "type": "string"
+        },
+        "hook_event_name": {
+          "alias": "alias:767e213963c5f6bcffade6fbe223a5afae0ade0ad9f74f63bdd440624adff0ca",
+          "length": 11,
+          "type": "string"
+        },
+        "model": {
+          "alias": "alias:f274e3e65dd074685f5378a0067551e081a89ac4deb422c80d34e7b5bf398413",
+          "length": 8,
+          "type": "string"
+        },
+        "session_id": {
+          "alias": "alias:68634c0c1d94287582e7bbee99750a66dc34e4861f7419947dda1dff7ec0947b",
+          "length": 36,
+          "type": "string"
+        },
+        "tool_input": {
+          "clientRequestId": {
+            "alias": "alias:8b45574a40ace0fc6e51b124314e000a3031b7579e0465ea9dad4bc76dd2b067",
+            "length": 11,
+            "type": "string"
+          },
+          "payload": {
+            "message": {
+              "alias": "alias:a3074316210cea4d68e64e020db1354b9b93fd0b22c2d6f174a0e737d66dbcad",
+              "length": 4,
+              "type": "string"
+            }
+          },
+          "schemaVersion": 1
+        },
+        "tool_name": {
+          "alias": "alias:6f077f784390021bde8b2157202737efc462ee1e0514bea076cffd8d1f63f260",
+          "length": 24,
+          "type": "string"
+        },
+        "tool_output": {
+          "alias": "alias:354098f856a712653313b979ae2a2967b64719cc7d7674b832a6d7427aad4b92",
+          "length": 239,
+          "type": "string"
+        },
+        "tool_use_id": {
+          "alias": "alias:fca01db3129af8f37267e0631201360752c1994b275fd6314fdad4da219470ff",
+          "length": 36,
+          "type": "string"
+        },
+        "workspace_roots": [
+          {
+            "alias": "alias:a08d2d2af074e79c79a7b9d79a681b0efee49e4a6ffcf20b59723e3f4581b9e0",
+            "length": 121,
+            "type": "string"
+          }
+        ]
+      },
+      "origin": "hookStdin",
+      "parsedToolInput": {
+        "clientRequestId": {
+          "alias": "alias:8b45574a40ace0fc6e51b124314e000a3031b7579e0465ea9dad4bc76dd2b067",
+          "length": 11,
+          "type": "string"
+        },
+        "payload": {
+          "message": {
+            "alias": "alias:a3074316210cea4d68e64e020db1354b9b93fd0b22c2d6f174a0e737d66dbcad",
+            "length": 4,
+            "type": "string"
+          }
+        },
+        "schemaVersion": 1
+      },
+      "probeInjected": false,
+      "probeSha256": "fd999946ea50a08f8bdcf3ff6c9a33eba72947fd7b7094c954b5fe646a50bbd4",
+      "receivedAtUnixMs": 1789993035228,
+      "runId": "1a97b3f4-03c6-44b9-a723-a8ec24afac2a",
+      "schemaVersion": 1,
+      "sequence": 53,
+      "toolName": "MCP:codecraft_probe_echo"
+    },
+    {
+      "captureSha256": "8ee7af980ed260f6aef7648eff9bf786177eb38e674c8dd89844905b912f2688",
+      "cursorClientExecuted": null,
+      "details": {
+        "identityAssessment": "OBSERVE_ONLY",
+        "inputModified": false,
+        "permissionWaitCreated": false,
+        "utf8BomRemoved": true
+      },
+      "event": "afterAgentResponse",
+      "eventId": "346ffacc-c369-4740-9ca8-61cc007721cd",
+      "evidenceKind": "probeCapture",
+      "input": {
+        "alias:043a5df768fcef73fc80463ef6ce0bef286a750ac527090e2e9f5ecc27dd149c": 28541,
+        "alias:09ae909669714584aa751a8d3b05c24d964dd25be452ec3dda4eb302a8904e03": {
+          "alias": "alias:de01a904d48531648436a730b133d55bbffb061bd63887510da63f6d430b0950",
+          "length": 19,
+          "type": "string"
+        },
+        "alias:1478e1969e1e6617efa6a50f3ff03638500632a2b514c64eff1285be25c66168": 0,
+        "alias:2d5ee63207d1f245a1752ebcfa3b0a7308a4af4a1fef2ec7395bd21d933d7e2c": 27648,
+        "alias:d0125d9486c644fc65eeb4f8ef66899b3262297e0c17daecbfea580bf66d1366": {
+          "alias": "alias:12e515bbe4a0d4ad242efc54140f9484ca4f6424b7e44a7ceae35bd6b1103dd9",
+          "length": 254,
+          "type": "string"
+        },
+        "alias:d44b7ac747bab0f00f2339d0684241bc702ff14a36c648b072333e5a250c4d6c": 350,
+        "conversation_id": {
+          "alias": "alias:68634c0c1d94287582e7bbee99750a66dc34e4861f7419947dda1dff7ec0947b",
+          "length": 36,
+          "type": "string"
+        },
+        "cursor_version": {
+          "alias": "alias:a254738f4c81e8e817c1fcd51dffeb4b863d6e5caad67f2985e37d503a4ed69b",
+          "length": 7,
+          "type": "string"
+        },
+        "generation_id": {
+          "alias": "alias:2aa07ebe2f2faa5634057faa6cbb9c07d84e1bd2ae1e7d538d335d34117ba6ec",
+          "length": 36,
+          "type": "string"
+        },
+        "hook_event_name": {
+          "alias": "alias:c9c16829a193fd31f3d8c3f3034ceacf8e3750498fff8b4880fbb7db19978c30",
+          "length": 18,
+          "type": "string"
+        },
+        "model": {
+          "alias": "alias:12232f7a4ead956df24b22f799c77a04deffa7f9eadd549dc7fcbf118265bf4b",
+          "length": 22,
+          "type": "string"
+        },
+        "model_id": {
+          "alias": "alias:f274e3e65dd074685f5378a0067551e081a89ac4deb422c80d34e7b5bf398413",
+          "length": 8,
+          "type": "string"
+        },
+        "model_params": [
+          {
+            "alias:c742557ef11e9775f7128c7e003222cb572860421d4a2defa09aaf7425e32dea": {
+              "alias": "alias:ff612be0102347dce8cabba54ea7d97d4f464bc08a2ac3197c90d835e1da40c6",
+              "length": 6,
+              "type": "string"
+            },
+            "id": {
+              "alias": "alias:dea7203411a6460e65fc89ed55c13e4f2f204c3ee0a9db4aa3f1ac959c633984",
+              "length": 6,
+              "type": "string"
+            }
+          },
+          {
+            "alias:c742557ef11e9775f7128c7e003222cb572860421d4a2defa09aaf7425e32dea": {
+              "alias": "alias:60740ba6ec7e38259f5c53fbc011a7f21ce74febaa268361af3ae575852b6f89",
+              "length": 5,
+              "type": "string"
+            },
+            "id": {
+              "alias": "alias:82f14f921242a61ee0cd92ae4566d5a8e1bf5c1e4a6de071d4232c553bf6a045",
+              "length": 4,
+              "type": "string"
+            }
+          }
+        ],
+        "session_id": {
+          "alias": "alias:68634c0c1d94287582e7bbee99750a66dc34e4861f7419947dda1dff7ec0947b",
+          "length": 36,
+          "type": "string"
+        },
+        "text": {
+          "alias": "alias:d04c0befa767a1ef0bb0408bf05e28e5113397a7124dd0fbb3e0ea1b5c69ce78",
+          "length": 139,
+          "type": "string"
+        },
+        "workspace_roots": [
+          {
+            "alias": "alias:a08d2d2af074e79c79a7b9d79a681b0efee49e4a6ffcf20b59723e3f4581b9e0",
+            "length": 121,
+            "type": "string"
+          }
+        ]
+      },
+      "origin": "hookStdin",
+      "probeInjected": false,
+      "probeSha256": "fd999946ea50a08f8bdcf3ff6c9a33eba72947fd7b7094c954b5fe646a50bbd4",
+      "receivedAtUnixMs": 1789993038629,
+      "runId": "1a97b3f4-03c6-44b9-a723-a8ec24afac2a",
+      "schemaVersion": 1,
+      "sequence": 54
+    },
+    {
+      "captureSha256": "85c498f8a56a8bbc2a0f43e216e7aa98c02e415ff7036e443946cfb6bb58ab62",
+      "cursorClientExecuted": null,
+      "details": {
+        "identityAssessment": "OBSERVE_ONLY",
+        "inputModified": false,
+        "permissionWaitCreated": false,
+        "utf8BomRemoved": true
+      },
+      "event": "stop",
+      "eventId": "af1fa2f6-8d57-4194-a674-8839f42c537b",
+      "evidenceKind": "probeCapture",
+      "input": {
+        "alias:043a5df768fcef73fc80463ef6ce0bef286a750ac527090e2e9f5ecc27dd149c": 28541,
+        "alias:09ae909669714584aa751a8d3b05c24d964dd25be452ec3dda4eb302a8904e03": {
+          "alias": "alias:de01a904d48531648436a730b133d55bbffb061bd63887510da63f6d430b0950",
+          "length": 19,
+          "type": "string"
+        },
+        "alias:1478e1969e1e6617efa6a50f3ff03638500632a2b514c64eff1285be25c66168": 0,
+        "alias:2d5ee63207d1f245a1752ebcfa3b0a7308a4af4a1fef2ec7395bd21d933d7e2c": 27648,
+        "alias:8007e82342e734a4f9c0184ae98dabd7a8b5e65454a4e16567f98b2fd8a505f0": 0,
+        "alias:d0125d9486c644fc65eeb4f8ef66899b3262297e0c17daecbfea580bf66d1366": {
+          "alias": "alias:12e515bbe4a0d4ad242efc54140f9484ca4f6424b7e44a7ceae35bd6b1103dd9",
+          "length": 254,
+          "type": "string"
+        },
+        "alias:d44b7ac747bab0f00f2339d0684241bc702ff14a36c648b072333e5a250c4d6c": 350,
+        "conversation_id": {
+          "alias": "alias:68634c0c1d94287582e7bbee99750a66dc34e4861f7419947dda1dff7ec0947b",
+          "length": 36,
+          "type": "string"
+        },
+        "cursor_version": {
+          "alias": "alias:a254738f4c81e8e817c1fcd51dffeb4b863d6e5caad67f2985e37d503a4ed69b",
+          "length": 7,
+          "type": "string"
+        },
+        "generation_id": {
+          "alias": "alias:2aa07ebe2f2faa5634057faa6cbb9c07d84e1bd2ae1e7d538d335d34117ba6ec",
+          "length": 36,
+          "type": "string"
+        },
+        "hook_event_name": {
+          "alias": "alias:de8ea3a49706201c3455a8ce5d5441b2806b728fbb8767303111e5257e45b3f3",
+          "length": 4,
+          "type": "string"
+        },
+        "model": {
+          "alias": "alias:12232f7a4ead956df24b22f799c77a04deffa7f9eadd549dc7fcbf118265bf4b",
+          "length": 22,
+          "type": "string"
+        },
+        "model_id": {
+          "alias": "alias:f274e3e65dd074685f5378a0067551e081a89ac4deb422c80d34e7b5bf398413",
+          "length": 8,
+          "type": "string"
+        },
+        "model_params": [
+          {
+            "alias:c742557ef11e9775f7128c7e003222cb572860421d4a2defa09aaf7425e32dea": {
+              "alias": "alias:ff612be0102347dce8cabba54ea7d97d4f464bc08a2ac3197c90d835e1da40c6",
+              "length": 6,
+              "type": "string"
+            },
+            "id": {
+              "alias": "alias:dea7203411a6460e65fc89ed55c13e4f2f204c3ee0a9db4aa3f1ac959c633984",
+              "length": 6,
+              "type": "string"
+            }
+          },
+          {
+            "alias:c742557ef11e9775f7128c7e003222cb572860421d4a2defa09aaf7425e32dea": {
+              "alias": "alias:60740ba6ec7e38259f5c53fbc011a7f21ce74febaa268361af3ae575852b6f89",
+              "length": 5,
+              "type": "string"
+            },
+            "id": {
+              "alias": "alias:82f14f921242a61ee0cd92ae4566d5a8e1bf5c1e4a6de071d4232c553bf6a045",
+              "length": 4,
+              "type": "string"
+            }
+          }
+        ],
+        "session_id": {
+          "alias": "alias:68634c0c1d94287582e7bbee99750a66dc34e4861f7419947dda1dff7ec0947b",
+          "length": 36,
+          "type": "string"
+        },
+        "status": {
+          "alias": "alias:6fb4688a781cd991baddfa7c0428d286b52897bb3c932f1a559256c9193349fb",
+          "length": 9,
+          "type": "string"
+        },
+        "workspace_roots": [
+          {
+            "alias": "alias:a08d2d2af074e79c79a7b9d79a681b0efee49e4a6ffcf20b59723e3f4581b9e0",
+            "length": 121,
+            "type": "string"
+          }
+        ]
+      },
+      "origin": "hookStdin",
+      "probeInjected": false,
+      "probeSha256": "fd999946ea50a08f8bdcf3ff6c9a33eba72947fd7b7094c954b5fe646a50bbd4",
+      "receivedAtUnixMs": 1789993039920,
+      "runId": "1a97b3f4-03c6-44b9-a723-a8ec24afac2a",
+      "schemaVersion": 1,
+      "sequence": 55
+    }
+  ]
+}

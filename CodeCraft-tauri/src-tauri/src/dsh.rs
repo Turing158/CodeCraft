@@ -48,6 +48,8 @@ pub(crate) struct DshEnvelope {
     pub(crate) bridge_instance_id: String,
     pub(crate) plugin_instance_id: String,
     pub(crate) plugin_version: String,
+    // Older plugins may still send this metadata; it does not gate the bridge.
+    #[serde(default)]
     pub(crate) dsh_version: String,
     pub(crate) dsh_process_id: u32,
     pub(crate) session_id: Option<String>,
@@ -70,7 +72,6 @@ impl DshEnvelope {
             || self.bridge_instance_id.is_empty()
             || self.plugin_instance_id.is_empty()
             || self.plugin_version.is_empty()
-            || self.dsh_version.is_empty()
         {
             return Err("Incomplete DSH bridge envelope".to_string());
         }

@@ -6,70 +6,13 @@ import path from "node:path";
 
 const PROTOCOL = "codecraft-dsh-bridge";
 const PROTOCOL_VERSION = 1;
-const PLUGIN_VERSION = "0.1.2";
+const PLUGIN_VERSION = "0.1.3";
 const HEARTBEAT_INTERVAL_MS = 5_000;
 const CONNECT_TIMEOUT_MS = 1_500;
 const DECISION_TIMEOUT_MS = 5 * 60_000;
 const MAX_LINE_BYTES = 256 * 1024;
 const pluginInstanceId = randomUUID();
 const toolCalls = new Map();
-
-const packageVersion = async (candidate) => {
-  try {
-    const manifest = JSON.parse(await readFile(candidate, "utf8"));
-    return manifest?.name === "@deepseek-ai/dsh" && typeof manifest?.version === "string"
-      ? manifest.version
-      : null;
-  } catch {
-    return null;
-  }
-};
-
-const detectDshVersion = async () => {
-  const candidates = new Set();
-  const dshHome = process.env.DSH_HOME || path.join(os.homedir(), ".dsh");
-  const profileFlagIndex = process.argv.indexOf("--profile");
-  const profileName =
-    profileFlagIndex >= 0 && typeof process.argv[profileFlagIndex + 1] === "string"
-      ? process.argv[profileFlagIndex + 1]
-      : process.argv.find((value) => value.startsWith("--profile="))?.slice(10);
-
-  candidates.add(path.join(dshHome, "profiles", "node_modules", "@deepseek-ai", "dsh", "package.json"));
-  if (profileName) {
-    candidates.add(
-      path.join(
-        dshHome,
-        "profiles",
-        profileName,
-        "node_modules",
-        "@deepseek-ai",
-        "dsh",
-        "package.json",
-      ),
-    );
-  }
-  candidates.add(path.join(process.cwd(), "node_modules", "@deepseek-ai", "dsh", "package.json"));
-
-  for (const argument of process.argv.slice(1)) {
-    if (!path.isAbsolute(argument)) continue;
-    let current = path.dirname(argument);
-    for (let depth = 0; depth < 10; depth += 1) {
-      candidates.add(path.join(current, "package.json"));
-      candidates.add(path.join(current, "node_modules", "@deepseek-ai", "dsh", "package.json"));
-      const parent = path.dirname(current);
-      if (parent === current) break;
-      current = parent;
-    }
-  }
-
-  for (const candidate of candidates) {
-    const version = await packageVersion(candidate);
-    if (version) return version;
-  }
-  return "unknown";
-};
-
-const dshVersionPromise = detectDshVersion();
 
 const bridgeConfigPath = () =>
   process.env.CODECRAFT_DSH_BRIDGE_CONFIG ||
@@ -146,7 +89,6 @@ async function exchange(messageType, payload, context = {}, waitForDecision = fa
   if (signal?.aborted) return { available: true, error: "aborted" };
   const config = await readBridgeConfig();
   if (!config) return { available: false };
-  const dshVersion = await dshVersionPromise;
   if (signal?.aborted) return { available: true, error: "aborted" };
   const envelope = {
     protocol: PROTOCOL,
@@ -156,7 +98,6 @@ async function exchange(messageType, payload, context = {}, waitForDecision = fa
     bridgeInstanceId: config.bridgeInstanceId,
     pluginInstanceId,
     pluginVersion: PLUGIN_VERSION,
-    dshVersion,
     dshProcessId: process.pid,
     sessionId: context.sessionId || null,
     turnId: context.turnId ?? null,

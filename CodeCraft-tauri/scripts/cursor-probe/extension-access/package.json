@@ -1,0 +1,9 @@
+{
+  "name": "cursor-api-access-probe",
+  "publisher": "codecraft",
+  "version": "0.0.1",
+  "private": true,
+  "engines": { "vscode": "^1.43.0" },
+  "main": "./extension.cjs",
+  "enabledApiProposals": ["cursor", "cursorNoDeps", "cursorAgentHost"]
+}

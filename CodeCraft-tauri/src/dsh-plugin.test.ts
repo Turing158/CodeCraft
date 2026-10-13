@@ -1,5 +1,10 @@
 import { describe, expect, it, vi } from "vitest";
 
+const { readFile } = vi.hoisted(() => ({
+  readFile: vi.fn(async () => { throw new Error("Unexpected filesystem read"); }),
+}));
+vi.mock("node:fs/promises", () => ({ readFile }));
+
 // @ts-expect-error The bundled DSH plugin is runtime JavaScript without a TS declaration.
 import { apply, dshQuestionPayload, installUserQuestionBridge } from "../src-tauri/assets/dsh/codecraft/index.mjs";
 
@@ -9,6 +14,10 @@ const agent = {
 };
 
 describe("DSH user-question provider bridge", () => {
+  it("loads without probing the installed DSH runtime version", () => {
+    expect(readFile).not.toHaveBeenCalled();
+  });
+
   it("preserves regular and multi-select question payloads", () => {
     expect(
       dshQuestionPayload({
